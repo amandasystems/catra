@@ -12,8 +12,6 @@ import ap.terfor.{Formula, TermOrder}
 import ap.theories._
 import EdgeWrapper._
 import ap.parser.IExpression.Predicate
-import scala.annotation.elidable
-import scala.annotation.elidable.FINE
 
 class ParikhTheory(private[this] val aut: Automaton)
     extends Theory
