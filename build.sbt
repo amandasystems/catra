@@ -23,6 +23,14 @@ ThisBuild / resolvers += ("uuverifiers" at "http://logicrunch.research.it.uu.se/
 ThisBuild / libraryDependencies += bricsAutomaton
 ThisBuild / libraryDependencies += princess
 
+// Tests run at maximum verbosity (this is untested and a pretty stupid
+// configuration, but may work). It's also the only way of doing this because
+// SBT is bonkers. cf. https://stackoverflow.com/a/43397744
+Test / scalacOptions --= Seq(
+  "-Xelide-below", "INFO")
+Test / scalacOptions ++= Seq(
+  "-Xelide-below", "0")
+
 lazy val root = (project in file("."))
   .settings(
     name := "Parikh Theory",
