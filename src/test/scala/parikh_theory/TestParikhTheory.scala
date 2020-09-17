@@ -26,10 +26,9 @@ class TestParikhTheory extends AnyFunSuite {
     SimpleAPI.withProver { p =>
       import p._
 
-      val formula = t allowsRegisterValues Seq(1)
-      !!(formula)
+      !!(t allowsRegisterValues Seq(1))
 
-      val expectedStatu = ProverStatus.Sat
+      val expectedStatus = ProverStatus.Sat
 
       if (??? != expectedStatus) {
         assert(
