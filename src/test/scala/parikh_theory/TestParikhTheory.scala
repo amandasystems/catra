@@ -26,9 +26,12 @@ class TestParikhTheory extends AnyFunSuite {
     SimpleAPI.withProver { p =>
       import p._
 
-      !!(t allowsRegisterValues Seq(1))
+      val length = createConstant("length")
+      !!(length  =/= 1)
 
-      val expectedStatus = ProverStatus.Sat
+      !!((t allowsRegisterValues Seq(length)))
+
+      val expectedStatus = ProverStatus.Unsat
 
       if (??? != expectedStatus) {
         assert(
