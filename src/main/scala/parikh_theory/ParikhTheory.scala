@@ -3,7 +3,7 @@ package uuverifiers.parikh_theory
 import ap.basetypes.IdealInt
 import ap.parser._
 import ap.proof.goal.Goal
-import ap.proof.theoryPlugins.{Plugin, TheoryProcedure}
+import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
 import ap.terfor.preds.Atom
 import ap.terfor.conjunctions.Conjunction
@@ -12,27 +12,41 @@ import ap.terfor.{Formula, TermOrder}
 import ap.theories._
 import EdgeWrapper._
 import ap.parser.IExpression.Predicate
+import ap.algebra.{Monoid, Abelian}
 
-class ParikhTheory(private[this] val aut: Automaton)
+// TODO write a LengthCounting mixin which interns one term for length and
+// yields that for each transition
+// TODO work through terminology. Why do we use "register values"?
+// TODO use [M <: Monoid with Abelian, A <: Automaton]
+// FIXME: this is a constructor for a theory, it never registers itself!
+
+/**
+ * The Parikh Theory enforces Parikh Image membership modulo a morphism to a
+ * commutative monoid. The most straightforward example is string length, with
+ * an automaton representing the possible strings.
+ */
+trait ParikhTheory[A <: Automaton]
     extends Theory
     with NoFunctions
     with NoAxioms
     with Tracing
     with Complete {
-  private val autGraph = aut.toGraph
 
-  // FIXME: this is a temporary shim which introduces a single register for
-  // length counting. We *should* design a better trait and use a mixin to add
-  // registers.
-  private implicit class DummyRegisterAutomata(
-      private val a: aut.type
-  ) {
-    def transitionIncrement(_t: autGraph.Edge)(_regId: Int): IdealInt =
-      IdealInt.ONE
-    val nrRegisters = 1
-  }
+  val aut: A
+  val toMonoid: aut.Transition => Seq[LinearCombination]
 
-  private val cycles = trace("cycles")(autGraph.simpleCycles)
+  /**
+   * This method provides the "modulo" aspect by performing the translation
+   * from a transition (usually really the transition's label) to a commutative
+   * monoid (M).
+   *
+   * For example length-counting would map all transitions representing a
+   * single character (typically all transitions) to 1.
+   */
+  //def toMonoid(a: aut.Transition): Seq[LinearCombination]
+
+  lazy private val autGraph = aut.toGraph
+  lazy private val cycles = trace("cycles")(autGraph.simpleCycles)
 
   // This describes the status of a transition in the current model
   protected sealed trait TransitionSelected {
@@ -174,13 +188,16 @@ class ParikhTheory(private[this] val aut: Automaton)
   // FIXME: total deterministisk ordning på edges!
   // FIXME: name the predicate!
   // FIXME: add back the registers
-  private val predicate =
+  lazy private val predicate =
     new Predicate(
       s"pa-${aut.hashCode}",
-      autGraph.edges.size + aut.nrRegisters.size
+      // the one here is the y parameter of the paper. If we have
+      // register/symbol automata, this would be the number of registers. As it
+      // stands, we just have one.
+      autGraph.edges.size + 1
     )
 
-  val predicates: Seq[ap.parser.IExpression.Predicate] = List(predicate)
+  lazy val predicates: Seq[ap.parser.IExpression.Predicate] = List(predicate)
 
   override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
     implicit val newOrder = order
@@ -221,19 +238,34 @@ class ParikhTheory(private[this] val aut: Automaton)
       }
     }
 
+    /**
+     *  This expresses the mapping between the monoid values and the transition
+     *  variables. It is the y = Sum t : transitions tVar(t) * h(t), for both
+     *  the h-values and y vectors.
+     *
+     *  TODO: How do we express that this multiplication happens on the
+     *  monoid's multiplication?
+     */
     def registerValuesReachable(
         registerVars: Seq[LinearCombination],
         transitionAndVar: Seq[(autGraph.Edge, LinearCombination)]
     ): Formula = {
       trace("Register equations") {
-        conj(registerVars.zipWithIndex.map {
-          case (rVar, rIdx) =>
-            rVar === sum(transitionAndVar.map {
-              case (t, tVar) =>
-                (aut.transitionIncrement(t)(rIdx), tVar)
-            })
-        })
-
+        // This is just a starting vector of the same dimension as the monoid
+        // values.
+        val startVectorSum: Seq[LinearCombination] =
+          Seq.fill(registerVars.length)(LinearCombination(IdealInt.ZERO))
+        conj(
+          transitionAndVar
+            .foldLeft(startVectorSum) {
+              case (sums, (t, tVar)) =>
+                toMonoid(t)
+                  .zip(sums)
+                  .map { case (monoidVal, sum) => sum + tVar * monoidVal }
+            }
+            .zip(registerVars)
+            .map { case (rVar, termSum) => rVar === termSum }
+        )
       }
     }
 
@@ -244,11 +276,13 @@ class ParikhTheory(private[this] val aut: Automaton)
         val (transitionVars, registerVars) = atom.splitAt(aut.transitions.size)
         val transitionAndVar = aut.transitions.zip(transitionVars.iterator).to
 
-        val constraints = List(
-          asManyIncomingAsOutgoing(transitionAndVar),
-          allNonnegative(transitionVars),
-          allNonnegative(registerVars),
-          registerValuesReachable(registerVars, transitionAndVar)
+        val constraints = trace("constraints")(
+          List(
+            asManyIncomingAsOutgoing(transitionAndVar),
+            allNonnegative(transitionVars),
+            allNonnegative(registerVars),
+            registerValuesReachable(registerVars, transitionAndVar)
+          )
         )
 
         val maybeAtom = if (cycles.isEmpty) List() else List(atom)
@@ -305,6 +339,14 @@ class ParikhTheory(private[this] val aut: Automaton)
     )
   }
 
-  TheoryRegistry register this
+}
 
+object ParikhTheory {
+  def apply[A <: Automaton](_aut: A)(
+      _toMonoid: _aut.Transition => Seq[LinearCombination]
+  ) = new ParikhTheory[A] {
+    val aut: _aut.type = _aut
+    val toMonoid = _toMonoid
+    TheoryRegistry register this
+  }
 }

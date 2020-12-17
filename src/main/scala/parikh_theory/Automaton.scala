@@ -21,6 +21,11 @@ trait Automaton {
   def states: Iterable[State]
 
   /**
+   * Transitions are just tuples of from, label, to
+   */
+  type Transition = (State, Label, State)
+
+  /**
    * Given a state, iterate over all outgoing transitions
    */
   def outgoingTransitions(from: State): Iterator[(State, Label)]
@@ -40,7 +45,7 @@ trait Automaton {
   /**
    * Iterate over all transitions
    */
-  def transitions: Iterator[(State, Label, State)] =
+  def transitions: Iterator[Transition] =
     for (s1 <- states.iterator; (s2, lbl) <- outgoingTransitions(s1))
       yield (s1, lbl, s2)
 
