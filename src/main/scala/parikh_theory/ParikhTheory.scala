@@ -12,7 +12,6 @@ import ap.terfor.{Formula, TermOrder}
 import ap.theories._
 import EdgeWrapper._
 import ap.parser.IExpression.Predicate
-import ap.algebra.{Monoid, Abelian}
 
 // TODO write a LengthCounting mixin which interns one term for length and
 // yields that for each transition
@@ -33,7 +32,6 @@ trait ParikhTheory[A <: Automaton]
     with Complete {
 
   val aut: A
-  val toMonoid: aut.Transition => Seq[LinearCombination]
 
   /**
    * This method provides the "modulo" aspect by performing the translation
@@ -43,7 +41,7 @@ trait ParikhTheory[A <: Automaton]
    * For example length-counting would map all transitions representing a
    * single character (typically all transitions) to 1.
    */
-  //def toMonoid(a: aut.Transition): Seq[LinearCombination]
+  def toMonoid(a: aut.Transition): Seq[LinearCombination]
 
   lazy private val autGraph = aut.toGraph
   lazy private val cycles = trace("cycles")(autGraph.simpleCycles)
@@ -346,7 +344,8 @@ object ParikhTheory {
       _toMonoid: _aut.Transition => Seq[LinearCombination]
   ) = new ParikhTheory[A] {
     val aut: _aut.type = _aut
-    val toMonoid = _toMonoid
+    override def toMonoid(t: _aut.Transition) = _toMonoid(t)
+
     TheoryRegistry register this
   }
 }

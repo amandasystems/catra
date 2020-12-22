@@ -36,7 +36,6 @@ class TestParikhTheory extends AnyFunSuite {
       !!(length =/= 1)
 
       !!((lt allowsRegisterValues Seq(length)))
-
       val expectedStatus = ProverStatus.Unsat
 
       if (??? != expectedStatus) {

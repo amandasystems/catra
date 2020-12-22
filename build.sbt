@@ -3,6 +3,7 @@ import Dependencies._
 ThisBuild / scalaVersion     := "2.12.12"
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "uuverifiers"
+ThisBuild / crossScalaVersions := Seq("2.11.12", "2.12.12")
 
 ThisBuild / scalacOptions ++= Seq(
     "-deprecation",
@@ -11,8 +12,6 @@ ThisBuild / scalacOptions ++= Seq(
     "-Xlint",
     "-Xelide-below", "INFO",
     // "-feature",
-    "-opt:l:inline",
-    "-opt-inline-from:**",
     "-Ywarn-dead-code",
     "-Ywarn-unused"
 )
