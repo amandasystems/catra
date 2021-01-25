@@ -43,6 +43,12 @@ trait ParikhTheory[A <: Automaton]
    */
   def toMonoid(a: aut.Transition): Seq[LinearCombination]
 
+  /**
+    *  This value represents the dimensionality of the sequence returned by
+    * `toMonoid`.
+    **/
+  val monoidDimension: Int
+
   lazy private val autGraph = aut.toGraph
   lazy private val cycles = trace("cycles")(autGraph.simpleCycles)
 
@@ -187,13 +193,7 @@ trait ParikhTheory[A <: Automaton]
   // FIXME: name the predicate!
   // FIXME: add back the registers
   lazy private val predicate =
-    new Predicate(
-      s"pa-${aut.hashCode}",
-      // the one here is the y parameter of the paper. If we have
-      // register/symbol automata, this would be the number of registers. As it
-      // stands, we just have one.
-      autGraph.edges.size + 1
-    )
+    new Predicate(s"pa-${aut.hashCode}", autGraph.edges.size + monoidDimension)
 
   lazy val predicates: Seq[ap.parser.IExpression.Predicate] = List(predicate)
 
@@ -341,10 +341,12 @@ trait ParikhTheory[A <: Automaton]
 
 object ParikhTheory {
   def apply[A <: Automaton](_aut: A)(
-      _toMonoid: _aut.Transition => Seq[LinearCombination]
+    _toMonoid: _aut.Transition => Seq[LinearCombination],
+    _monoidDimension: Int
   ) = new ParikhTheory[A] {
     val aut: _aut.type = _aut
     override def toMonoid(t: _aut.Transition) = _toMonoid(t)
+    override val monoidDimension = _monoidDimension
 
     TheoryRegistry register this
   }
