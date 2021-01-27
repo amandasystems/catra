@@ -23,17 +23,6 @@ object TestUtilities {
     true
   }
 
-  def theoryBoilerplate(
-      p: ap.SimpleAPI,
-      theory: ParikhTheory[_, _, _],
-      dimension: Int
-  ) = {
-    import p._
-    val constants = (0 until dimension).map(i => createConstant(s"length_${i}"))
-    !!((theory allowsRegisterValues constants))
-    constants
-  }
-
   def expectCountValues(
       theory: ParikhTheory[_, _, _],
       expectedValues: Seq[Int]
@@ -45,7 +34,10 @@ object TestUtilities {
 
     expect(expectStatus) { p =>
       import p._
-      val constants = theoryBoilerplate(p, theory, expectedValues.length)
+
+      val constants =
+        (0 until expectedValues.length).map(i => createConstant(s"length_${i}"))
+      !!((theory allowsRegisterValues constants))
 
       constants.zip(expectedValues).foreach {
         case (c, expected) =>
