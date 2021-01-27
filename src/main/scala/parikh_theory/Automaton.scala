@@ -3,17 +3,7 @@ package uuverifiers.parikh_theory
 /**
  An automaton as far as the Parikh Theory is concerned.
  */
-trait Automaton {
-
-  /**
-   * Type of states
-   */
-  type State
-
-  /**
-   * Type of labels
-   */
-  type Label
+trait Automaton[State, Label] {
 
   /**
    * Iterate over automaton states
@@ -49,7 +39,8 @@ trait Automaton {
     for (s1 <- states.iterator; (s2, lbl) <- outgoingTransitions(s1))
       yield (s1, lbl, s2)
 
-  class AutomatonGraph(val aut: Automaton) extends Graphable[State, Label] {
+  class AutomatonGraph(val aut: Automaton[State, Label])
+      extends Graphable[State, Label] {
 
     def allNodes() = states.to
     def edges() = transitions.to
@@ -72,4 +63,19 @@ trait Automaton {
 
   lazy val toGraph = new AutomatonGraph(this)
 
+  /**
+   * Compute the product of two automata
+   *  FIXME: should work on other types for state and label
+    **/
+  def *(that: Automaton[State, Label]): ProductAutomaton[State, Label] = ???
+
+}
+
+/**
+ * The only thing special about a product automaton is that each transition
+ * remembers the ones it came from.
+  **/
+trait ProductAutomaton[State, Label] extends Automaton[State, Label] {
+  // states are product states
+  // labels are product labels
 }

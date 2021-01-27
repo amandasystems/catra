@@ -1,16 +1,12 @@
 package uuverifiers.parikh_theory
 
 import org.scalatest.funsuite.AnyFunSuite
-import ap.SimpleAPI
-import SimpleAPI.ProverStatus
-import ap.terfor.linearcombination.LinearCombination
-import ap.basetypes.IdealInt
 
 class TestParikhTheory extends AnyFunSuite {
   test("length constraint for trivial automaton works") {
 
     // TODO we need a nicer way to define automata for testing!
-    object Aut extends Automaton {
+    object Aut extends Automaton[Int, Int] {
       type State = Int
       type Label = Int
 
@@ -21,30 +17,9 @@ class TestParikhTheory extends AnyFunSuite {
       def states = List(0, 1)
     }
 
-    // val lt = ParikhTheory(Aut)(_ => Seq(LinearCombination(IdealInt.ONE)))
-    // val lt = new ParikhTheory[Aut.type] with LengthCounting[Aut.type] {
-    //   val aut: Aut.type = Aut
-    // }
-    val lt = LengthCounting(Aut)
+    val lt = LengthCounting[Int, Int, Aut.type](Array(Aut, Aut))
 
-    // TODO: this should be broken out into a function for re-use, as in
-    // Ostrich+
-    SimpleAPI.withProver { p =>
-      import p._
-
-      val length = createConstant("length")
-      !!(length =/= 1)
-
-      !!((lt allowsRegisterValues Seq(length)))
-      val expectedStatus = ProverStatus.Unsat
-
-      if (??? != expectedStatus) {
-        assert(
-          false,
-          s"${???} (expected: ${expectedStatus}). Countermodel: ${partialModel}"
-        )
-      }
-    }
+    assert(TestUtilities.onlyReturnsLength(lt, 1))
   }
 
 }

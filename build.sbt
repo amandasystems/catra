@@ -32,4 +32,5 @@ lazy val root = (project in file("."))
   .settings(
     name := "Parikh Theory",
     libraryDependencies += scalaTest % Test,
+    libraryDependencies += scalaCheck % Test,
   )

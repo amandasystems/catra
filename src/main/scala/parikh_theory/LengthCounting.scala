@@ -3,17 +3,17 @@ import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
 import ap.theories.TheoryRegistry
 
-trait LengthCounting[A <: Automaton] extends ParikhTheory[A] {
-  override def toMonoid(_t: aut.Transition) =
+trait LengthCounting[S, L, A <: Automaton[S, L]] extends ParikhTheory[S, L, A] {
+  override def toMonoid(_t: Any) =
     Seq(LinearCombination(IdealInt.ONE))
-  
+
   override val monoidDimension = 1
 }
 
 object LengthCounting {
-  def apply[A <: Automaton](_aut: A) =
-    new ParikhTheory[A] with LengthCounting[A] {
-      override val aut = _aut
+  def apply[S, L, A <: Automaton[S, L]](_auts: IndexedSeq[A]) =
+    new ParikhTheory[S, L, A] with LengthCounting[S, L, A] {
+      override val auts = _auts
       TheoryRegistry register this
     }
 }

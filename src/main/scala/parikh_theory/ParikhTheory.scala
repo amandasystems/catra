@@ -17,56 +17,50 @@ import ap.parser.IExpression.Predicate
 // yields that for each transition
 // TODO work through terminology. Why do we use "register values"?
 // TODO use [M <: Monoid with Abelian, A <: Automaton]
-// FIXME: this is a constructor for a theory, it never registers itself!
 
 /**
  * The Parikh Theory enforces Parikh Image membership modulo a morphism to a
  * commutative monoid. The most straightforward example is string length, with
  * an automaton representing the possible strings.
+ *
+ * NOTE: this is a theory factory, it never registers itself, that's on you, the
+ * caller!
+ *
+ * WARNING! fields are lazy because of how initialisation works in scala (it's
+ * Not Great.)
  */
-trait ParikhTheory[A <: Automaton]
+trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
     extends Theory
     with NoFunctions
     with NoAxioms
     with Tracing
     with Complete {
 
-  val aut: A
+  val auts: IndexedSeq[A]
 
   /**
    * This method provides the "modulo" aspect by performing the translation
    * from a transition (usually really the transition's label) to a commutative
    * monoid (M).
    *
+   * Must always return something of length monoidDimension.
+   *
    * For example length-counting would map all transitions representing a
    * single character (typically all transitions) to 1.
+   * NOTE: takes Any argument because Scala's type system isn't sophisticated
+   * enough, or I am not sophisticated enough for it. 1-2 of those.
    */
-  def toMonoid(a: aut.Transition): Seq[LinearCombination]
+  def toMonoid(a: Any): Seq[LinearCombination]
 
   /**
-    *  This value represents the dimensionality of the sequence returned by
-    * `toMonoid`.
+   *  This value represents the dimensionality of the sequence returned by
+   * `toMonoid`.
     **/
   val monoidDimension: Int
 
-  lazy private val autGraph = aut.toGraph
-  lazy private val cycles = trace("cycles")(autGraph.simpleCycles)
-
-  // This describes the status of a transition in the current model
-  protected sealed trait TransitionSelected {
-    def definitelyAbsent = false
-    def isUnknown = false
-  }
-
-  object TransitionSelected {
-    case object Present extends TransitionSelected
-    case object Absent extends TransitionSelected {
-      override def definitelyAbsent = true
-    }
-    case object Unknown extends TransitionSelected {
-      override def isUnknown = true
-    }
-  }
+  lazy val aut = auts(0) // lazy because of early init
+  lazy private val autGraph = aut.toGraph // lazy because of early init
+  lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of early init
 
   private object TransitionSplitter extends PredicateHandlingProcedure {
     override val procedurePredicate = predicate
@@ -153,6 +147,9 @@ trait ParikhTheory[A <: Automaton]
         // some cycle that can still appear (i.e. wose edges are not
         // known-deselected).
 
+        // TODO experiment with branching order and start close to initial
+        // states.
+
         // constrain any terms associated with a transition from a
         // *known* unreachable state to be = 0 ("not used").
         val unreachableActions = trace("unreachableActions") {
@@ -193,7 +190,10 @@ trait ParikhTheory[A <: Automaton]
   // FIXME: name the predicate!
   // FIXME: add back the registers
   lazy private val predicate =
-    new Predicate(s"pa-${aut.hashCode}", autGraph.edges.size + monoidDimension)
+    new Predicate(
+      s"pa-${auts(0).hashCode}",
+      autGraph.edges.size + monoidDimension
+    )
 
   lazy val predicates: Seq[ap.parser.IExpression.Predicate] = List(predicate)
 
@@ -204,7 +204,7 @@ trait ParikhTheory[A <: Automaton]
         transitionAndVar: Seq[(autGraph.Edge, LinearCombination)]
     ): Formula = {
       def asStateFlowSum(
-          stateTerms: Seq[(aut.State, (IdealInt, LinearCombination))]
+          stateTerms: Seq[(State, (IdealInt, LinearCombination))]
       ) = {
         val (state, _) = stateTerms.head
         val isInitial =
@@ -340,14 +340,30 @@ trait ParikhTheory[A <: Automaton]
 }
 
 object ParikhTheory {
-  def apply[A <: Automaton](_aut: A)(
-    _toMonoid: _aut.Transition => Seq[LinearCombination],
-    _monoidDimension: Int
-  ) = new ParikhTheory[A] {
-    val aut: _aut.type = _aut
-    override def toMonoid(t: _aut.Transition) = _toMonoid(t)
+  def apply[S, L, A <: Automaton[S, L]](_auts: IndexedSeq[A])(
+      _toMonoid: Any => Seq[LinearCombination],
+      _monoidDimension: Int
+  ) = new ParikhTheory[S, L, A] {
+    override val auts: IndexedSeq[A] = _auts
+    override def toMonoid(t: Any) = _toMonoid(t)
     override val monoidDimension = _monoidDimension
 
     TheoryRegistry register this
+  }
+}
+
+// This describes the status of a transition in the current model
+protected sealed trait TransitionSelected {
+  def definitelyAbsent = false
+  def isUnknown = false
+}
+
+object TransitionSelected {
+  case object Present extends TransitionSelected
+  case object Absent extends TransitionSelected {
+    override def definitelyAbsent = true
+  }
+  case object Unknown extends TransitionSelected {
+    override def isUnknown = true
   }
 }
