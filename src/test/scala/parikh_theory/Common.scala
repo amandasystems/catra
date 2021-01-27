@@ -35,9 +35,10 @@ object TestUtilities {
   }
 
   def expectCountValues(
-      expectStatus: ProverStatus.Value,
       theory: ParikhTheory[_, _, _],
       expectedValues: Seq[Int]
+  )(
+      expectStatus: ProverStatus.Value
   ): Boolean = {
     // We negate equality when proving a negative
     val negateEquality = expectStatus == ProverStatus.Unsat
@@ -58,15 +59,8 @@ object TestUtilities {
       expectedCounts: Seq[Int]
   ): Boolean = {
 
-    expectCountValues(
-      ProverStatus.Unsat,
-      theory,
-      expectedCounts
-    ) && expectCountValues(
-      ProverStatus.Sat,
-      theory,
-      expectedCounts
-    )
+    val prover = expectCountValues(theory, expectedCounts) _
+    prover(ProverStatus.Unsat) && prover(ProverStatus.Sat)
   }
 
   def onlyReturnsLength(
