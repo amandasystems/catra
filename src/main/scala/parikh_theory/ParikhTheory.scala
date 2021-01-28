@@ -59,8 +59,8 @@ trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
   val monoidDimension: Int
 
   lazy val aut = auts(0) // lazy because of early init
-  lazy private val autGraph = aut.toGraph // lazy because of early init
-  lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of early init
+  lazy private val autGraph = aut.toGraph // lazy because of aut
+  lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
 
   private object TransitionSplitter extends PredicateHandlingProcedure {
     override val procedurePredicate = predicate
@@ -189,13 +189,18 @@ trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
   // FIXME: total deterministisk ordning på edges!
   // FIXME: name the predicate!
   // FIXME: add back the registers
+  // lazy because it depends on aut
   lazy private val predicate =
     new Predicate(
-      s"pa-${auts(0).hashCode}",
+      s"pa-${aut.hashCode}",
       autGraph.edges.size + monoidDimension
     )
 
-  lazy val predicates: Seq[ap.parser.IExpression.Predicate] = List(predicate)
+  private val transitionMaskPredicate =
+    new Predicate(s"TransitionMask_${this.hashCode}", 4)
+
+  lazy val predicates: Seq[ap.parser.IExpression.Predicate] =
+    Seq(predicate, transitionMaskPredicate)
 
   override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
     implicit val newOrder = order
@@ -339,6 +344,7 @@ trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
 
 }
 
+// TODO turn this into a theory builder?
 object ParikhTheory {
   def apply[S, L, A <: Automaton[S, L]](_auts: IndexedSeq[A])(
       _toMonoid: Any => Seq[LinearCombination],
