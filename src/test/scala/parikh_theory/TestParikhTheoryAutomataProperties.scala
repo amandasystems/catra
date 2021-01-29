@@ -5,7 +5,7 @@ import ap.basetypes.IdealInt
 import org.scalacheck.Properties
 import org.scalacheck.Prop.{forAll, propBoolean}
 
-class WordAutomaton(var word: String) extends Automaton[Int, Char] {
+class WordAutomaton(var word: String) extends Automaton {
   type State = Int
   type Label = Char
 
@@ -24,7 +24,7 @@ object WordSpecification extends Properties("WordAutmata") {
 
   property("wordHasCorrectLength") = forAll { (word: String) =>
     val a = new WordAutomaton(word)
-    val lt = LengthCounting[Int, Char, WordAutomaton](Array(a))
+    val lt = LengthCounting[WordAutomaton](Array(a))
 
     TestUtilities.onlyReturnsLength(lt, word.length)
   }
@@ -48,7 +48,7 @@ object WordSpecification extends Properties("WordAutmata") {
         res
       }
 
-      val pi = ParikhTheory[Int, Char, WordAutomaton](Array(a))(
+      val pi = ParikhTheory[WordAutomaton](Array(a))(
         charCounter,
         alphabet.length
       )

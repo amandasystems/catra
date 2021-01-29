@@ -24,7 +24,7 @@ object TestUtilities {
   }
 
   def expectCountValues(
-      theory: ParikhTheory[_, _, _],
+      theory: ParikhTheory[_],
       expectedValues: Seq[Int]
   )(
       expectStatus: ProverStatus.Value
@@ -37,7 +37,7 @@ object TestUtilities {
 
       val constants =
         (0 until expectedValues.length).map(i => createConstant(s"length_${i}"))
-      !!((theory allowsRegisterValues constants))
+      !!((theory allowsMonoidValues constants))
 
       constants.zip(expectedValues).foreach {
         case (c, expected) =>
@@ -47,7 +47,7 @@ object TestUtilities {
   }
 
   def onlyReturnsCounts(
-      theory: ParikhTheory[_, _, _],
+      theory: ParikhTheory[_],
       expectedCounts: Seq[Int]
   ): Boolean = {
 
@@ -56,7 +56,7 @@ object TestUtilities {
   }
 
   def onlyReturnsLength(
-      theory: LengthCounting[_, _, _],
+      theory: LengthCounting[_],
       length: Int
   ): Boolean = {
     onlyReturnsCounts(theory, Seq(length))

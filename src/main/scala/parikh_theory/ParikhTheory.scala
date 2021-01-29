@@ -29,7 +29,7 @@ import ap.parser.IExpression.Predicate
  * WARNING! fields are lazy because of how initialisation works in scala (it's
  * Not Great.)
  */
-trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
+trait ParikhTheory[A <: Automaton]
     extends Theory
     with NoFunctions
     with NoAxioms
@@ -209,7 +209,7 @@ trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
         transitionAndVar: Seq[(autGraph.Edge, LinearCombination)]
     ): Formula = {
       def asStateFlowSum(
-          stateTerms: Seq[(State, (IdealInt, LinearCombination))]
+          stateTerms: Seq[(aut.State, (IdealInt, LinearCombination))]
       ) = {
         val (state, _) = stateTerms.head
         val isInitial =
@@ -324,21 +324,28 @@ trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
 
   /**
    * Generate a quantified formula that is satisfiable iff the provided
-   * register values are possible by any legal path through the automaton.
+   * monoid values are possible by any legal path through the automaton.
    *
     **/
-  def allowsRegisterValues(registerValues: Seq[ITerm]): IFormula = {
+  def allowsMonoidValues(monoidValues: Seq[ITerm]): IFormula = {
     import IExpression._
     val transitionTermSorts = List.fill(autGraph.edges.size)(Sort.Integer) //
-    val transitionTerms = autGraph.edges.indices.map(v)
+    val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
 
     // need to prevent variable capture by the quantifiers added below
-    val shiftedRegisterValues =
-      registerValues map (VariableShiftVisitor(_, 0, transitionTermSorts.size))
+    val shiftedMonoidValues =
+      monoidValues map (VariableShiftVisitor(_, 0, transitionTerms.size))
+
+    val transitionMaskInstances = and(
+      transitionTerms.zipWithIndex
+        .map {
+          case (t, i) => this.transitionMaskPredicate(0, 0, i, t)
+        }
+    )
 
     ex(
       transitionTermSorts,
-      this.predicate(transitionTerms ++ shiftedRegisterValues: _*)
+      this.predicate(transitionTerms ++ shiftedMonoidValues: _*) &&& transitionMaskInstances
     )
   }
 
@@ -346,15 +353,17 @@ trait ParikhTheory[State, Label, A <: Automaton[State, Label]]
 
 // TODO turn this into a theory builder?
 object ParikhTheory {
-  def apply[S, L, A <: Automaton[S, L]](_auts: IndexedSeq[A])(
+  def apply[A <: Automaton](_auts: IndexedSeq[A])(
       _toMonoid: Any => Seq[LinearCombination],
       _monoidDimension: Int
-  ) = new ParikhTheory[S, L, A] {
-    override val auts: IndexedSeq[A] = _auts
-    override def toMonoid(t: Any) = _toMonoid(t)
-    override val monoidDimension = _monoidDimension
+  ) = {
+    new ParikhTheory[A] {
+      override val auts: IndexedSeq[A] = _auts
+      override def toMonoid(t: Any) = _toMonoid(t)
+      override val monoidDimension = _monoidDimension
 
     TheoryRegistry register this
+  }
   }
 }
 
