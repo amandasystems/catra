@@ -4,7 +4,7 @@ import ap.basetypes.IdealInt
 import ap.theories.TheoryRegistry
 
 trait LengthCounting[A <: Automaton] extends ParikhTheory[A] {
-  override def toMonoid(_t: Any) =
+  override def toMonoid(_t: (Any, Any, Any)) =
     Seq(LinearCombination(IdealInt.ONE))
 
   override val monoidDimension = 1

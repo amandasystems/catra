@@ -50,7 +50,7 @@ trait ParikhTheory[A <: Automaton]
    * NOTE: takes Any argument because Scala's type system isn't sophisticated
    * enough, or I am not sophisticated enough for it. 1-2 of those.
    */
-  def toMonoid(a: Any): Seq[LinearCombination]
+  def toMonoid(a: (Any, Any, Any)): Seq[LinearCombination]
 
   /**
    *  This value represents the dimensionality of the sequence returned by
@@ -359,7 +359,7 @@ object ParikhTheory {
   ) = {
     new ParikhTheory[A] {
       override val auts: IndexedSeq[A] = _auts
-      override def toMonoid(t: Any) = _toMonoid(t)
+      override def toMonoid(t: (Any, Any, Any)) = _toMonoid(t)
       override val monoidDimension = _monoidDimension
 
     TheoryRegistry register this
