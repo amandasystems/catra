@@ -1,6 +1,4 @@
 package uuverifiers.parikh_theory
-import ap.terfor.linearcombination.LinearCombination
-import ap.basetypes.IdealInt
 
 import org.scalacheck.Properties
 import org.scalacheck.Prop.{forAll, propBoolean}
@@ -36,20 +34,8 @@ object WordSpecification extends Properties("WordAutmata") {
       val alphabet = word.toSet.toSeq.sorted
       val expectedCharCounts = alphabet.map(c => word.count(_ == c))
 
-      val charCounter = (t: Any) => {
-        val label = t.asInstanceOf[Tuple3[_, Char, _]]._2
-        val res = alphabet
-          .map(
-            c =>
-              if (c == label) LinearCombination(IdealInt.ONE)
-              else LinearCombination(IdealInt.ZERO)
-          )
-          .toSeq
-        res
-      }
-
       val pi = ParikhTheory[WordAutomaton](Array(a))(
-        charCounter,
+        TestUtilities.alphabetCounter(alphabet) _,
         alphabet.length
       )
 

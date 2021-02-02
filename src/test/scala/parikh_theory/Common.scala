@@ -5,10 +5,18 @@ import SimpleAPI.ProverStatus
 import ap.parser.{ITerm, IFormula}
 import org.scalatest.funsuite.AnyFunSuite
 
-// TODO make a general method to just test an automaton against a set of
-// constraints.
-
 object TestUtilities extends AnyFunSuite {
+
+  def alphabetCounter[T](alphabet: Seq[T])(t: Any) = {
+    import ap.terfor.linearcombination.LinearCombination
+    import ap.basetypes.IdealInt
+    val ONE = LinearCombination(IdealInt.ONE)
+    val ZERO = LinearCombination(IdealInt.ZERO)
+
+    val label = t.asInstanceOf[Tuple3[_, T, _]]._2
+    alphabet.map(c => if (c == label) ONE else ZERO).toSeq
+  }
+
   private def assertConstraints(
       p: ap.SimpleAPI
   )(cs: IFormula, expect: ProverStatus.Value) = {
@@ -21,7 +29,7 @@ object TestUtilities extends AnyFunSuite {
   }
 
   def ensuresAlways(theory: ParikhTheory[_])(
-      lengthConstraints: IndexedSeq[ITerm] => Seq[IFormula]
+      lengthConstraints: IndexedSeq[ITerm] => IFormula
   ) = {
     SimpleAPI.withProver { p =>
       val constants =
@@ -30,7 +38,7 @@ object TestUtilities extends AnyFunSuite {
 
       p !! ((theory allowsMonoidValues constants))
 
-      val constraints = lengthConstraints(constants).reduce(_ &&& _)
+      val constraints = lengthConstraints(constants)
       val asserter = assertConstraints(p) _
 
       p scope asserter(constraints, ProverStatus.Sat)
@@ -42,9 +50,13 @@ object TestUtilities extends AnyFunSuite {
       theory: ParikhTheory[_],
       expectedCounts: Seq[Int]
   ) = {
-    ensuresAlways(theory)(_.zip(expectedCounts).map {
-      case (l, expected) => l === expected
-    })
+    ensuresAlways(theory)(
+      _.zip(expectedCounts)
+        .map {
+          case (l, expected) => l === expected
+        }
+        .reduce(_ &&& _)
+    )
 
     true
   }
