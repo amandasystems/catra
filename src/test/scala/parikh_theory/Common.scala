@@ -2,63 +2,111 @@ package uuverifiers.parikh_theory
 
 import ap.SimpleAPI
 import SimpleAPI.ProverStatus
+import ap.parser.{ITerm, IFormula}
+import org.scalatest.funsuite.AnyFunSuite
 
-object TestUtilities {
+// TODO make a general method to just test an automaton against a set of
+// constraints.
 
-  def expect(
-      expectedStatus: ProverStatus.Value
-  )(hook: ap.SimpleAPI => Any): Boolean = {
-    SimpleAPI.withProver { p =>
-      import p._
+object TestUtilities extends AnyFunSuite {
+  private def assertConstraints(
+      p: ap.SimpleAPI
+  )(cs: IFormula, expect: ProverStatus.Value) = {
+    p !! cs
 
-      hook(p)
-
-      if (??? != expectedStatus) {
-        println(
-          s"${???} (expected: ${expectedStatus}). Countermodel: ${partialModel}"
-        )
-        return false
-      }
+    val res = p.???
+    withClue(s"${cs} countermodel: ${p.partialModel}") {
+      assert(res == expect)
     }
-    true
   }
 
-  def expectCountValues(
-      theory: ParikhTheory[_],
-      expectedValues: Seq[Int]
-  )(
-      expectStatus: ProverStatus.Value
-  ): Boolean = {
-    // We negate equality when proving a negative
-    val negateEquality = expectStatus == ProverStatus.Unsat
-
-    expect(expectStatus) { p =>
-      import p._
-
+  def ensuresAlways(theory: ParikhTheory[_])(
+      lengthConstraints: IndexedSeq[ITerm] => Seq[IFormula]
+  ) = {
+    SimpleAPI.withProver { p =>
       val constants =
-        (0 until expectedValues.length).map(i => createConstant(s"length_${i}"))
-      !!((theory allowsMonoidValues constants))
+        (0 until theory.monoidDimension)
+          .map(i => p createConstant (s"length_${i}"))
 
-      constants.zip(expectedValues).foreach {
-        case (c, expected) =>
-          if (negateEquality) !!(c =/= expected) else !!(c === expected)
-      }
+      p !! ((theory allowsMonoidValues constants))
+
+      val constraints = lengthConstraints(constants).reduce(_ &&& _)
+      val asserter = assertConstraints(p) _
+
+      p scope asserter(constraints, ProverStatus.Sat)
+      p scope asserter(~constraints, ProverStatus.Unsat)
     }
   }
 
   def onlyReturnsCounts(
       theory: ParikhTheory[_],
       expectedCounts: Seq[Int]
-  ): Boolean = {
+  ) = {
+    ensuresAlways(theory)(_.zip(expectedCounts).map {
+      case (l, expected) => l === expected
+    })
 
-    val prover = expectCountValues(theory, expectedCounts) _
-    prover(ProverStatus.Unsat) && prover(ProverStatus.Sat)
+    true
   }
 
   def onlyReturnsLength(
       theory: LengthCounting[_],
       length: Int
-  ): Boolean = {
-    onlyReturnsCounts(theory, Seq(length))
+  ) = onlyReturnsCounts(theory, Seq(length))
+}
+
+class AutomatonBuilder[S, L] {
+  private var _autStates = Set[S]()
+  private var _transitions = Set[(S, L, S)]()
+  private var _initial: Option[S] = None
+  private var _accepting = Set[S]()
+
+  def addStates(statesToAdd: Seq[S]): AutomatonBuilder[S, L] = {
+    _autStates ++= statesToAdd
+    this
   }
+
+  def setInitial(newInitialState: S): AutomatonBuilder[S, L] = {
+    assert(_autStates contains newInitialState)
+    _initial = Some(newInitialState)
+    this
+  }
+
+  def setAccepting(acceptingStates: S*): AutomatonBuilder[S, L] = {
+    assert(acceptingStates forall (_autStates(_)))
+    _accepting ++= acceptingStates
+    this
+  }
+
+  def addTransition(from: S, label: L, to: S): AutomatonBuilder[S, L] = {
+    assert((_autStates contains from) && (_autStates contains to))
+    _transitions += ((from, label, to))
+    this
+  }
+
+  def getAutomaton(): Automaton = {
+    assert(_initial != None)
+
+    object Aut extends Automaton {
+      type State = S
+      type Label = L
+
+      override val initialState = _initial.get
+      override def isAccept(s: State) = _accepting contains s
+      override def outgoingTransitions(from: State) =
+        _transitions
+          .filter { case (thatFrom, _, _) => thatFrom == from }
+          .map {
+            case (_, label, to) => (to, label)
+          }
+          .to
+      override val states = _autStates
+    }
+
+    Aut
+  }
+}
+
+object AutomatonBuilder {
+  def apply[S, L]() = new AutomatonBuilder[S, L]()
 }
