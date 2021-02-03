@@ -49,7 +49,7 @@ trait ParikhTheory[A <: Automaton]
    * single character (typically all transitions) to 1.
    * NOTE: takes Any argument because Scala's type system isn't sophisticated
    * enough, or I am not sophisticated enough for it. 1-2 of those.
-   */
+    **/
   def toMonoid(a: (Any, Any, Any)): Seq[LinearCombination]
 
   /**
@@ -69,9 +69,7 @@ trait ParikhTheory[A <: Automaton]
     )(predicateAtom: Atom): Seq[Plugin.Action] = trace("TransitionSplitter") {
       implicit val _ = goal.order
 
-      val transitionTerms = trace("transitionTerms") {
-        predicateAtom.take(aut.transitions.size)
-      }
+      val transitionTerms = trace("transitionTerms")(goalTransitionTerms(goal))
 
       val unknownTransitions = trace("unknownTransitions") {
         transitionTerms filter (
@@ -100,6 +98,22 @@ trait ParikhTheory[A <: Automaton]
     }
   }
 
+  /**
+   * Take a TransitionMask predicate, and extract its indices.
+    **/
+  private def transitionMaskToTuple(atom: Atom) = {
+    val _ :+ _ :+ tIdxTerm :+ tVal = atom.toSeq
+    // TODO in the future, we will need all indices!
+    (tIdxTerm.constant.intValue, tVal)
+  }
+
+  private def goalTransitionTerms(goal: Goal) =
+    goal.facts.predConj
+      .positiveLitsWithPred(transitionMaskPredicate)
+      .map(transitionMaskToTuple)
+      .sortBy(_._1)
+      .map(_._2)
+
   private object ConnectednessPropagator
       extends Plugin
       with PredicateHandlingProcedure
@@ -113,9 +127,8 @@ trait ParikhTheory[A <: Automaton]
       trace("ConnectednessPropagator") {
         implicit val _ = goal.order
 
-        // try { throw new Exception() } catch {case e => e.printStackTrace}
-
-        val transitionTerms = predicateAtom.take(aut.transitions.size)
+        // TODO in the future we want to filter this for the correct automaton
+        val transitionTerms = goalTransitionTerms(goal)
 
         val transitionToTerm =
           trace("transitionToTerm")(
@@ -132,7 +145,9 @@ trait ParikhTheory[A <: Automaton]
         }
 
         if (isSubsumed) {
-          return Seq(Plugin.RemoveFacts(predicateAtom))
+          return trace("Subsumed, schedule actions")(
+            Seq(Plugin.RemoveFacts(predicateAtom))
+          )
         }
 
         val splittingActions = trace("splittingActions") {
@@ -329,6 +344,8 @@ trait ParikhTheory[A <: Automaton]
     **/
   def allowsMonoidValues(monoidValues: Seq[ITerm]): IFormula = {
     import IExpression._
+    assert(monoidValues.length == this.monoidDimension)
+
     val transitionTermSorts = List.fill(autGraph.edges.size)(Sort.Integer) //
     val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
 
@@ -343,9 +360,11 @@ trait ParikhTheory[A <: Automaton]
         }
     )
 
-    ex(
-      transitionTermSorts,
-      this.predicate(transitionTerms ++ shiftedMonoidValues: _*) &&& transitionMaskInstances
+    trace("allowsMonoidValues")(
+      ex(
+        transitionTermSorts,
+        this.predicate(transitionTerms ++ shiftedMonoidValues: _*) &&& transitionMaskInstances
+      )
     )
   }
 
@@ -362,8 +381,8 @@ object ParikhTheory {
       override def toMonoid(t: (Any, Any, Any)) = _toMonoid(t)
       override val monoidDimension = _monoidDimension
 
-    TheoryRegistry register this
-  }
+      TheoryRegistry register this
+    }
   }
 }
 

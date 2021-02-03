@@ -15,7 +15,7 @@ class WordAutomaton(var word: String) extends Automaton {
   def outgoingTransitions(from: this.State) =
     if (from != lastState) Iterator((from + 1, word(from))) else Iterator()
 
-  def states = (0 to (word.length)).toList
+  lazy val states = (0 to (word.length)).toList
 }
 
 object WordSpecification extends Properties("WordAutmata") {

@@ -42,8 +42,7 @@ trait Automaton {
     for (s1 <- states.iterator; (s2, lbl) <- outgoingTransitions(s1))
       yield (s1, lbl, s2)
 
-  class AutomatonGraph(val aut: Automaton)
-      extends Graphable[State, Label] {
+  class AutomatonGraph(val aut: Automaton) extends Graphable[State, Label] {
 
     def allNodes() = states.to
     def edges() = transitions.to

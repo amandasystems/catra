@@ -33,8 +33,7 @@ object TestUtilities extends AnyFunSuite {
   ) = {
     SimpleAPI.withProver { p =>
       val constants =
-        (0 until theory.monoidDimension)
-          .map(i => p createConstant (s"length_${i}"))
+        (0 until theory.monoidDimension).map(i => p createConstant (s"x${i}"))
 
       p !! ((theory allowsMonoidValues constants))
 
