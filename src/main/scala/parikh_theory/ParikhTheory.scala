@@ -219,7 +219,7 @@ trait ParikhTheory[A <: Automaton]
   // FIXME: total deterministisk ordning på edges!
   // lazy because it depends on aut
   lazy private val monoidMapPredicate =
-    new Predicate(s"MonoidMap_${aut.hashCode}", monoidDimension)
+    new Predicate(s"MonoidMap_${aut.hashCode}", monoidDimension + 1)
 
   private val transitionMaskPredicate =
     new Predicate(s"TransitionMask_${this.hashCode}", 4)
@@ -301,7 +301,7 @@ trait ParikhTheory[A <: Automaton]
 
     Theory.rewritePreds(f, order) { (atom, _) =>
       if (atom.pred == monoidMapPredicate) {
-        val registerVars = atom.take(monoidDimension)
+        val registerVars = trace("RegisterVars")(atom.tail.take(monoidDimension))
         val transitionVars = conjTransitionTerms(f)
         val transitionAndVar = aut.transitions.zip(transitionVars.iterator).to
 
@@ -357,24 +357,25 @@ trait ParikhTheory[A <: Automaton]
     import IExpression._
     assert(monoidValues.length == this.monoidDimension)
 
-    val transitionTermSorts = List.fill(autGraph.edges.size)(Sort.Integer) //
+    val termSorts = List.fill(autGraph.edges.size + 1)(Sort.Integer) //
     val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
+    val instanceTerm = v(transitionTerms.size)
 
     // need to prevent variable capture by the quantifiers added below
     val shiftedMonoidValues =
-      monoidValues map (VariableShiftVisitor(_, 0, transitionTerms.size))
+      monoidValues map (VariableShiftVisitor(_, 0, transitionTerms.size + 1))
 
     val transitionMaskInstances = and(
       transitionTerms.zipWithIndex
         .map {
-          case (t, i) => this.transitionMaskPredicate(0, 0, i, t)
+          case (t, i) => this.transitionMaskPredicate(instanceTerm, 0, i, t)
         }
     )
 
     trace("allowsMonoidValues")(
       ex(
-        transitionTermSorts,
-        monoidMapPredicate(shiftedMonoidValues: _*) &&& transitionMaskInstances
+        termSorts,
+        monoidMapPredicate(instanceTerm +: shiftedMonoidValues: _*) &&& transitionMaskInstances
       )
     )
   }
