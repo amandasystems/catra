@@ -63,13 +63,14 @@ trait ParikhTheory[A <: Automaton]
   lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
 
   private object TransitionSplitter extends PredicateHandlingProcedure {
-    override val procedurePredicate = predicate
+    override val procedurePredicate = monoidMapPredicate
     override def handlePredicateInstance(
         goal: Goal
     )(predicateAtom: Atom): Seq[Plugin.Action] = trace("TransitionSplitter") {
       implicit val _ = goal.order
 
-      val transitionTerms = trace("transitionTerms")(goalTransitionTerms(goal))
+      val transitionTerms =
+        trace("transitionTerms")(conjTransitionTerms(goal.facts))
 
       val unknownTransitions = trace("unknownTransitions") {
         transitionTerms filter (
@@ -107,9 +108,23 @@ trait ParikhTheory[A <: Automaton]
     (tIdxTerm.constant.intValue, tVal)
   }
 
-  private def goalTransitionTerms(goal: Goal) =
-    goal.facts.predConj
-      .positiveLitsWithPred(transitionMaskPredicate)
+  /**
+   * Recursively find all instances of a predicate, regardless of where they are
+   * in the conjunction and regardless of their sign.
+   *  WARNING: recursive!
+   *  TODO: figure out when this is overkill (most of the time?) and optimise!
+   **/
+  private def termsWithPredicate(
+      conj: Conjunction,
+      p: Predicate
+  ): IndexedSeq[Atom] =
+    conj.predConj.positiveLitsWithPred(p) ++ conj.predConj
+      .negativeLitsWithPred(p) ++ conj.negatedConjs.flatMap(
+      termsWithPredicate(_, p)
+    )
+
+  private def conjTransitionTerms(conj: Conjunction) =
+    termsWithPredicate(conj, transitionMaskPredicate)
       .map(transitionMaskToTuple)
       .sortBy(_._1)
       .map(_._2)
@@ -120,7 +135,7 @@ trait ParikhTheory[A <: Automaton]
       with NoAxiomGeneration {
     // Handle a specific predicate instance for a proof goal, returning the
     // resulting plugin actions.
-    override val procedurePredicate = predicate
+    override val procedurePredicate = monoidMapPredicate
     override def handlePredicateInstance(
         goal: Goal
     )(predicateAtom: Atom): Seq[Plugin.Action] =
@@ -128,7 +143,7 @@ trait ParikhTheory[A <: Automaton]
         implicit val _ = goal.order
 
         // TODO in the future we want to filter this for the correct automaton
-        val transitionTerms = goalTransitionTerms(goal)
+        val transitionTerms = conjTransitionTerms(goal.facts)
 
         val transitionToTerm =
           trace("transitionToTerm")(
@@ -202,20 +217,15 @@ trait ParikhTheory[A <: Automaton]
   }
 
   // FIXME: total deterministisk ordning på edges!
-  // FIXME: name the predicate!
-  // FIXME: add back the registers
   // lazy because it depends on aut
-  lazy private val predicate =
-    new Predicate(
-      s"pa-${aut.hashCode}",
-      autGraph.edges.size + monoidDimension
-    )
+  lazy private val monoidMapPredicate =
+    new Predicate(s"MonoidMap_${aut.hashCode}", monoidDimension)
 
   private val transitionMaskPredicate =
     new Predicate(s"TransitionMask_${this.hashCode}", 4)
 
-  lazy val predicates: Seq[ap.parser.IExpression.Predicate] =
-    Seq(predicate, transitionMaskPredicate)
+  override lazy val predicates =
+    Seq(monoidMapPredicate, transitionMaskPredicate)
 
   override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
     implicit val newOrder = order
@@ -290,8 +300,9 @@ trait ParikhTheory[A <: Automaton]
     def allNonnegative(vars: Seq[LinearCombination]) = conj(vars.map(_ >= 0))
 
     Theory.rewritePreds(f, order) { (atom, _) =>
-      if (atom.pred == this.predicate) {
-        val (transitionVars, registerVars) = atom.splitAt(aut.transitions.size)
+      if (atom.pred == monoidMapPredicate) {
+        val registerVars = atom.take(monoidDimension)
+        val transitionVars = conjTransitionTerms(f)
         val transitionAndVar = aut.transitions.zip(transitionVars.iterator).to
 
         val constraints = trace("constraints")(
@@ -363,7 +374,7 @@ trait ParikhTheory[A <: Automaton]
     trace("allowsMonoidValues")(
       ex(
         transitionTermSorts,
-        this.predicate(transitionTerms ++ shiftedMonoidValues: _*) &&& transitionMaskInstances
+        monoidMapPredicate(shiftedMonoidValues: _*) &&& transitionMaskInstances
       )
     )
   }

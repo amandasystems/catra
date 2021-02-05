@@ -23,9 +23,10 @@ object TestUtilities extends AnyFunSuite {
     p !! cs
 
     val res = p.???
-    withClue(s"${cs} countermodel: ${p.partialModel}") {
-      assert(res == expect)
-    }
+    val description =
+      if (res == ProverStatus.Sat) s" model: ${p.partialModel}" else ""
+
+    withClue(s"${cs}${description}")(assert(res == expect))
   }
 
   def ensuresAlways(theory: ParikhTheory[_])(
