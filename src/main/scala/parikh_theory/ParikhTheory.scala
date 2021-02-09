@@ -70,7 +70,9 @@ trait ParikhTheory[A <: Automaton]
       implicit val _ = goal.order
 
       val transitionTerms =
-        trace("transitionTerms")(conjTransitionTerms(goal.facts))
+        trace("transitionTerms")(
+          conjTransitionTerms(goal.facts, predicateAtom(0))
+        )
 
       val unknownTransitions = trace("unknownTransitions") {
         transitionTerms filter (
@@ -103,17 +105,17 @@ trait ParikhTheory[A <: Automaton]
    * Take a TransitionMask predicate, and extract its indices.
     **/
   private def transitionMaskToTuple(atom: Atom) = {
-    val _ :+ _ :+ tIdxTerm :+ tVal = atom.toSeq
+    val instanceIdTerm :+ _ :+ tIdxTerm :+ tVal = atom.toSeq
     // TODO in the future, we will need all indices!
-    (tIdxTerm.constant.intValue, tVal)
+    (instanceIdTerm(0), tIdxTerm.constant.intValue, tVal)
   }
 
   /**
    * Recursively find all instances of a predicate, regardless of where they are
    * in the conjunction and regardless of their sign.
    *  WARNING: recursive!
-   *  TODO: figure out when this is overkill (most of the time?) and optimise!
-   **/
+   *  TODO: roll this back to just operating on Goals
+   */
   private def termsWithPredicate(
       conj: Conjunction,
       p: Predicate
@@ -123,11 +125,17 @@ trait ParikhTheory[A <: Automaton]
       termsWithPredicate(_, p)
     )
 
-  private def conjTransitionTerms(conj: Conjunction) =
-    termsWithPredicate(conj, transitionMaskPredicate)
-      .map(transitionMaskToTuple)
-      .sortBy(_._1)
-      .map(_._2)
+  private def conjTransitionTerms(
+      conj: Conjunction,
+      instance: LinearCombination
+  ) =
+    trace(s"TransitionMasks for ${instance} in ${conj}") {
+      termsWithPredicate(conj, transitionMaskPredicate)
+        .map(transitionMaskToTuple)
+        .filter { case (i, _, _) => i == instance }
+        .sortBy(_._2)
+        .map(_._3)
+    }
 
   private object ConnectednessPropagator
       extends Plugin
@@ -142,8 +150,10 @@ trait ParikhTheory[A <: Automaton]
       trace("ConnectednessPropagator") {
         implicit val _ = goal.order
 
+        val instanceTerm = predicateAtom(0)
+
         // TODO in the future we want to filter this for the correct automaton
-        val transitionTerms = conjTransitionTerms(goal.facts)
+        val transitionTerms = conjTransitionTerms(goal.facts, instanceTerm)
 
         val transitionToTerm =
           trace("transitionToTerm")(
@@ -230,94 +240,12 @@ trait ParikhTheory[A <: Automaton]
   override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
     implicit val newOrder = order
 
-    def asManyIncomingAsOutgoing(
-        transitionAndVar: Seq[(autGraph.Edge, LinearCombination)]
-    ): Formula = {
-      def asStateFlowSum(
-          stateTerms: Seq[(aut.State, (IdealInt, LinearCombination))]
-      ) = {
-        val (state, _) = stateTerms.head
-        val isInitial =
-          (if (state == aut.initialState) LinearCombination.ONE
-           else LinearCombination.ZERO)
-        (state, sum(stateTerms.unzip._2 ++ List((IdealInt.ONE, isInitial))))
-      }
-
-      trace("Flow equations") {
-        conj(
-          transitionAndVar
-            .filter(!_._1.isSelfEdge)
-            .flatMap {
-              case ((from, _, to), transitionVar) =>
-                List(
-                  (to, (IdealInt.ONE, transitionVar)),
-                  (from, (IdealInt.MINUS_ONE, transitionVar))
-                )
-            }
-            .to
-            .groupBy(_._1)
-            .values
-            .map(asStateFlowSum)
-            .map {
-              case (state, flowSum) =>
-                if (aut isAccept state) flowSum >= 0 else flowSum === 0
-            }
-        )
-      }
-    }
-
-    /**
-     *  This expresses the mapping between the monoid values and the transition
-     *  variables. It is the y = Sum t : transitions tVar(t) * h(t), for both
-     *  the h-values and y vectors.
-     *
-     *  TODO: How do we express that this multiplication happens on the
-     *  monoid's multiplication?
-     */
-    def registerValuesReachable(
-        registerVars: Seq[LinearCombination],
-        transitionAndVar: Seq[(autGraph.Edge, LinearCombination)]
-    ): Formula = {
-      trace("Register equations") {
-        // This is just a starting vector of the same dimension as the monoid
-        // values.
-        val startVectorSum: Seq[LinearCombination] =
-          Seq.fill(registerVars.length)(LinearCombination(IdealInt.ZERO))
-        conj(
-          transitionAndVar
-            .foldLeft(startVectorSum) {
-              case (sums, (t, tVar)) =>
-                toMonoid(t)
-                  .zip(sums)
-                  .map { case (monoidVal, sum) => sum + tVar * monoidVal }
-            }
-            .zip(registerVars)
-            .map { case (rVar, termSum) => rVar === termSum }
-        )
-      }
-    }
-
-    def allNonnegative(vars: Seq[LinearCombination]) = conj(vars.map(_ >= 0))
-
     Theory.rewritePreds(f, order) { (atom, _) =>
       if (atom.pred == monoidMapPredicate) {
-        val registerVars = trace("RegisterVars")(atom.tail.take(monoidDimension))
-        val transitionVars = conjTransitionTerms(f)
-        val transitionAndVar = aut.transitions.zip(transitionVars.iterator).to
-
-        val constraints = trace("constraints")(
-          List(
-            asManyIncomingAsOutgoing(transitionAndVar),
-            allNonnegative(transitionVars),
-            allNonnegative(registerVars),
-            registerValuesReachable(registerVars, transitionAndVar)
-          )
-        )
-
         val maybeAtom = if (cycles.isEmpty) List() else List(atom)
 
         trace(s"Rewriting predicate ${atom} => \n") {
-          Conjunction.conj(maybeAtom ++ constraints, order)
+          Conjunction.conj(maybeAtom, order)
         }
       } else atom
     }
@@ -372,10 +300,18 @@ trait ParikhTheory[A <: Automaton]
         }
     )
 
+    // TODO check if the flow equations have just one solution, in that case just return that.
+    // TODO also add analysis for simple automata...
     trace("allowsMonoidValues")(
       ex(
         termSorts,
-        monoidMapPredicate(instanceTerm +: shiftedMonoidValues: _*) &&& transitionMaskInstances
+        and(
+          Seq(
+            monoidMapPredicate(instanceTerm +: shiftedMonoidValues: _*),
+            transitionMaskInstances,
+            AutomataFlow(aut).flowEquations(aut, transitionTerms, toMonoid _)
+          )
+        )
       )
     )
   }
@@ -395,21 +331,5 @@ object ParikhTheory {
 
       TheoryRegistry register this
     }
-  }
-}
-
-// This describes the status of a transition in the current model
-protected sealed trait TransitionSelected {
-  def definitelyAbsent = false
-  def isUnknown = false
-}
-
-object TransitionSelected {
-  case object Present extends TransitionSelected
-  case object Absent extends TransitionSelected {
-    override def definitelyAbsent = true
-  }
-  case object Unknown extends TransitionSelected {
-    override def isUnknown = true
   }
 }

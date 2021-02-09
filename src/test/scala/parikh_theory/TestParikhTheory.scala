@@ -1,6 +1,8 @@
 package uuverifiers.parikh_theory
 
 import org.scalatest.funsuite.AnyFunSuite
+import ap.SimpleAPI
+import SimpleAPI.ProverStatus
 
 class TestParikhTheory extends AnyFunSuite {
 
@@ -94,6 +96,48 @@ class TestParikhTheory extends AnyFunSuite {
 
     TestUtilities.ensuresAlways(pt) {
       case a +: b +: _ => b > 1 ===> (a > 1)
+    }
+  }
+
+  test("two instances of the predicate") {
+    val aut = AutomatonBuilder[Int, Char]()
+      .addStates(0 to 3)
+      .setAccepting(3)
+      .setInitial(0)
+      .addTransition(0, 'a', 1)
+      .addTransition(0, '-', 2)
+      .addTransition(1, '-', 3)
+      .addTransition(1, 'b', 0)
+      .addTransition(2, '-', 3)
+      .addTransition(2, 'c', 2)
+      .addTransition(3, '-', 2)
+      .getAutomaton
+
+    val alphabet = "abc-".toCharArray
+
+    val theory = ParikhTheory[Automaton](Array(aut))(
+      TestUtilities.alphabetCounter(alphabet) _,
+      alphabet.length
+    )
+
+    SimpleAPI.withProver { p =>
+      val constantsA =
+        (0 until theory.monoidDimension).map(i => p createConstant (s"xa${i}"))
+
+      val constantsB =
+        (0 until theory.monoidDimension).map(i => p createConstant (s"xb${i}"))
+
+      val clause = (((theory allowsMonoidValues constantsA)) | (theory allowsMonoidValues constantsB))
+
+      // &&& ~(constantsA(
+      //   0
+      // ) === constantsB(0)) &&& ~(constantsA(1) === constantsB(1))
+
+      p !! clause
+
+      val res = p.???
+      withClue(s"${clause}")(assert(res == ProverStatus.Sat))
+
     }
   }
 
