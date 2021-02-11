@@ -1,17 +1,16 @@
 package uuverifiers.parikh_theory
 
-import ap.basetypes.IdealInt
-import ap.parser._
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
 import ap.terfor.preds.Atom
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
-import ap.terfor.{Formula, TermOrder}
+import ap.terfor.{TermOrder, Formula, Term}
+import ap.terfor.substitutions.{VariableShiftSubst}
 import ap.theories._
-import EdgeWrapper._
 import ap.parser.IExpression.Predicate
+import ap.terfor.TerForConvenience._
 
 // TODO write a LengthCounting mixin which interns one term for length and
 // yields that for each transition
@@ -237,19 +236,18 @@ trait ParikhTheory[A <: Automaton]
   override lazy val predicates =
     Seq(monoidMapPredicate, transitionMaskPredicate)
 
-  override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
-    implicit val newOrder = order
+  // TODO do this logic somewhere else!
+  // override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
+  //   Theory.rewritePreds(f, order) { (atom, _) =>
+  //     if (atom.pred == monoidMapPredicate) {
+  //       val maybeAtom = if (cycles.isEmpty) List() else List(atom)
 
-    Theory.rewritePreds(f, order) { (atom, _) =>
-      if (atom.pred == monoidMapPredicate) {
-        val maybeAtom = if (cycles.isEmpty) List() else List(atom)
-
-        trace(s"Rewriting predicate ${atom} => \n") {
-          Conjunction.conj(maybeAtom, order)
-        }
-      } else atom
-    }
-  }
+  //       trace(s"Rewriting predicate ${atom} => \n") {
+  //         Conjunction.conj(maybeAtom, order)
+  //       }
+  //     } else atom
+  //   }
+  // }
 
   private def termMeansDefinitelyAbsent(
       goal: Goal,
@@ -279,38 +277,45 @@ trait ParikhTheory[A <: Automaton]
   /**
    * Generate a quantified formula that is satisfiable iff the provided
    * monoid values are possible by any legal path through the automaton.
-   *
-    **/
-  def allowsMonoidValues(monoidValues: Seq[ITerm]): IFormula = {
-    import IExpression._
+   */
+  def allowsMonoidValues(
+      monoidValues: Seq[Term]
+  )(implicit order: TermOrder): Formula = {
     assert(monoidValues.length == this.monoidDimension)
 
-    val termSorts = List.fill(autGraph.edges.size + 1)(Sort.Integer) //
+    // val termSorts = List.fill(autGraph.edges.size + 1)(Sort.Integer) //
     val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
-    val instanceTerm = v(transitionTerms.size)
+    val instanceTerm = l(v(transitionTerms.size))
+    val nrNewTerms = transitionTerms.size + 1
 
     // need to prevent variable capture by the quantifiers added below
-    val shiftedMonoidValues =
-      monoidValues map (VariableShiftVisitor(_, 0, transitionTerms.size + 1))
+    val shiftAwayFromQuantifiers =
+      VariableShiftSubst.upShifter[Term](nrNewTerms, order)
+    val shiftedMonoidValues = (monoidValues map shiftAwayFromQuantifiers) map (l _)
 
-    val transitionMaskInstances = and(
+    val transitionMaskInstances =
       transitionTerms.zipWithIndex
         .map {
-          case (t, i) => this.transitionMaskPredicate(instanceTerm, 0, i, t)
+          case (t, i) =>
+            transitionMaskPredicate(Seq(instanceTerm, l(0), l(i), l(t)))
         }
-    )
+
+    val flowEquations =
+      AutomataFlow(aut).flowEquations(
+        transitionTerms.map(l _).toSeq,
+        monoidValues.map(l _).toSeq,
+        toMonoid _
+      )
 
     // TODO check if the flow equations have just one solution, in that case just return that.
-    // TODO also add analysis for simple automata...
+    // TODO also add analysis for simple automata, or perhaps do that earlier?
     trace("allowsMonoidValues")(
-      ex(
-        termSorts,
-        and(
-          Seq(
-            monoidMapPredicate(instanceTerm +: shiftedMonoidValues: _*),
-            transitionMaskInstances,
-            AutomataFlow(aut).flowEquations(aut, transitionTerms, toMonoid _)
-          )
+      exists(
+        nrNewTerms,
+        conj(
+          monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +:
+            flowEquations +:
+            transitionMaskInstances
         )
       )
     )

@@ -1,11 +1,11 @@
 package uuverifiers.parikh_theory
-import ap.parser.{IVariable, IFormula, IExpression}
-import ap.terfor.{Formula, TermOrder}
+import ap.terfor.{Formula, TermOrder, Term}
+import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
 import ap.basetypes.IdealInt.{ONE, ZERO, MINUS_ONE}
-import ap.terfor.TerForConvenience._
 import EdgeWrapper._
+import ap.terfor.TerForConvenience._
 
 /**
  *  A class to generate flow-balancing constraints for an automaton, modulo an
@@ -18,7 +18,7 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
   // From Label To
   private type Transition = (aut.State, aut.Label, aut.State)
 
-  private def allNonnegative(vars: Seq[IVariable]) = conj(vars.map(_ >= 0))
+  private def allNonnegative(vars: Seq[Term]) = trace("allNonnegative")(conj(vars.map(_ >= 0)))
 
   // TODO fold this into asManyIncomingAsOutgoing; it's short, single-use, and
   // only makes sense in that context.
@@ -26,15 +26,15 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
       stateTerms: Seq[(aut.State, (IdealInt, LinearCombination))]
   ) = {
     val (state, _) = stateTerms.head
-    val isInitial = if (state == aut.initialState) ONE else ZERO
-    (state, sum(stateTerms.unzip._2 ++ List((ONE, isInitial))))
+    val initialFlow = l(if (state == aut.initialState) ONE else ZERO)
+    (state, sum(stateTerms.unzip._2 ++ List((ONE, initialFlow))))
   }
 
   /**
-    * Compute the balancing constraints for the state flow stating that for each
-    * state there are at least as many incoming and outgoing connections, as
-    * defined by the mapping from transition to variable.
-    */
+   * Compute the balancing constraints for the state flow stating that for each
+   * state there are at least as many incoming and outgoing connections, as
+   * defined by the mapping from transition to variable.
+   */
   private def asManyIncomingAsOutgoing(
       transitionAndVar: Seq[(Transition, LinearCombination)]
   ): Formula = {
@@ -94,26 +94,24 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
     }
   }
 
+  // TODO implement an IFormula version of this as well
   def flowEquations(
-      transitionTerms: Seq[IVariable],
-      monoidVars: Seq[IVariable],
+      transitionVars: Seq[LinearCombination],
+      monoidVars: Seq[LinearCombination],
       toMonoid: Transition => Seq[LinearCombination]
-  ): IFormula = {
-    val transitionAndVar = aut.transitions.zip(transitionTerms.iterator)
+  ): Conjunction = {
+    val transitionAndVar = trace("transitionAndVar")(aut.transitions.zip(transitionVars.iterator).toSeq)
 
-    IExpression.and(
-      Seq(
-        allNonnegative(transitionTerms),
-        allNonnegative(monoidVars),
-        asManyIncomingAsOutgoing(transitionAndVar),
-        monoidValuesReachable(monoidVars, transitionAndVar, toMonoid)
-      ),
-      order
-    )
+    trace("flowEquations")(conj(
+      allNonnegative(transitionVars),
+      allNonnegative(monoidVars),
+      asManyIncomingAsOutgoing(transitionAndVar),
+      monoidValuesReachable(monoidVars, transitionAndVar, toMonoid)
+    ))
   }
 }
 
 object AutomataFlow {
   def apply[A <: Automaton](a: A)(implicit order: TermOrder) =
-    new AutomataFlow(a)(order: TermOrder)
+    new AutomataFlow(a)(order)
 }

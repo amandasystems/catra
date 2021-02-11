@@ -1,9 +1,11 @@
 package uuverifiers.parikh_theory
 
 import ap.SimpleAPI
+import ap.terfor.{Term, Formula, TermOrder}
+import ap.terfor.conjunctions.Conjunction
 import SimpleAPI.ProverStatus
-import ap.parser.{ITerm, IFormula}
 import org.scalatest.funsuite.AnyFunSuite
+import ap.terfor.TerForConvenience._
 
 object TestUtilities extends AnyFunSuite {
 
@@ -19,8 +21,8 @@ object TestUtilities extends AnyFunSuite {
 
   private def assertConstraints(
       p: ap.SimpleAPI
-  )(cs: IFormula, expect: ProverStatus.Value) = {
-    p !! cs
+  )(cs: Formula, expect: ProverStatus.Value) = {
+    p addAssertion cs
 
     val res = p.???
     val description =
@@ -30,19 +32,20 @@ object TestUtilities extends AnyFunSuite {
   }
 
   def ensuresAlways(theory: ParikhTheory[_])(
-      lengthConstraints: IndexedSeq[ITerm] => IFormula
+      lengthConstraints: (IndexedSeq[Term], TermOrder) => Conjunction
   ) = {
     SimpleAPI.withProver { p =>
-      val constants =
-        (0 until theory.monoidDimension).map(i => p createConstant (s"x${i}"))
+      implicit val order = p.order
 
-      p !! ((theory allowsMonoidValues constants))
+      val constants = p createConstantsRaw ("x", 0 until theory.monoidDimension)
 
-      val constraints = lengthConstraints(constants)
+      p addAssertion ((theory allowsMonoidValues constants))
+
+      val constraints = lengthConstraints(constants, order)
       val asserter = assertConstraints(p) _
 
       p scope asserter(constraints, ProverStatus.Sat)
-      p scope asserter(~constraints, ProverStatus.Unsat)
+      p scope asserter(constraints.negate, ProverStatus.Unsat)
     }
   }
 
@@ -50,13 +53,17 @@ object TestUtilities extends AnyFunSuite {
       theory: ParikhTheory[_],
       expectedCounts: Seq[Int]
   ) = {
-    ensuresAlways(theory)(
-      _.zip(expectedCounts)
-        .map {
-          case (l, expected) => l === expected
-        }
-        .reduce(_ &&& _)
-    )
+    ensuresAlways(theory) {
+      case (vars, order) =>
+        implicit val _ = order
+        conj(
+          vars
+            .zip(expectedCounts)
+            .map {
+              case (x, expected) => x === l(expected)
+            }
+        )
+    }
 
     true
   }

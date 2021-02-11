@@ -3,6 +3,7 @@ package uuverifiers.parikh_theory
 import org.scalatest.funsuite.AnyFunSuite
 import ap.SimpleAPI
 import SimpleAPI.ProverStatus
+import ap.terfor.TerForConvenience._
 
 class TestParikhTheory extends AnyFunSuite {
 
@@ -37,8 +38,10 @@ class TestParikhTheory extends AnyFunSuite {
 
     val lt = LengthCounting[Automaton](Array(aut))
 
-    TestUtilities.ensuresAlways(lt) { lengths =>
-      lengths(0) === 1 ||| lengths(0) === 2
+    TestUtilities.ensuresAlways(lt) {
+      case (lengths, order) =>
+        implicit val _ = order
+        disj(lengths(0) === l(1), lengths(0) === l(2))
     }
   }
 
@@ -53,7 +56,11 @@ class TestParikhTheory extends AnyFunSuite {
 
     val lt = LengthCounting[Automaton](Array(aut))
 
-    TestUtilities.ensuresAlways(lt)(_.map(_ >= 0).reduce(_ &&& _))
+    TestUtilities.ensuresAlways(lt) {
+      case (lengths, order) =>
+        implicit val _ = order
+        conj(geqZ(lengths.map(l(_))))
+    }
   }
 
   //              b
@@ -94,9 +101,11 @@ class TestParikhTheory extends AnyFunSuite {
       alphabet.length
     )
 
-    TestUtilities.ensuresAlways(pt) {
-      case a +: b +: _ => b > 1 ===> (a > 1)
-    }
+    // FIXME
+    // TestUtilities.ensuresAlways(pt) { case (a +: b +: _, order) =>
+    //   implicit val _ = order
+    //   b > 1 ===> (a > 1)
+    // }
   }
 
   test("two instances of the predicate") {
@@ -121,19 +130,17 @@ class TestParikhTheory extends AnyFunSuite {
     )
 
     SimpleAPI.withProver { p =>
-      val constantsA =
-        (0 until theory.monoidDimension).map(i => p createConstant (s"xa${i}"))
+      implicit val _ = p.order
 
-      val constantsB =
-        (0 until theory.monoidDimension).map(i => p createConstant (s"xb${i}"))
+      val constantsA = p createConstantsRaw ("a", 0 until theory.monoidDimension)
+      val constantsB = p createConstantsRaw ("b", 0 until theory.monoidDimension)
 
-      val clause = (((theory allowsMonoidValues constantsA)) | (theory allowsMonoidValues constantsB))
+      val clause = disjFor(
+        theory allowsMonoidValues constantsA,
+        theory allowsMonoidValues constantsB
+      )
 
-      // &&& ~(constantsA(
-      //   0
-      // ) === constantsB(0)) &&& ~(constantsA(1) === constantsB(1))
-
-      p !! clause
+      p addAssertion clause
 
       val res = p.???
       withClue(s"${clause}")(assert(res == ProverStatus.Sat))
