@@ -70,7 +70,7 @@ trait ParikhTheory[A <: Automaton]
 
       val transitionTerms =
         trace("transitionTerms")(
-          conjTransitionTerms(goal.facts, predicateAtom(0))
+          goalTransitionTerms(goal, predicateAtom(0))
         )
 
       val unknownTransitions = trace("unknownTransitions") {
@@ -109,27 +109,13 @@ trait ParikhTheory[A <: Automaton]
     (instanceIdTerm(0), tIdxTerm.constant.intValue, tVal)
   }
 
-  /**
-   * Recursively find all instances of a predicate, regardless of where they are
-   * in the conjunction and regardless of their sign.
-   *  WARNING: recursive!
-   *  TODO: roll this back to just operating on Goals
-   */
-  private def termsWithPredicate(
-      conj: Conjunction,
-      p: Predicate
-  ): IndexedSeq[Atom] =
-    conj.predConj.positiveLitsWithPred(p) ++ conj.predConj
-      .negativeLitsWithPred(p) ++ conj.negatedConjs.flatMap(
-      termsWithPredicate(_, p)
-    )
-
-  private def conjTransitionTerms(
-      conj: Conjunction,
+  private def goalTransitionTerms(
+      goal: Goal,
       instance: LinearCombination
   ) =
-    trace(s"TransitionMasks for ${instance} in ${conj}") {
-      termsWithPredicate(conj, transitionMaskPredicate)
+    trace(s"TransitionMasks for ${instance} in ${goal}") {
+      goal.facts.predConj
+        .positiveLitsWithPred(transitionMaskPredicate)
         .map(transitionMaskToTuple)
         .filter { case (i, _, _) => i == instance }
         .sortBy(_._2)
@@ -152,7 +138,7 @@ trait ParikhTheory[A <: Automaton]
         val instanceTerm = predicateAtom(0)
 
         // TODO in the future we want to filter this for the correct automaton
-        val transitionTerms = conjTransitionTerms(goal.facts, instanceTerm)
+        val transitionTerms = goalTransitionTerms(goal, instanceTerm)
 
         val transitionToTerm =
           trace("transitionToTerm")(
