@@ -35,9 +35,10 @@ object TestUtilities extends AnyFunSuite {
       lengthConstraints: (IndexedSeq[Term], TermOrder) => Conjunction
   ) = {
     SimpleAPI.withProver { p =>
-      implicit val order = p.order
-
       val constants = p createConstantsRaw ("x", 0 until theory.monoidDimension)
+      p addTheory theory // It's not smart enough to realise it needs the theory
+
+      implicit val order = p.order // Adding constants and predicates changes order
 
       p addAssertion ((theory allowsMonoidValues constants))
 

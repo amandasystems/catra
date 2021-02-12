@@ -4,7 +4,7 @@ import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
 import ap.terfor.preds.Atom
-import ap.terfor.conjunctions.Conjunction
+import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.{TermOrder, Formula, Term}
 import ap.terfor.substitutions.{VariableShiftSubst}
@@ -59,7 +59,7 @@ trait ParikhTheory[A <: Automaton]
 
   lazy val aut = auts(0) // lazy because of early init
   lazy private val autGraph = aut.toGraph // lazy because of aut
-  lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
+  // lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
 
   private object TransitionSplitter extends PredicateHandlingProcedure {
     override val procedurePredicate = monoidMapPredicate
@@ -300,25 +300,26 @@ trait ParikhTheory[A <: Automaton]
             transitionMaskPredicate(Seq(instanceTerm, l(0), l(i), l(t)))
         }
 
-    val flowEquations =
-      AutomataFlow(aut).flowEquations(
-        transitionTerms.map(l _).toSeq,
-        monoidValues.map(l _).toSeq,
-        toMonoid _
-      )
-
-    // TODO check if the flow equations have just one solution, in that case just return that.
-    // TODO also add analysis for simple automata, or perhaps do that earlier?
-    trace("allowsMonoidValues")(
-      exists(
-        nrNewTerms,
-        conj(
-          monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +:
-            flowEquations +:
-            transitionMaskInstances
-        )
+    val allEquations = exists(
+      nrNewTerms,
+      conj(
+        monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +:
+          AutomataFlow(aut).flowEquations(
+            transitionTerms.map(l _).toSeq,
+            monoidValues.map(l _).toSeq,
+            toMonoid _
+          ) +:
+          transitionMaskInstances
       )
     )
+
+    val simplifiedEquations =
+      ReduceWithConjunction(Conjunction.TRUE, order)(allEquations)
+
+    // TODO check if the flow equations have just one solution, in that case just return that.
+    // Use  simplifiedEquations.quans: check if empty, and WHAT MORE???
+    // TODO also add analysis for simple automata, or perhaps do that earlier?
+    trace("allowsMonoidValues")(simplifiedEquations)
   }
 
 }

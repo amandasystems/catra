@@ -130,10 +130,12 @@ class TestParikhTheory extends AnyFunSuite {
     )
 
     SimpleAPI.withProver { p =>
-      implicit val _ = p.order
-
       val constantsA = p createConstantsRaw ("a", 0 until theory.monoidDimension)
       val constantsB = p createConstantsRaw ("b", 0 until theory.monoidDimension)
+
+      p addTheory theory
+
+      implicit val _ = p.order
 
       val clause = disjFor(
         theory allowsMonoidValues constantsA,

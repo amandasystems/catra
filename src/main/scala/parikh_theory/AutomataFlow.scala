@@ -1,6 +1,7 @@
 package uuverifiers.parikh_theory
 import ap.terfor.{Formula, TermOrder, Term}
-import ap.terfor.conjunctions.Conjunction
+import ap.terfor.conjunctions.{Conjunction}
+import ap.terfor.arithconj.ArithConj
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
 import ap.basetypes.IdealInt.{ONE, ZERO, MINUS_ONE}
@@ -18,7 +19,8 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
   // From Label To
   private type Transition = (aut.State, aut.Label, aut.State)
 
-  private def allNonnegative(vars: Seq[Term]) = trace("allNonnegative")(conj(vars.map(_ >= 0)))
+  private def allNonnegative(vars: Seq[Term]) =
+    trace("allNonnegative")(conj(vars.map(_ >= 0)))
 
   // TODO fold this into asManyIncomingAsOutgoing; it's short, single-use, and
   // only makes sense in that context.
@@ -37,10 +39,9 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
    */
   private def asManyIncomingAsOutgoing(
       transitionAndVar: Seq[(Transition, LinearCombination)]
-  ): Formula = {
-
+  ): ArithConj = {
     trace("Flow equations") {
-      conj(
+      arithConj(
         transitionAndVar
           .filter(!_._1.isSelfEdge)
           .flatMap {
@@ -100,14 +101,18 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
       monoidVars: Seq[LinearCombination],
       toMonoid: Transition => Seq[LinearCombination]
   ): Conjunction = {
-    val transitionAndVar = trace("transitionAndVar")(aut.transitions.zip(transitionVars.iterator).toSeq)
+    val transitionAndVar = trace("transitionAndVar")(
+      aut.transitions.zip(transitionVars.iterator).toSeq
+    )
 
-    trace("flowEquations")(conj(
-      allNonnegative(transitionVars),
-      allNonnegative(monoidVars),
-      asManyIncomingAsOutgoing(transitionAndVar),
-      monoidValuesReachable(monoidVars, transitionAndVar, toMonoid)
-    ))
+    trace("flowEquations")(
+      conj(
+        allNonnegative(transitionVars),
+        allNonnegative(monoidVars),
+        asManyIncomingAsOutgoing(transitionAndVar),
+        monoidValuesReachable(monoidVars, transitionAndVar, toMonoid)
+      )
+    )
   }
 }
 
