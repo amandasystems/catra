@@ -16,6 +16,13 @@ ThisBuild / scalacOptions ++= Seq(
     "-Ywarn-unused"
 )
 
+
+// ThisBuild / coverageMinimum := 60
+// ThisBuild / coverageFailOnMinimum := false
+// ThisBuild / coverageExcludedFiles := ".*/src/test/.*"
+// ThisBuild / coverageEnabled := true
+
+
 ThisBuild / resolvers += ("uuverifiers" at "http://logicrunch.research.it.uu.se/maven/")
   .withAllowInsecureProtocol(true)
 

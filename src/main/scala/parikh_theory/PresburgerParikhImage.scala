@@ -9,7 +9,8 @@ import ap.terfor.conjunctions.Conjunction
 class PresburgerParikhImage[A <: Automaton](private val aut: A)
     extends Tracing {
   private lazy val stateSeq = aut.states.toIndexedSeq
-  private lazy val state2Index = stateSeq.iterator.zipWithIndex.toMap
+  private lazy val state2Index =
+    trace("state2Index")(stateSeq.iterator.zipWithIndex.toMap)
 
   def parikhImage(
       charCounts: Seq[Term],
@@ -76,9 +77,9 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
                     preState <- preStates(state))
                 yield (state, Some(preState._1), preState._2)).toList
 
-          val prodVars = productions.view.zipWithIndex.map {
+          val prodVars = trace("prodVars")(productions.zipWithIndex.map {
             case (_, i) => v(i)
-          }
+          })
           val zVars = refStates
             .zip(Stream from prodVars.size)
             .map {
@@ -119,7 +120,8 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
           }
 
           // [((to, from, registers), Z_prod)]
-          val prodsWithVars = productions.zip(prodVars).toList
+          val prodsWithVars =
+            trace("prodsWithVars")(productions.zip(prodVars).toList)
 
           // equations relating the production counters
           // consistent
@@ -138,9 +140,16 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
           def makeCharCountTerms(ci: (Term, Int)): LinearCombination = {
             val (c, i) = ci
             val prodTerms: Seq[(IdealInt, Term)] =
-              aut.transitions.zip(prodVars.iterator).toSeq.map {
-                case (t, prodVar) => (toCharIncrement(t)(i), prodVar)
-              }
+              /// we HAVE to use prods with vars here
+              prodsWithVars
+                .filter(!_._1._3.isEmpty) // ignore the dummy transition to the first state
+                .map {
+                  case t @ ((to, from, increments), prodVar) =>
+                    trace(s"term for ${t}, offset ${i}")(
+                      (increments(i), prodVar)
+                    )
+                }
+                .toSeq
 
             LinearCombination(prodTerms :+ (IdealInt.MINUS_ONE, c), order)
           }
@@ -154,7 +163,9 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
 
           // A list of equations on the format
           // - char(c) + SUM of t: y_t * toCharIncrement(t)(c)
-          val charCountEqs = charCounts.zipWithIndex.map(makeCharCountTerms)
+          val charCountEqs = trace("charCountEqs")(
+            charCounts.zipWithIndex.map(makeCharCountTerms)
+          )
 
           val entryZEq = zVars(finalStateInd) - 1
 

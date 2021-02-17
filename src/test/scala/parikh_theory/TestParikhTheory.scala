@@ -5,7 +5,7 @@ import ap.SimpleAPI
 import SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience._
 
-class TestParikhTheory extends AnyFunSuite {
+class TestParikhTheory extends AnyFunSuite with Tracing {
 
   test("length constraint for trivial automaton works") {
     val aut = AutomatonBuilder[Int, Unit]()
@@ -97,6 +97,15 @@ class TestParikhTheory extends AnyFunSuite {
     TestUtilities.bothImplementationsHaveSameImage(aut)
   }
 
+  //       +---+  a  +---+  b  +---+
+  //   --> | 0 | --> | 1 | --> | 3 | -->
+  //       +---+     +---+     +---+
+  //                           |
+  //                    b      |
+  //               +-----------+
+  //       +---+<--+
+  //       | 2 |
+  //       +---+
   test("old implementation bug for 4-state automaton") {
     import ap.terfor.conjunctions.Conjunction
     import ap.basetypes.IdealInt
@@ -107,26 +116,24 @@ class TestParikhTheory extends AnyFunSuite {
       .setAccepting(3)
       .setInitial(0)
       .addTransition(0, 'a', 1)
-      .addTransition(0, '-', 2)
-      .addTransition(1, '-', 3)
-      .addTransition(1, 'b', 0)
-      .addTransition(2, '-', 3)
-      .addTransition(2, 'c', 2)
-      .addTransition(3, '-', 2)
+      .addTransition(1, 'b', 3)
+      .addTransition(3, 'b', 2)
       .getAutomaton
 
-    val alphabet = "-abc".toCharArray
+    val alphabet = "ab".toCharArray
 
     val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
 
-    def incrementLetters(t: Any): Seq[IdealInt] = {
-      val label = t.asInstanceOf[Tuple3[_, aut.Label, _]]._2
-      alphabet.map(c => if (c == label) IdealInt.ONE else IdealInt.ZERO).toSeq
-    }
+    def incrementLetters(t: Any): Seq[IdealInt] =
+      trace(s"incrementLetters(${t.asInstanceOf[Tuple3[_, _, _]]._2})") {
+        val label = t.asInstanceOf[Tuple3[_, aut.Label, _]]._2
+        alphabet.map(c => if (c == label) IdealInt.ONE else IdealInt.ZERO).toSeq
+      }
 
     SimpleAPI.withProver { p =>
-      val constants = p createConstantsRaw ("a", 0 until 4)
-      val dash :+ a :+ b :+ c = constants
+      val a = p.createConstantRaw("a")
+      val b = p.createConstantRaw("b")
+      val constants = Seq(a, b)
 
       import p._
       implicit val order = p.order
@@ -137,7 +144,9 @@ class TestParikhTheory extends AnyFunSuite {
         Conjunction.conj(oldImage, p.order)
       )
 
-      p addAssertion conj(reduced, a === 1, dash === 1, b === 0, c === 0)
+      val constraint = conj(reduced, b === 1, a === 1)
+
+      p addAssertion constraint
 
       val res = p.???
 
