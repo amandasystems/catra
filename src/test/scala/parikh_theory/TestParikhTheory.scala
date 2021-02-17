@@ -94,18 +94,57 @@ class TestParikhTheory extends AnyFunSuite {
       .addTransition(3, '-', 2)
       .getAutomaton
 
-    val alphabet = "abc-".toCharArray
+    TestUtilities.bothImplementationsHaveSameImage(aut)
+  }
 
-    val pt = ParikhTheory[Automaton](Array(aut))(
-      TestUtilities.alphabetCounter(alphabet) _,
-      alphabet.length
-    )
+  test("old implementation bug for 4-state automaton") {
+    import ap.terfor.conjunctions.Conjunction
+    import ap.basetypes.IdealInt
+    import ap.PresburgerTools
 
-    // FIXME
-    // TestUtilities.ensuresAlways(pt) { case (a +: b +: _, order) =>
-    //   implicit val _ = order
-    //   b > 1 ===> (a > 1)
-    // }
+    val aut = AutomatonBuilder[Int, Char]()
+      .addStates(0 to 3)
+      .setAccepting(3)
+      .setInitial(0)
+      .addTransition(0, 'a', 1)
+      .addTransition(0, '-', 2)
+      .addTransition(1, '-', 3)
+      .addTransition(1, 'b', 0)
+      .addTransition(2, '-', 3)
+      .addTransition(2, 'c', 2)
+      .addTransition(3, '-', 2)
+      .getAutomaton
+
+    val alphabet = "-abc".toCharArray
+
+    val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
+
+    def incrementLetters(t: Any): Seq[IdealInt] = {
+      val label = t.asInstanceOf[Tuple3[_, aut.Label, _]]._2
+      alphabet.map(c => if (c == label) IdealInt.ONE else IdealInt.ZERO).toSeq
+    }
+
+    SimpleAPI.withProver { p =>
+      val constants = p createConstantsRaw ("a", 0 until 4)
+      val dash :+ a :+ b :+ c = constants
+
+      import p._
+      implicit val order = p.order
+
+      val oldImage = presburgerFormulation parikhImage (constants, incrementLetters _)
+
+      val reduced = PresburgerTools.elimQuantifiersWithPreds(
+        Conjunction.conj(oldImage, p.order)
+      )
+
+      p addAssertion conj(reduced, a === 1, dash === 1, b === 0, c === 0)
+
+      val res = p.???
+
+      val simplifiedOld = pp(simplify(asIFormula(reduced)))
+
+      withClue(s"${simplifiedOld}")(assert(res == ProverStatus.Sat))
+    }
   }
 
   test("two instances of the predicate") {
@@ -148,6 +187,17 @@ class TestParikhTheory extends AnyFunSuite {
       withClue(s"${clause}")(assert(res == ProverStatus.Sat))
 
     }
+  }
+
+  test("parikh image for trivial automaton works") {
+    val aut = AutomatonBuilder[Int, Char]()
+      .addStates(List(0, 1))
+      .setInitial(0)
+      .setAccepting(1)
+      .addTransition(0, 'a', 1)
+      .getAutomaton
+
+    TestUtilities.bothImplementationsHaveSameImage(aut)
   }
 
 }

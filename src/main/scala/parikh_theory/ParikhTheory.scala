@@ -269,7 +269,6 @@ trait ParikhTheory[A <: Automaton]
   )(implicit order: TermOrder): Formula = {
     assert(monoidValues.length == this.monoidDimension)
 
-    // val termSorts = List.fill(autGraph.edges.size + 1)(Sort.Integer) //
     val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
     val instanceTerm = l(v(transitionTerms.size))
     val nrNewTerms = transitionTerms.size + 1

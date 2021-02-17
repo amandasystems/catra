@@ -1,13 +1,14 @@
 package uuverifiers.parikh_theory
 
-import ap.SimpleAPI
+import ap.{SimpleAPI, PresburgerTools}
 import ap.terfor.{Term, Formula, TermOrder}
 import ap.terfor.conjunctions.Conjunction
 import SimpleAPI.ProverStatus
 import org.scalatest.funsuite.AnyFunSuite
 import ap.terfor.TerForConvenience._
+import ap.basetypes.IdealInt
 
-object TestUtilities extends AnyFunSuite {
+object TestUtilities extends AnyFunSuite with Tracing {
 
   def alphabetCounter[T](alphabet: Seq[T])(t: Any) = {
     import ap.terfor.linearcombination.LinearCombination
@@ -48,6 +49,61 @@ object TestUtilities extends AnyFunSuite {
       p scope asserter(constraints, ProverStatus.Sat)
       p scope asserter(constraints.negate, ProverStatus.Unsat)
     }
+  }
+
+  def bothImplementationsHaveSameImage(aut: Automaton) = {
+    // WARNING: only works for characters (but that's all we have right now)
+    val alphabet = trace("alphabet")(
+      aut.transitions.map(_._2.asInstanceOf[Char]).toSet.toIndexedSeq.sorted
+    )
+
+    val pt = ParikhTheory[Automaton](Array[Automaton](aut))(
+      TestUtilities.alphabetCounter(alphabet) _,
+      alphabet.length
+    )
+
+    val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
+
+    def incrementLetters(t: Any): Seq[IdealInt] = {
+      import ap.basetypes.IdealInt
+
+      val label = t.asInstanceOf[Tuple3[_, aut.Label, _]]._2
+      alphabet.map(c => if (c == label) IdealInt.ONE else IdealInt.ZERO).toSeq
+    }
+
+    SimpleAPI.withProver { p =>
+      val constants = p createConstantsRaw ("a", 0 until pt.monoidDimension)
+
+      p addTheory pt
+      implicit val _ = p.order
+      import p._
+
+      val newImage = pt allowsMonoidValues constants
+      val oldImage = presburgerFormulation parikhImage (constants, incrementLetters _)
+
+      val reduced = PresburgerTools.elimQuantifiersWithPreds(
+        Conjunction.conj(oldImage, p.order)
+      )
+
+      p addConclusion (
+        Conjunction.conj(newImage, order) ==>
+          Conjunction.conj(reduced, order)
+      )
+
+      val res = p.???
+
+      val simplifiedNew =
+        pp(simplify(asIFormula(Conjunction.conj(newImage, order))))
+      val simplifiedOld = pp(simplify(asIFormula(reduced)))
+
+      withClue(
+        s"${simplifiedOld} != ${simplifiedNew} model: ${p.partialModel}"
+      )(
+        assert(res == ProverStatus.Valid)
+      )
+    }
+
+    true
   }
 
   def onlyReturnsCounts(

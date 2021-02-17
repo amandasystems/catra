@@ -19,8 +19,7 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
   // From Label To
   private type Transition = (aut.State, aut.Label, aut.State)
 
-  private def allNonnegative(vars: Seq[Term]) =
-    trace("allNonnegative")(conj(vars.map(_ >= 0)))
+  private def allNonnegative(vars: Seq[Term]) = conj(vars.map(_ >= 0))
 
   // TODO fold this into asManyIncomingAsOutgoing; it's short, single-use, and
   // only makes sense in that context.
