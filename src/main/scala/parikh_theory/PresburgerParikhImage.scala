@@ -14,12 +14,12 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
 
   def parikhImage(
       charCounts: Seq[Term],
-      toCharIncrement: aut.Transition => Seq[IdealInt]
+      toCharIncrement: aut.Transition => Seq[LinearCombination]
   )(implicit order: TermOrder): Formula = trace("PresburgerParikhImage") {
     lazy val preStates = {
       val preStates =
         Array.fill(stateSeq.size)(
-          new ArrayBuffer[(Int, List[IdealInt])]
+          new ArrayBuffer[(Int, List[LinearCombination])]
         )
 
       for (transition @ (from, label, to) <- aut.transitions) {
@@ -69,7 +69,7 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
 
           // FIXME: remove self-loops maybe?
           // [to, Option[from] [labels]]
-          val productions: List[(Int, Option[Int], List[IdealInt])] =
+          val productions: List[(Int, Option[Int], List[LinearCombination])] =
             (if (refStates contains initialStateInd)
                List((initialStateInd, None, List()))
              else List()) ::: // FIXME: why concat?
@@ -139,27 +139,15 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
           // combination like c = SUM of t: y_t * toCharIncrement(t)(i)
           def makeCharCountTerms(ci: (Term, Int)): LinearCombination = {
             val (c, i) = ci
-            val prodTerms: Seq[(IdealInt, Term)] =
-              /// we HAVE to use prods with vars here
-              prodsWithVars
-                .filter(!_._1._3.isEmpty) // ignore the dummy transition to the first state
-                .map {
-                  case t @ ((to, from, increments), prodVar) =>
-                    trace(s"term for ${t}, offset ${i}")(
-                      (increments(i), prodVar)
-                    )
-                }
-                .toSeq
-
-            LinearCombination(prodTerms :+ (IdealInt.MINUS_ONE, c), order)
+            val monoidTerm = LinearCombination.MINUS_ONE * c
+            /// we HAVE to use prods with vars here
+            prodsWithVars
+              .filter(!_._1._3.isEmpty) // ignore the dummy transition to the first state
+              .foldLeft(monoidTerm) {
+                case (acc, ((_, _, increments), prodVar)) =>
+                  acc + (increments(i) * prodVar)
+              }
           }
-
-          // for each register, generate a linear combination of -1 * r +
-          // [y_A->B * s(r)], where s(r) for each register r, where s(r) is
-          // the...state of register r at state s.
-          // val rEqs = registers.zipWithIndex
-          //   .map(makeRegisterTerms)
-          // val rEqs = List()
 
           // A list of equations on the format
           // - char(c) + SUM of t: y_t * toCharIncrement(t)(c)

@@ -124,12 +124,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
 
-    def incrementLetters(t: Any): Seq[IdealInt] =
-      trace(s"incrementLetters(${t.asInstanceOf[Tuple3[_, _, _]]._2})") {
-        val label = t.asInstanceOf[Tuple3[_, aut.Label, _]]._2
-        alphabet.map(c => if (c == label) IdealInt.ONE else IdealInt.ZERO).toSeq
-      }
-
     SimpleAPI.withProver { p =>
       val a = p.createConstantRaw("a")
       val b = p.createConstantRaw("b")
@@ -138,7 +132,8 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       import p._
       implicit val order = p.order
 
-      val oldImage = presburgerFormulation parikhImage (constants, incrementLetters _)
+      val oldImage = presburgerFormulation parikhImage (constants, TestUtilities
+        .alphabetCounter(alphabet) _)
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
         Conjunction.conj(oldImage, p.order)

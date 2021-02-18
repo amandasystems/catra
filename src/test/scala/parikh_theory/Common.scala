@@ -64,13 +64,6 @@ object TestUtilities extends AnyFunSuite with Tracing {
 
     val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
 
-    def incrementLetters(t: Any): Seq[IdealInt] = {
-      import ap.basetypes.IdealInt
-
-      val label = t.asInstanceOf[Tuple3[_, aut.Label, _]]._2
-      alphabet.map(c => if (c == label) IdealInt.ONE else IdealInt.ZERO).toSeq
-    }
-
     SimpleAPI.withProver { p =>
       val constants = p createConstantsRaw ("a", 0 until pt.monoidDimension)
 
@@ -79,7 +72,8 @@ object TestUtilities extends AnyFunSuite with Tracing {
       import p._
 
       val newImage = pt allowsMonoidValues constants
-      val oldImage = presburgerFormulation parikhImage (constants, incrementLetters _)
+      val oldImage = presburgerFormulation parikhImage (constants, TestUtilities
+        .alphabetCounter(alphabet) _)
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
         Conjunction.conj(oldImage, p.order)
