@@ -2,7 +2,6 @@ package uuverifiers.parikh_theory
 
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
-import ap.terfor.TerForConvenience._
 import ap.terfor.preds.Atom
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.linearcombination.LinearCombination
@@ -61,156 +60,6 @@ trait ParikhTheory[A <: Automaton]
   lazy private val autGraph = aut.toGraph // lazy because of aut
   // lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
 
-  private object TransitionSplitter extends PredicateHandlingProcedure {
-    override val procedurePredicate = monoidMapPredicate
-    override def handlePredicateInstance(
-        goal: Goal
-    )(predicateAtom: Atom): Seq[Plugin.Action] = trace("TransitionSplitter") {
-      implicit val _ = goal.order
-
-      val transitionTerms =
-        trace("transitionTerms")(
-          goalTransitionTerms(goal, predicateAtom(0))
-        )
-
-      val unknownTransitions = trace("unknownTransitions") {
-        transitionTerms filter (
-            t => transitionStatusFromTerm(goal, t).isUnknown
-        )
-      }
-
-      trace("unknownActions") {
-        def transitionToSplit(transitionTerm: LinearCombination) =
-          Plugin.AxiomSplit(
-            Seq(),
-            Seq(transitionTerm <= 0, transitionTerm > 0)
-              .map(eq => (conj(eq), Seq())),
-            ParikhTheory.this
-          )
-
-        val splittingActions = trace("splittingActions") {
-          unknownTransitions
-            .map(transitionToSplit(_))
-            .toSeq
-        }
-
-        Seq(splittingActions.head)
-
-      }
-    }
-  }
-
-  /**
-   * Take a TransitionMask predicate, and extract its indices.
-    **/
-  private def transitionMaskToTuple(atom: Atom) = {
-    val instanceIdTerm :+ _ :+ tIdxTerm :+ tVal = atom.toSeq
-    // TODO in the future, we will need all indices!
-    (instanceIdTerm(0), tIdxTerm.constant.intValue, tVal)
-  }
-
-  private def goalTransitionTerms(
-      goal: Goal,
-      instance: LinearCombination
-  ) =
-    trace(s"TransitionMasks for ${instance} in ${goal}") {
-      goal.facts.predConj
-        .positiveLitsWithPred(transitionMaskPredicate)
-        .map(transitionMaskToTuple)
-        .filter { case (i, _, _) => i == instance }
-        .sortBy(_._2)
-        .map(_._3)
-    }
-
-  private object ConnectednessPropagator
-      extends Plugin
-      with PredicateHandlingProcedure
-      with NoAxiomGeneration {
-    // Handle a specific predicate instance for a proof goal, returning the
-    // resulting plugin actions.
-    override val procedurePredicate = monoidMapPredicate
-    override def handlePredicateInstance(
-        goal: Goal
-    )(predicateAtom: Atom): Seq[Plugin.Action] =
-      trace("ConnectednessPropagator") {
-        implicit val _ = goal.order
-
-        val instanceTerm = predicateAtom(0)
-
-        // TODO in the future we want to filter this for the correct automaton
-        val transitionTerms = goalTransitionTerms(goal, instanceTerm)
-
-        val transitionToTerm =
-          trace("transitionToTerm")(
-            aut.transitions.to.zip(transitionTerms).toMap
-          )
-
-        // FIXME this is highly inefficient repeat work and should be factored
-        // out.
-        val isSubsumed = trace("isSubsumed") {
-          !(transitionTerms exists (
-              t => transitionStatusFromTerm(goal, t).isUnknown
-          ))
-
-        }
-
-        if (isSubsumed) {
-          return trace("Subsumed, schedule actions")(
-            Seq(Plugin.RemoveFacts(predicateAtom))
-          )
-        }
-
-        val splittingActions = trace("splittingActions") {
-          goalState(goal) match {
-            case Plugin.GoalState.Final => TransitionSplitter.handleGoal(goal)
-            case _                      => List(Plugin.ScheduleTask(TransitionSplitter, 0))
-          }
-        }
-
-        // TODO: we don't care about splitting edges that cannot possibly cause a
-        // disconnect; i.e. *we only care* about critical edges on the path to
-        // some cycle that can still appear (i.e. wose edges are not
-        // known-deselected).
-
-        // TODO experiment with branching order and start close to initial
-        // states.
-
-        // constrain any terms associated with a transition from a
-        // *known* unreachable state to be = 0 ("not used").
-        val unreachableActions = trace("unreachableActions") {
-          val deadTransitions = trace("deadTransitions") {
-            aut.transitions
-              .filter(
-                t => termMeansDefinitelyAbsent(goal, transitionToTerm(t))
-              )
-              .to[Set]
-          }
-
-          val unreachableConstraints =
-            conj(
-              autGraph
-                .dropEdges(deadTransitions)
-                .unreachableFrom(aut.initialState)
-                .flatMap(
-                  autGraph.transitionsFrom(_).map(transitionToTerm(_) === 0)
-                )
-            )
-
-          if (unreachableConstraints.isTrue) Seq()
-          else
-            Seq(
-              Plugin.AddAxiom(
-                Seq(predicateAtom),
-                unreachableConstraints,
-                ParikhTheory.this
-              )
-            )
-        }
-
-        unreachableActions ++ splittingActions
-      }
-  }
-
   // FIXME: total deterministisk ordning på edges!
   // lazy because it depends on aut
   lazy private val monoidMapPredicate =
@@ -222,43 +71,16 @@ trait ParikhTheory[A <: Automaton]
   override lazy val predicates =
     Seq(monoidMapPredicate, transitionMaskPredicate)
 
-  // TODO do this logic somewhere else!
-  // override def preprocess(f: Conjunction, order: TermOrder): Conjunction = {
-  //   Theory.rewritePreds(f, order) { (atom, _) =>
-  //     if (atom.pred == monoidMapPredicate) {
-  //       val maybeAtom = if (cycles.isEmpty) List() else List(atom)
-
-  //       trace(s"Rewriting predicate ${atom} => \n") {
-  //         Conjunction.conj(maybeAtom, order)
-  //       }
-  //     } else atom
-  //   }
-  // }
-
-  private def termMeansDefinitelyAbsent(
-      goal: Goal,
-      term: LinearCombination
-  ): Boolean = trace(s"termMeansDefinitelyAbsent(${term})") {
-    term match {
-      case LinearCombination.Constant(x) => x <= 0
-      case _                             => goal.reduceWithFacts.upperBound(term).exists(_ <= 0)
-    }
-
-  }
-
-  private[this] def transitionStatusFromTerm(
-      goal: Goal,
-      term: LinearCombination
-  ): TransitionSelected = trace(s"selection status for ${term} is ") {
-    lazy val lowerBound = goal.reduceWithFacts.lowerBound(term)
-    lazy val upperBound = goal.reduceWithFacts.upperBound(term)
-
-    if (lowerBound.exists(_ > 0)) TransitionSelected.Present
-    else if (upperBound.exists(_ <= 0)) TransitionSelected.Absent
-    else TransitionSelected.Unknown
-  }
-
-  def plugin: Option[Plugin] = Some(ConnectednessPropagator)
+  def plugin: Option[Plugin] =
+    Some(
+      new ConnectednessPropagator(
+        aut,
+        monoidMapPredicate,
+        transitionMaskPredicate,
+        new TransitionMaskExtractor(transitionMaskPredicate),
+        this
+      )
+    )
 
   /**
    * Generate a quantified formula that is satisfiable iff the provided
@@ -266,7 +88,7 @@ trait ParikhTheory[A <: Automaton]
    */
   def allowsMonoidValues(
       monoidValues: Seq[Term]
-  )(implicit order: TermOrder): Formula = {
+  )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
     assert(monoidValues.length == this.monoidDimension)
 
     val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
@@ -285,16 +107,20 @@ trait ParikhTheory[A <: Automaton]
             transitionMaskPredicate(Seq(instanceTerm, l(0), l(i), l(t)))
         }
 
+    // TODO evaluate whether this pays off!
+    val predicateInstances =
+      if (autGraph.simpleCycles.isEmpty) Seq()
+      else
+        monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +: transitionMaskInstances
+
     val allEquations = exists(
       nrNewTerms,
       conj(
-        monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +:
-          AutomataFlow(aut).flowEquations(
-            transitionTerms.map(l _).toSeq,
-            monoidValues.map(l _).toSeq,
-            toMonoid _
-          ) +:
-          transitionMaskInstances
+        AutomataFlow(aut).flowEquations(
+          transitionTerms.map(l _).toSeq,
+          monoidValues.map(l _).toSeq,
+          toMonoid _
+        ) +: predicateInstances
       )
     )
 
@@ -304,7 +130,7 @@ trait ParikhTheory[A <: Automaton]
     // TODO check if the flow equations have just one solution, in that case just return that.
     // Use  simplifiedEquations.quans: check if empty, and WHAT MORE???
     // TODO also add analysis for simple automata, or perhaps do that earlier?
-    trace("allowsMonoidValues")(simplifiedEquations)
+    simplifiedEquations
   }
 
 }
