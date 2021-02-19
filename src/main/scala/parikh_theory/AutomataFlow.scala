@@ -50,7 +50,6 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
                 (from, (MINUS_ONE, transitionVar))
               )
           }
-          .to
           .groupBy(_._1)
           .values
           .map(asStateFlowSum)

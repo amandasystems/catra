@@ -1,8 +1,6 @@
 package uuverifiers.parikh_theory
 
-import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
-import ap.terfor.preds.Atom
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.{TermOrder, Formula, Term}
@@ -90,6 +88,12 @@ trait ParikhTheory[A <: Automaton]
       monoidValues: Seq[Term]
   )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
     assert(monoidValues.length == this.monoidDimension)
+
+    // FIXME adjust the threshold!
+    if (aut.states.size <= 10 || aut.transitions.size <= 10) {
+      return (new PresburgerParikhImage(aut))
+        .parikhImage(monoidValues, toMonoid _)
+    }
 
     val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
     val instanceTerm = l(v(transitionTerms.size))

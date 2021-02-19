@@ -4,7 +4,6 @@ import ap.terfor.TerForConvenience._
 import scala.collection.mutable.{ArrayBuffer, BitSet => MBitSet}
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
-import ap.terfor.conjunctions.Conjunction
 
 class PresburgerParikhImage[A <: Automaton](private val aut: A)
     extends Tracing {

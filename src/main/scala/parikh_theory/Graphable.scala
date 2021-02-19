@@ -8,8 +8,7 @@ import scala.collection.mutable.{
   ArrayBuffer,
   HashMap => MHashMap,
   Queue => MQueue,
-  Set => MSet,
-  Stack => MStack
+  Set => MSet
 }
 import scala.language.implicitConversions
 import scala.math.min
@@ -50,7 +49,7 @@ trait Graphable[Node, Label] {
 
       thisNode
     }
-    def unvisited() = nodeUnseen.to[Set]
+    def unvisited() = nodeUnseen.toSet
     def nodeVisited(node: Node) = !(nodeUnseen contains node)
     def pathTo(endNode: Node): Option[Seq[Edge]] = {
       if (!(graph hasNode endNode)) {
@@ -100,7 +99,7 @@ trait Graphable[Node, Label] {
         case Some(augmentingPath) => {
           findResidual(
             residual
-              .dropEdges(augmentingPath.to)
+              .dropEdges(augmentingPath.toSet)
               .addEdges(augmentingPath.reversePath)
           )
         }
@@ -121,13 +120,13 @@ trait Graphable[Node, Label] {
           (reachableInResidual contains e.from) &&
             !(reachableInResidual contains e.to)
       )
-      .to
+      .toSet
   }
 
   def unreachableFrom(startNode: Node) = {
     val it = startBFSFrom(startNode)
     it.foreach(identity) // perform iteration
-    it.unvisited.to[Set]
+    it.unvisited.toSet
   }
 
   // Find the strongly connected components of a graph using Tarjan's
@@ -138,7 +137,7 @@ trait Graphable[Node, Label] {
     val depthIndex = new MHashMap[Node, Int]
     val lowLink = new MHashMap[Node, Int]
     val inCurrentComponent = new MHashMap[Node, Boolean]
-    val currentComponent = new MStack[Node]
+    var currentComponent = List[Node]()
     val components = new ArrayBuffer[Set[Node]]
 
     def unvisited(node: Node) = !(depthIndex contains node)
@@ -153,7 +152,7 @@ trait Graphable[Node, Label] {
       depthIndex(node) = smallestFreeIndex
       lowLink(node) = smallestFreeIndex
       smallestFreeIndex += 1
-      currentComponent.push(node)
+      currentComponent = node +: currentComponent
       inCurrentComponent(node) = true
 
       for (successor <- neighbours(node)) {
@@ -174,7 +173,8 @@ trait Graphable[Node, Label] {
 
         breakable {
           while (!currentComponent.isEmpty) {
-            val w = currentComponent.pop
+            val (w +: rest) = currentComponent
+            currentComponent = rest
             inCurrentComponent(w) = false
             component += w
 
@@ -200,12 +200,14 @@ trait Graphable[Node, Label] {
         blocked: MSet[Node],
         noCircuit: MHashMap[Node, MSet[Node]]
     ) = {
-      val stack = MStack(thisNode)
+      var stack = List(thisNode)
       while (!stack.isEmpty) {
-        val node = stack.pop
+        val (node +: rest) = stack
+        stack = rest
+
         if (blocked contains node) {
           blocked -= node
-          stack pushAll noCircuit.getOrElse(node, Set())
+          stack = stack ++ noCircuit.getOrElse(node, Set())
           noCircuit -= node
         }
       }
@@ -219,27 +221,28 @@ trait Graphable[Node, Label] {
         cycles += Set(from)
     }
 
-    val sccs = stronglyConnectedComponents.to[MStack]
+    var sccs: List[Set[Node]] = stronglyConnectedComponents.toList
 
     while (!sccs.isEmpty) {
-      val component = sccs.pop
-      val componentGraph = subgraph(component)
+      val (component +: rest) = sccs
+      sccs = rest
+      val componentGraph = subgraph(component.toSet)
 
       val startNode = component.head
 
       val closed = MSet[Node]()
       val blocked = MSet(startNode)
-      val path = MStack(startNode)
+      var path = List(startNode)
+
       val noCircuit = MHashMap[Node, MSet[Node]]()
 
-      def neighbourStack(node: Node) =
-        MStack(componentGraph(node).filter(node.!=): _*)
+      def neighbourStack(node: Node) = componentGraph(node).filter(node.!=)
 
-      val stack = MStack((startNode, neighbourStack(startNode)))
+      val stack = ArrayBuffer((startNode, neighbourStack(startNode)))
 
       def scheduleVisitNext(node: Node) = {
-        path push node
-        stack push ((node, neighbourStack(node)))
+        path = node +: path
+        ((node, neighbourStack(node))) +=: stack
         closed -= node
         blocked += node
       }
@@ -252,17 +255,18 @@ trait Graphable[Node, Label] {
             noCircuit.getOrElse(neighbour, MSet[Node]()) += node
           }
         }
-        stack.pop
+        stack.remove(0)
 
-        path.pop // Drop thisNode
+        path = path.tail // Drop thisNode
       }
 
       while (!stack.isEmpty) {
         // Note: we only pop the stack when we have finished walking all neighbours
-        val (thisNode, neighbours) = stack.top
+        val (thisNode, neighbours) = stack.head
         var thisNodeNextOnStack = true
         if (!neighbours.isEmpty) {
-          val nextNode = neighbours.pop
+          val (nextNode +: remainingNeighbours) = neighbours
+          stack(0) = (thisNode, remainingNeighbours)
 
           if (nextNode == startNode) {
             closed ++= path
@@ -283,7 +287,7 @@ trait Graphable[Node, Label] {
       for (component <- (componentGraph subgraph component.tail).stronglyConnectedComponents
            if component.size > 1) {
 
-        sccs push component
+        sccs = component +: sccs
       }
 
     }
@@ -294,7 +298,7 @@ trait Graphable[Node, Label] {
   // Create a new homomorphic graph by merging the given nodes, returning both
   // the new graph and the resulting composite node in that graph.
   def mergeNodes(nodesToMerge: Iterable[Node]): CompositeGraph[Node, Label] =
-    CompositeGraph(this, nodesToMerge.to)
+    CompositeGraph(this, nodesToMerge.toSet)
 
 }
 
@@ -310,17 +314,18 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
 
   override def hasNode(node: N) = underlying contains node
 
-  def allNodes() = underlying.keys.to
+  def allNodes() = underlying.keys.toSeq
   def transitionsFrom(node: N) =
     underlying
       .getOrElse(node, Set())
       .map { case (to, label) => (node, label, to) }
-      .to
+      .toSeq
   def subgraph(selectedNodes: Set[N]) =
     new MapGraph[N, L](
       underlying
         .filterKeys(selectedNodes contains _)
         .mapValues(nexts => nexts.filter(selectedNodes contains _._1))
+        .toMap
     )
 
   // NOTE: Maintains all nodes
@@ -382,7 +387,7 @@ sealed abstract class CompositeNode[N] extends Product with Serializable {
 
 object CompositeNode {
   final case class MultiNode[N](ns: Iterable[N]) extends CompositeNode[N] {
-    val nodes = ns.to[Set]
+    val nodes = ns.toSet
 
     def representative() = nodes.head
   }
@@ -464,7 +469,7 @@ class CompositeGraph[N, L](
     val affectedClasses = newClass.nodes
       .map(this.nodeToEqClass(_))
       .filter(_.isInstanceOf[CompositeNode.MultiNode[N]])
-      .to[Set]
+      .toSet
 
     assert(affectedClasses.isEmpty, "NOT IMPLEMENTED: non-disjoint merging!")
 

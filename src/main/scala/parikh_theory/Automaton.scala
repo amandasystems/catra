@@ -44,8 +44,8 @@ trait Automaton {
 
   class AutomatonGraph(val aut: Automaton) extends Graphable[State, Label] {
 
-    def allNodes() = states.to
-    def edges() = transitions.to
+    def allNodes() = states.toSeq
+    def edges() = transitions.toSeq
     def transitionsFrom(node: State) =
       outgoingTransitions(node).map(t => (node, t._2, t._1)).toSeq
     // FIXME this is ugly we should *not* change type

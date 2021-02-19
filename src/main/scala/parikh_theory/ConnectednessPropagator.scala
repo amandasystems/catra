@@ -42,7 +42,7 @@ class ConnectednessPropagator[A <: Automaton](
 
       val transitionToTerm =
         trace("transitionToTerm")(
-          aut.transitions.to.zip(transitionTerms).toMap
+          aut.transitions.zip(transitionTerms.iterator).toMap
         )
 
       // FIXME this is highly inefficient repeat work and should be factored
@@ -88,7 +88,7 @@ class ConnectednessPropagator[A <: Automaton](
             .filter(
               t => termMeansDefinitelyAbsent(goal, transitionToTerm(t))
             )
-            .to[Set]
+            .toSet
         }
 
         val unreachableConstraints =
