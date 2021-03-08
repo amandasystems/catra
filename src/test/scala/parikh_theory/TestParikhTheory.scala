@@ -13,9 +13,9 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .setInitial(0)
       .setAccepting(1)
       .addTransition(0, (), 1)
-      .getAutomaton
+      .getAutomaton()
 
-    val lt = LengthCounting[Automaton](Array(aut))
+    val lt = LengthCounting[Automaton](IndexedSeq(aut))
 
     assert(TestUtilities.onlyReturnsLength(lt, 1))
   }
@@ -34,14 +34,14 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .addTransition(0, 'c', 2)
       .addTransition(0, 'a', 1)
       .addTransition(1, 'b', 2)
-      .getAutomaton
+      .getAutomaton()
 
-    val lt = LengthCounting[Automaton](Array(aut))
+    val lt = LengthCounting[Automaton](IndexedSeq(aut))
 
     TestUtilities.ensuresAlways(lt) {
       case (lengths, order) =>
-        implicit val _ = order
-        disj(lengths(0) === l(1), lengths(0) === l(2))
+        implicit val o = order
+        disj(lengths(0) === l(1), lengths(0) === l(2))(order)
     }
   }
 
@@ -52,13 +52,13 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .setInitial(0)
       .addTransition(0, 'a', 1)
       .addTransition(1, 'b', 1)
-      .getAutomaton
+      .getAutomaton()
 
-    val lt = LengthCounting[Automaton](Array(aut))
+    val lt = LengthCounting[Automaton](IndexedSeq(aut))
 
     TestUtilities.ensuresAlways(lt) {
       case (lengths, order) =>
-        implicit val _ = order
+        implicit val o = order
         conj(geqZ(lengths.map(l(_))))
     }
   }
@@ -92,7 +92,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .addTransition(2, '-', 3)
       .addTransition(2, 'c', 2)
       .addTransition(3, '-', 2)
-      .getAutomaton
+      .getAutomaton()
 
     TestUtilities.bothImplementationsHaveSameImage(aut)
   }
@@ -108,7 +108,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   //       +---+
   test("old implementation bug for 4-state automaton") {
     import ap.terfor.conjunctions.Conjunction
-    import ap.basetypes.IdealInt
     import ap.PresburgerTools
 
     val aut = AutomatonBuilder[Int, Char]()
@@ -118,7 +117,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .addTransition(0, 'a', 1)
       .addTransition(1, 'b', 3)
       .addTransition(3, 'b', 2)
-      .getAutomaton
+      .getAutomaton()
 
     val alphabet = "ab".toCharArray
 
@@ -132,8 +131,11 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       import p._
       implicit val order = p.order
 
-      val oldImage = presburgerFormulation parikhImage (constants, TestUtilities
-        .alphabetCounter(alphabet) _)
+      val oldImage = presburgerFormulation.parikhImage(
+        constants,
+        TestUtilities
+          .alphabetCounter(alphabet) _
+      )
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
         Conjunction.conj(oldImage, p.order)
@@ -163,22 +165,22 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .addTransition(2, '-', 3)
       .addTransition(2, 'c', 2)
       .addTransition(3, '-', 2)
-      .getAutomaton
+      .getAutomaton()
 
     val alphabet = "abc-".toCharArray
 
-    val theory = ParikhTheory[Automaton](Array(aut))(
+    val theory = ParikhTheory[Automaton](IndexedSeq(aut))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )
 
     SimpleAPI.withProver { p =>
-      val constantsA = p createConstantsRaw ("a", 0 until theory.monoidDimension)
-      val constantsB = p createConstantsRaw ("b", 0 until theory.monoidDimension)
+      val constantsA = p.createConstantsRaw("a", 0 until theory.monoidDimension)
+      val constantsB = p.createConstantsRaw("b", 0 until theory.monoidDimension)
 
       p addTheory theory
 
-      implicit val _ = p.order
+      implicit val o = p.order
 
       val clause = disjFor(
         theory allowsMonoidValues constantsA,
@@ -199,9 +201,90 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .setInitial(0)
       .setAccepting(1)
       .addTransition(0, 'a', 1)
-      .getAutomaton
+      .getAutomaton()
 
     TestUtilities.bothImplementationsHaveSameImage(aut)
+  }
+
+  test("product parikh image removes non-common transitions") {
+    import ap.terfor.conjunctions.Conjunction
+    import ap.PresburgerTools
+
+    // TODO implement a .clone() method on builders and simplify this immensely
+    val abcAutomaton = AutomatonBuilder[Int, Char]()
+      .addStates(0 to 3)
+      .setAccepting(3)
+      .setInitial(0)
+      .addTransition(0, 'a', 1)
+      .addTransition(1, 'b', 2)
+      .addTransition(2, 'c', 3)
+      .getAutomaton()
+
+    val aAut = AutomatonBuilder[Int, Char]()
+      .addStates(0 to 3)
+      .setAccepting(3)
+      .setInitial(0)
+      .addTransition(0, 'a', 1)
+      .addTransition(1, 'b', 2)
+      .addTransition(2, 'c', 3)
+      .addTransition(3, 'b', 3)
+      .addTransition(1, 'b', 3)
+      .addTransition(2, 'b', 2)
+      .getAutomaton()
+
+    val bAut = AutomatonBuilder[Int, Char]()
+      .addStates(0 to 4)
+      .setAccepting(3)
+      .setInitial(0)
+      .addTransition(0, 'a', 1)
+      .addTransition(1, 'b', 2)
+      .addTransition(2, 'c', 3)
+      .addTransition(1, 'b', 4)
+      .addTransition(4, 'b', 3)
+      .getAutomaton()
+
+    val alphabet = "abc".toCharArray
+
+    val presburgerFormulation =
+      new PresburgerParikhImage[Automaton](abcAutomaton)
+
+    val pt = ParikhTheory[Automaton](IndexedSeq[Automaton](aAut, bAut))(
+      TestUtilities.alphabetCounter(alphabet) _,
+      alphabet.length
+    )
+
+    SimpleAPI.withProver { p =>
+      val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
+
+      p addTheory pt
+
+      implicit val order = p.order
+      import p._
+
+      val oldImage = presburgerFormulation.parikhImage(
+        constants,
+        TestUtilities
+          .alphabetCounter(alphabet) _
+      )
+
+      val newImage = pt allowsMonoidValues constants
+
+      val reduced = PresburgerTools.elimQuantifiersWithPreds(
+        Conjunction.conj(oldImage, p.order)
+      )
+
+      p addConclusion (Conjunction.conj(newImage, order) ==>
+        Conjunction.conj(reduced, order))
+
+      val res = p.???
+      val simplifiedNew =
+        pp(simplify(asIFormula(Conjunction.conj(newImage, order))))
+      val simplifiedOld = pp(simplify(asIFormula(reduced)))
+
+      withClue(s"${simplifiedOld} != ${simplifiedNew}")(
+        assert(res == ProverStatus.Valid)
+      )
+    }
   }
 
 }

@@ -90,12 +90,12 @@ trait ParikhTheory[A <: Automaton]
     assert(monoidValues.length == this.monoidDimension)
 
     // FIXME adjust the threshold!
-    if (aut.states.size <= 10 || aut.transitions.size <= 10) {
-      return (new PresburgerParikhImage(aut))
-        .parikhImage(monoidValues, toMonoid _)
-    }
+    // if (aut.states.size <= 10 || aut.transitions.size <= 10) {
+    //   return (new PresburgerParikhImage(aut))
+    //     .parikhImage(monoidValues, toMonoid _)
+    // }
 
-    val transitionTerms = autGraph.edges.indices.map(v).toIndexedSeq
+    val transitionTerms = autGraph.edges().indices.map(v).toIndexedSeq
     val instanceTerm = l(v(transitionTerms.size))
     val nrNewTerms = transitionTerms.size + 1
 
@@ -113,7 +113,7 @@ trait ParikhTheory[A <: Automaton]
 
     // TODO evaluate whether this pays off!
     val predicateInstances =
-      if (autGraph.simpleCycles.isEmpty) Seq()
+      if (autGraph.simpleCycles().isEmpty) Seq()
       else
         monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +: transitionMaskInstances
 

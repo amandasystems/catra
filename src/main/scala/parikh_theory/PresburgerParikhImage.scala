@@ -4,6 +4,7 @@ import ap.terfor.TerForConvenience._
 import scala.collection.mutable.{ArrayBuffer, BitSet => MBitSet}
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
+import compat._
 
 class PresburgerParikhImage[A <: Automaton](private val aut: A)
     extends Tracing {
@@ -81,11 +82,12 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
           })
           val zVars = refStates
             .zip(Stream from prodVars.size)
+            .unsorted
             .map {
               case (state, index) =>
                 state -> v(index)
             }
-            .toMap
+            .to(Map)
 
           // Generate 0 - 2 variable -> coefficient * term mappings from a
           // transition , eg.
@@ -170,6 +172,7 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
 
           val connective = refStates
             .filter(finalStateInd.!=)
+            .unsorted
             .map(
               state =>
                 disjFor(

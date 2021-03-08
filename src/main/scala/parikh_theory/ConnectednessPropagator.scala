@@ -33,7 +33,7 @@ class ConnectednessPropagator[A <: Automaton](
       goal: Goal
   )(predicateAtom: Atom): Seq[Plugin.Action] =
     trace("ConnectednessPropagator") {
-      implicit val _ = goal.order
+      implicit val order = goal.order
 
       val instanceTerm = predicateAtom(0)
 

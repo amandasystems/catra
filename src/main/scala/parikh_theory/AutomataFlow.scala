@@ -42,7 +42,7 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
     trace("Flow equations") {
       arithConj(
         transitionAndVar
-          .filter(!_._1.isSelfEdge)
+          .filter(!_._1.isSelfEdge())
           .flatMap {
             case ((from, _, to), transitionVar) =>
               List(

@@ -1,9 +1,10 @@
 import Dependencies._
 
-ThisBuild / scalaVersion     := "2.12.12"
+// ThisBuild / scalaVersion     := "2.12.12"
+ThisBuild / scalaVersion     := "2.13.5"
 ThisBuild / version          := "0.1.0-SNAPSHOT"
 ThisBuild / organization     := "uuverifiers"
-ThisBuild / crossScalaVersions := Seq("2.11.12", "2.12.12")
+// ThisBuild / crossScalaVersions := Seq("2.11.12", "2.12.12")
 
 ThisBuild / scalacOptions ++= Seq(
     "-deprecation",
@@ -11,7 +12,7 @@ ThisBuild / scalacOptions ++= Seq(
     "-unchecked",
     "-Xlint",
     "-Xelide-below", "INFO",
-    // "-feature",
+    "-feature",
     "-Ywarn-dead-code",
     "-Ywarn-unused"
 )

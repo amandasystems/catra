@@ -6,11 +6,10 @@ import ap.terfor.conjunctions.Conjunction
 import SimpleAPI.ProverStatus
 import org.scalatest.funsuite.AnyFunSuite
 import ap.terfor.TerForConvenience._
-import ap.basetypes.IdealInt
 
 object TestUtilities extends AnyFunSuite with Tracing {
 
-  def alphabetCounter[T](alphabet: Seq[T])(t: Any) = {
+  def alphabetCounter[T](alphabet: Iterable[T])(t: Any) = {
     import ap.terfor.linearcombination.LinearCombination
     import ap.basetypes.IdealInt
     val ONE = LinearCombination(IdealInt.ONE)
@@ -36,7 +35,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
       lengthConstraints: (IndexedSeq[Term], TermOrder) => Conjunction
   ) = {
     SimpleAPI.withProver { p =>
-      val constants = p createConstantsRaw ("x", 0 until theory.monoidDimension)
+      val constants = p.createConstantsRaw("x", 0 until theory.monoidDimension)
       p addTheory theory // It's not smart enough to realise it needs the theory
 
       implicit val order = p.order // Adding constants and predicates changes order
@@ -57,7 +56,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
       aut.transitions.map(_._2.asInstanceOf[Char]).toSet.toIndexedSeq.sorted
     )
 
-    val pt = ParikhTheory[Automaton](Array[Automaton](aut))(
+    val pt = ParikhTheory[Automaton](IndexedSeq[Automaton](aut))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )
@@ -65,15 +64,18 @@ object TestUtilities extends AnyFunSuite with Tracing {
     val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
 
     SimpleAPI.withProver { p =>
-      val constants = p createConstantsRaw ("a", 0 until pt.monoidDimension)
+      val constants = p.createConstantsRaw("a", 0 until pt.monoidDimension)
 
       p addTheory pt
-      implicit val _ = p.order
+      implicit val order = p.order
       import p._
 
       val newImage = pt allowsMonoidValues constants
-      val oldImage = presburgerFormulation parikhImage (constants, TestUtilities
-        .alphabetCounter(alphabet) _)
+      val oldImage = presburgerFormulation.parikhImage(
+        constants,
+        TestUtilities
+          .alphabetCounter(alphabet) _
+      )
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
         Conjunction.conj(oldImage, p.order)
@@ -104,7 +106,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
   ) = {
     ensuresAlways(theory) {
       case (vars, order) =>
-        implicit val _ = order
+        implicit val order2 = order
         conj(
           vars
             .zip(expectedCounts)
@@ -121,60 +123,4 @@ object TestUtilities extends AnyFunSuite with Tracing {
       theory: LengthCounting[_],
       length: Int
   ) = onlyReturnsCounts(theory, Seq(length))
-}
-
-class AutomatonBuilder[S, L] {
-  private var _autStates = Set[S]()
-  private var _transitions = Set[(S, L, S)]()
-  private var _initial: Option[S] = None
-  private var _accepting = Set[S]()
-
-  def addStates(statesToAdd: Seq[S]): AutomatonBuilder[S, L] = {
-    _autStates ++= statesToAdd
-    this
-  }
-
-  def setInitial(newInitialState: S): AutomatonBuilder[S, L] = {
-    assert(_autStates contains newInitialState)
-    _initial = Some(newInitialState)
-    this
-  }
-
-  def setAccepting(acceptingStates: S*): AutomatonBuilder[S, L] = {
-    assert(acceptingStates forall (_autStates(_)))
-    _accepting ++= acceptingStates
-    this
-  }
-
-  def addTransition(from: S, label: L, to: S): AutomatonBuilder[S, L] = {
-    assert((_autStates contains from) && (_autStates contains to))
-    _transitions += ((from, label, to))
-    this
-  }
-
-  def getAutomaton(): Automaton = {
-    assert(_initial != None)
-
-    object Aut extends Automaton {
-      type State = S
-      type Label = L
-
-      override val initialState = _initial.get
-      override def isAccept(s: State) = _accepting contains s
-      override def outgoingTransitions(from: State) =
-        _transitions
-          .filter { case (thatFrom, _, _) => thatFrom == from }
-          .map {
-            case (_, label, to) => (to, label)
-          }
-          .to
-      override val states = _autStates
-    }
-
-    Aut
-  }
-}
-
-object AutomatonBuilder {
-  def apply[S, L]() = new AutomatonBuilder[S, L]()
 }

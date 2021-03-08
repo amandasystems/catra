@@ -18,7 +18,7 @@ trait Graphable[Node, Label] {
   def allNodes(): Seq[Node]
   def edges(): Seq[(Node, Label, Node)]
   def subgraph(selectedNodes: Set[Node]): Graphable[Node, Label]
-  def hasNode(node: Node): Boolean = allNodes contains node
+  def hasNode(node: Node): Boolean = allNodes() contains node
   def dropEdges(edges: Set[(Node, Label, Node)]): Graphable[Node, Label]
   def addEdges(edges: Iterable[(Node, Label, Node)]): Graphable[Node, Label]
 
@@ -29,7 +29,7 @@ trait Graphable[Node, Label] {
   class BFSVisitor(val graph: Graphable[Node, Label], val startNode: Node)
       extends Iterator[Node] {
 
-    private val nodeUnseen = MSet(graph.allNodes: _*)
+    private val nodeUnseen = MSet(graph.allNodes(): _*)
     private val toVisit = MQueue[Node](startNode)
     private val connectingEdge = MHashMap[Node, Option[Edge]](startNode -> None)
 
@@ -38,7 +38,7 @@ trait Graphable[Node, Label] {
     override def hasNext = !toVisit.isEmpty
 
     override def next() = {
-      val thisNode = toVisit.dequeue
+      val thisNode = toVisit.dequeue()
 
       for (edge @ (_, label, neighbour) <- graph.transitionsFrom(thisNode)
            if nodeUnseen contains neighbour) {
@@ -81,7 +81,7 @@ trait Graphable[Node, Label] {
   def startBFSFrom(startNode: Node) =
     new BFSVisitor(this, startNode)
 
-  def neighbours(node: Node): Seq[Node] = transitionsFrom(node).map(_.to)
+  def neighbours(node: Node): Seq[Node] = transitionsFrom(node).map(_.to())
 
   // Apply is what you'd expect
   def apply(n: Node) = neighbours(n)
@@ -100,19 +100,19 @@ trait Graphable[Node, Label] {
           findResidual(
             residual
               .dropEdges(augmentingPath.toSet)
-              .addEdges(augmentingPath.reversePath)
+              .addEdges(augmentingPath.reversePath())
           )
         }
       }
 
     val residual = findResidual(
-      new MapGraph(this.edges.filter(!_.isSelfEdge))
+      new MapGraph(this.edges().filter(!_.isSelfEdge()))
     )
 
-    val visitor = residual.startBFSFrom(source).visitAll
+    val visitor = residual.startBFSFrom(source).visitAll()
 
     val reachableInResidual: Set[Node] =
-      residual.allNodes.filter(visitor.nodeVisited(_)).toSet
+      residual.allNodes().filter(visitor.nodeVisited(_)).toSet
 
     this.edges
       .filter(
@@ -270,7 +270,7 @@ trait Graphable[Node, Label] {
 
           if (nextNode == startNode) {
             closed ++= path
-            cycles += path.to
+            cycles += path.toSet
 
           } else if (!(blocked contains nextNode)) {
             scheduleVisitNext(nextNode)
@@ -305,7 +305,7 @@ trait Graphable[Node, Label] {
 class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
     extends Graphable[N, L] {
 
-  def this(edges: Traversable[(N, L, N)]) {
+  def this(edges: Traversable[(N, L, N)]) = {
     this(
       edges.map((_._3 -> List())).toMap ++
         edges.groupBy(_._1).mapValues(_.map(v => (v._3, v._2)).toList).toMap
@@ -341,7 +341,7 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
   }
 
   def addEdges(edgesToAdd: Iterable[(N, L, N)]) =
-    new MapGraph(this.edges ++ edgesToAdd)
+    new MapGraph(this.edges() ++ edgesToAdd)
 
   def edges() =
     underlying.flatMap { case (v, ws) => ws.map(w => (v, w._2, w._1)) }.toSeq
@@ -350,7 +350,7 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
 
 object MapGraph {
   implicit def mapToLabellessGraph[N](m: Map[N, List[N]]): MapGraph[N, Unit] =
-    new MapGraph(m.mapValues(_.map(v => (v, ()))))
+    new MapGraph(m.mapValues(_.map(v => (v, ()))).toMap)
   implicit def mapToGraph[N, L](m: Map[N, List[(N, L)]]): MapGraph[N, L] =
     new MapGraph(m)
 }
@@ -400,7 +400,8 @@ object CompositeNode {
 object CompositeGraph {
   def apply[N, L](graphToMerge: Graphable[N, L], equivalentNodes: Set[N]) = {
     val mergedClass = new CompositeNode.MultiNode(equivalentNodes)
-    val nodeToEqClass: Map[N, CompositeNode[N]] = graphToMerge.allNodes
+    val nodeToEqClass: Map[N, CompositeNode[N]] = graphToMerge
+      .allNodes()
       .map(
         node =>
           node ->
@@ -415,18 +416,21 @@ object CompositeGraph {
     // Now, merge the redundant edges
     val underlying: Graphable[CompositeNode[N], Set[(N, L, N)]] =
       MapGraph.mapToGraph(
-        graphToMerge.edges
+        graphToMerge
+          .edges()
           .map {
             case edge @ (from, _, to) =>
               (nodeToEqClass(from), edge, nodeToEqClass(to))
           }
-          .groupBy(e => (e.from, e.to))
+          .groupBy(e => (e.from(), e.to()))
           .map {
             case ((from, to), edgeLump) =>
-              (from, edgeLump.map(_.label).toSet, to)
+              (from, edgeLump.map(_.label()).toSet, to)
           }
-          .groupBy(_.from)
-          .mapValues(_.map(e => (e.to, e.label)).toList)
+          .groupBy(_.from())
+          .view
+          .mapValues(_.map(e => (e.to(), e.label())).toList)
+          .toMap
       )
 
     new CompositeGraph(underlying, nodeToEqClass)
@@ -461,8 +465,8 @@ class CompositeGraph[N, L](
   ): Seq[(CompositeNode[N], Set[(N, L, N)], CompositeNode[N])] =
     underlying.transitionsFrom(node)
 
-  def allNodes = underlying.allNodes
-  def edges = underlying.edges
+  def allNodes() = underlying.allNodes()
+  def edges() = underlying.edges()
 
   def flatMergeNodes(nodesToMerge: Iterable[N]): CompositeGraph[N, L] = {
     val newClass = new CompositeNode.MultiNode(nodesToMerge)
@@ -488,22 +492,25 @@ class CompositeGraph[N, L](
 
     val underlying: Graphable[CompositeNode[N], Set[(N, L, N)]] =
       MapGraph.mapToGraph(
-        this.edges
+        this
+          .edges()
           .map {
             case (from, label, to) =>
               (
-                nodeToEqClass(from.representative),
+                nodeToEqClass(from.representative()),
                 label,
-                nodeToEqClass(to.representative)
+                nodeToEqClass(to.representative())
               )
           }
-          .groupBy(e => (e.from, e.to))
+          .groupBy(e => (e.from(), e.to()))
           .map {
             case ((from, to), edgeLump) =>
-              (from, edgeLump.map(_.label).flatten.toSet, to)
+              (from, edgeLump.map(_.label()).flatten.toSet, to)
           }
-          .groupBy(_.from)
-          .mapValues(_.map(e => (e.to, e.label)).toList)
+          .groupBy(_.from())
+          .view
+          .mapValues(_.map(e => (e.to(), e.label())).toList)
+          .toMap
       )
 
     new CompositeGraph(underlying, nodeToEqClass)

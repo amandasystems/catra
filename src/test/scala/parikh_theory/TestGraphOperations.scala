@@ -15,24 +15,24 @@ class TestGraphOperations extends AnyFunSuite {
   }
 
   test("BFS marks all nodes visited") {
-    assert((allConnected startBFSFrom 1).visitAll().unvisited.isEmpty)
+    assert((allConnected startBFSFrom 1).visitAll().unvisited().isEmpty)
   }
 
   test("BFS misses disconnected bit") {
     val g =
       Map(1 -> List(1, 2, 3), 2 -> List(2), 3 -> List(3, 2), 4 -> List())
 
-    assert((g startBFSFrom 1).visitAll().unvisited == Set(4))
+    assert((g startBFSFrom 1).visitAll().unvisited() == Set(4))
 
   }
 
   test("connectedComponent finds components in SCC-less graph") {
-    val sccs = allConnected.stronglyConnectedComponents
+    val sccs = allConnected.stronglyConnectedComponents()
     assert(sccs == Set(Set(1), Set(2), Set(3), Set(4)))
   }
 
   test("connectedComponent finds simple 2-node component") {
-    assert(twoNodeCycle.stronglyConnectedComponents == Set(Set(1, 2)))
+    assert(twoNodeCycle.stronglyConnectedComponents() == Set(Set(1, 2)))
   }
 
   test(
@@ -50,7 +50,7 @@ class TestGraphOperations extends AnyFunSuite {
     )
 
     assert(
-      ex1.stronglyConnectedComponents == Set(
+      ex1.stronglyConnectedComponents() == Set(
         Set('a', 'b', 'e'),
         Set('f', 'g'),
         Set('c', 'd', 'h')
@@ -59,23 +59,24 @@ class TestGraphOperations extends AnyFunSuite {
   }
 
   test("simpleCycle finds a minimal cycle") {
-    assert(twoNodeCycle.simpleCycles == Set(Set(1, 2)))
+    assert(twoNodeCycle.simpleCycles() == Set(Set(1, 2)))
   }
 
   test("simpleCycle finds a self-loop") {
-    assert(Map(1 -> List(1)).simpleCycles == Set(Set(1)))
+    assert(Map(1 -> List(1)).simpleCycles() == Set(Set(1)))
   }
 
   test("simpleCycle finds a minimal cycle and a self-loop") {
     assert(
-      Map(1 -> List(1, 2), 2 -> List(1)).simpleCycles == Set(Set(1), Set(1, 2))
+      Map(1 -> List(1, 2), 2 -> List(1))
+        .simpleCycles() == Set(Set(1), Set(1, 2))
     )
   }
 
   test("simpleCycle finds two cycles") {
     val g = Map(1 -> List(2, 4), 2 -> List(3), 3 -> List(1), 4 -> List(1))
 
-    assert(g.simpleCycles == Set(Set(1, 2, 3), Set(1, 4)))
+    assert(g.simpleCycles() == Set(Set(1, 2, 3), Set(1, 4)))
   }
 
   test("BFS finds last node of connected graph") {

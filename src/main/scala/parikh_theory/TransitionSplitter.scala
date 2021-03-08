@@ -18,7 +18,7 @@ class TransitionSplitter(
   override def handlePredicateInstance(
       goal: Goal
   )(predicateAtom: Atom): Seq[Plugin.Action] = trace("TransitionSplitter") {
-    implicit val _ = goal.order
+    implicit val order = goal.order
 
     val transitionTerms =
       trace("transitionTerms")(
