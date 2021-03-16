@@ -55,7 +55,6 @@ trait ParikhTheory[A <: Automaton]
   val monoidDimension: Int
 
   lazy val aut = auts(0) // lazy because of early init
-  lazy private val autGraph = aut.toGraph // lazy because of aut
   // lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
 
   // FIXME: total deterministisk ordning på edges!
@@ -81,13 +80,16 @@ trait ParikhTheory[A <: Automaton]
     )
 
   /**
-   * Generate a quantified formula that is satisfiable iff the provided
-   * monoid values are possible by any legal path through the automaton.
+   * Generate the clauses for the i:th automaton. Introduces a number of new
+   * terms. Returns the formula and new offset.
    */
-  def allowsMonoidValues(
+  private def automataClauses(
+      automataNr: Int,
+      varStartOffset: Int,
       monoidValues: Seq[Term]
-  )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
-    assert(monoidValues.length == this.monoidDimension)
+  )(implicit order: TermOrder): (Int, Seq[Formula]) = {
+    val aut = auts(automataNr)
+    val autGraph = aut.toGraph
 
     // FIXME adjust the threshold!
     // if (aut.states.size <= 10 || aut.transitions.size <= 10) {
@@ -97,18 +99,21 @@ trait ParikhTheory[A <: Automaton]
 
     val transitionTerms = autGraph.edges().indices.map(v).toIndexedSeq
     val instanceTerm = l(v(transitionTerms.size))
-    val nrNewTerms = transitionTerms.size + 1
+    val newVarOffset = varStartOffset + transitionTerms.size + 1
 
     // need to prevent variable capture by the quantifiers added below
+    // TODO can we do this shifting all in one go to save time?
     val shiftAwayFromQuantifiers =
-      VariableShiftSubst.upShifter[Term](nrNewTerms, order)
+      VariableShiftSubst.upShifter[Term](newVarOffset, order)
     val shiftedMonoidValues = (monoidValues map shiftAwayFromQuantifiers) map (l _)
 
     val transitionMaskInstances =
       transitionTerms.zipWithIndex
         .map {
           case (t, i) =>
-            transitionMaskPredicate(Seq(instanceTerm, l(0), l(i), l(t)))
+            transitionMaskPredicate(
+              Seq(instanceTerm, l(automataNr), l(i), l(t))
+            )
         }
 
     // TODO evaluate whether this pays off!
@@ -117,16 +122,34 @@ trait ParikhTheory[A <: Automaton]
       else
         monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +: transitionMaskInstances
 
-    val allEquations = exists(
-      nrNewTerms,
-      conj(
-        AutomataFlow(aut).flowEquations(
-          transitionTerms.map(l _).toSeq,
-          monoidValues.map(l _).toSeq,
-          toMonoid _
-        ) +: predicateInstances
-      )
+    (
+      newVarOffset,
+      AutomataFlow(aut).flowEquations(
+        transitionTerms.map(l _).toSeq,
+        monoidValues.map(l _).toSeq,
+        toMonoid _
+      ) +: predicateInstances
     )
+  }
+
+  /**
+   * Generate a quantified formula that is satisfiable iff the provided
+   * monoid values are possible by any legal path through the automaton.
+   */
+  def allowsMonoidValues(
+      monoidValues: Seq[Term]
+  )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
+    assert(monoidValues.length == this.monoidDimension)
+
+    val (nrNewTerms, clauses) =
+      (0 until auts.size).foldLeft((0, List[Formula]())) {
+        case ((currentOffset, currentClauses), autId) =>
+          val (newOffset, newClauses) =
+            automataClauses(autId, currentOffset, monoidValues)
+          (newOffset, currentClauses ++ newClauses)
+      }
+
+    val allEquations = exists(nrNewTerms, conj(clauses))
 
     val simplifiedEquations =
       ReduceWithConjunction(Conjunction.TRUE, order)(allEquations)
