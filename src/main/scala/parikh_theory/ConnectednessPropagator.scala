@@ -11,7 +11,7 @@ import ap.terfor.TerForConvenience._
  * subsumption.
  */
 class ConnectednessPropagator[A <: Automaton](
-    private val aut: A,
+    private val auts: IndexedSeq[A],
     private val connectedPredicate: Predicate,
     private val transitionPredicate: Predicate,
     private val transitionExtractor: TransitionMaskExtractor,
@@ -26,6 +26,7 @@ class ConnectednessPropagator[A <: Automaton](
     transitionStatusFromTerm,
     termMeansDefinitelyAbsent
   }
+  lazy private val aut = auts(0)
   lazy private val autGraph = aut.toGraph
 
   override val procedurePredicate = connectedPredicate

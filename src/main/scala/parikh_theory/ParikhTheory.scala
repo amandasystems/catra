@@ -54,13 +54,9 @@ trait ParikhTheory[A <: Automaton]
     **/
   val monoidDimension: Int
 
-  lazy val aut = auts(0) // lazy because of early init
-  // lazy private val cycles = trace("cycles")(autGraph.simpleCycles) // lazy because of aut
-
-  // FIXME: total deterministisk ordning på edges!
-  // lazy because it depends on aut
+  // lazy because it depends on auts
   lazy private val monoidMapPredicate =
-    new Predicate(s"MonoidMap_${aut.hashCode}", monoidDimension + 1)
+    new Predicate(s"MonoidMap_${auts.hashCode}", monoidDimension + 1)
 
   private val transitionMaskPredicate =
     new Predicate(s"TransitionMask_${this.hashCode}", 4)
@@ -71,7 +67,7 @@ trait ParikhTheory[A <: Automaton]
   def plugin: Option[Plugin] =
     Some(
       new ConnectednessPropagator(
-        aut,
+        auts,
         monoidMapPredicate,
         transitionMaskPredicate,
         new TransitionMaskExtractor(transitionMaskPredicate),
