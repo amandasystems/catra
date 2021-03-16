@@ -100,6 +100,56 @@ object TestUtilities extends AnyFunSuite with Tracing {
     true
   }
 
+  def productsAreEqual(left: Automaton, right: Automaton) = {
+    val leftLabels = left.transitions.map(_._2.asInstanceOf[Char]).toSet
+    val rightLabels = right.transitions.map(_._2.asInstanceOf[Char]).toSet
+    val alphabet = trace("alphabet")(
+      (leftLabels ++ rightLabels).toIndexedSeq.sorted
+    )
+
+    val presburgerFormulation =
+      new PresburgerParikhImage[Automaton](left &&& right)
+
+    val pt = ParikhTheory[Automaton](IndexedSeq[Automaton](left, right))(
+      TestUtilities.alphabetCounter(alphabet) _,
+      alphabet.length
+    )
+
+    SimpleAPI.withProver { p =>
+      val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
+
+      p addTheory pt
+
+      implicit val order = p.order
+      import p._
+
+      val oldImage = presburgerFormulation.parikhImage(
+        constants,
+        TestUtilities
+          .alphabetCounter(alphabet) _
+      )
+
+      val newImage = pt allowsMonoidValues constants
+
+      val reduced = PresburgerTools.elimQuantifiersWithPreds(
+        Conjunction.conj(oldImage, p.order)
+      )
+
+      p addConclusion (Conjunction.conj(newImage, order) ==>
+        Conjunction.conj(reduced, order))
+
+      val res = p.???
+      val simplifiedNew =
+        pp(simplify(asIFormula(Conjunction.conj(newImage, order))))
+      val simplifiedOld = pp(simplify(asIFormula(reduced)))
+
+      withClue(s"${simplifiedOld} != ${simplifiedNew}")(
+        assert(res == ProverStatus.Valid)
+      )
+    }
+    true
+  }
+
   def onlyReturnsCounts(
       theory: ParikhTheory[_],
       expectedCounts: Seq[Int]

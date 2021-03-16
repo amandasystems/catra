@@ -207,84 +207,80 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("product parikh image removes non-common transitions") {
-    import ap.terfor.conjunctions.Conjunction
-    import ap.PresburgerTools
 
-    // TODO implement a .clone() method on builders and simplify this immensely
-    val abcAutomaton = AutomatonBuilder[Int, Char]()
-      .addStates(0 to 3)
-      .setAccepting(3)
-      .setInitial(0)
-      .addTransition(0, 'a', 1)
-      .addTransition(1, 'b', 2)
-      .addTransition(2, 'c', 3)
-      .getAutomaton()
+    def commonBits() =
+      AutomatonBuilder[Int, Char]()
+        .addStates(0 to 3)
+        .setAccepting(3)
+        .setInitial(0)
+        .addTransition(0, 'a', 1)
+        .addTransition(1, 'b', 2)
+        .addTransition(2, 'c', 3)
 
-    val aAut = AutomatonBuilder[Int, Char]()
-      .addStates(0 to 3)
-      .setAccepting(3)
-      .setInitial(0)
-      .addTransition(0, 'a', 1)
-      .addTransition(1, 'b', 2)
-      .addTransition(2, 'c', 3)
-      .addTransition(3, 'b', 3)
-      .addTransition(1, 'b', 3)
-      .addTransition(2, 'b', 2)
-      .getAutomaton()
-
-    val bAut = AutomatonBuilder[Int, Char]()
-      .addStates(0 to 4)
-      .setAccepting(3)
-      .setInitial(0)
-      .addTransition(0, 'a', 1)
-      .addTransition(1, 'b', 2)
-      .addTransition(2, 'c', 3)
-      .addTransition(1, 'b', 4)
-      .addTransition(4, 'b', 3)
-      .getAutomaton()
-
-    val alphabet = "abc".toCharArray
-
-    val presburgerFormulation =
-      new PresburgerParikhImage[Automaton](abcAutomaton)
-
-    val pt = ParikhTheory[Automaton](IndexedSeq[Automaton](aAut, bAut))(
-      TestUtilities.alphabetCounter(alphabet) _,
-      alphabet.length
+    TestUtilities.productsAreEqual(
+      commonBits()
+        .addTransition(3, 'b', 3)
+        .addTransition(1, 'b', 3)
+        .addTransition(2, 'b', 2)
+        .getAutomaton(),
+      commonBits()
+        .addStates(Seq(4))
+        .addTransition(1, 'b', 4)
+        .addTransition(4, 'b', 3)
+        .getAutomaton()
     )
+  }
 
-    SimpleAPI.withProver { p =>
-      val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
+  //              b
+  //         +---------+
+  //         v         |
+  //       +---+  a  +---+  #2 +---+
+  //   --> | 0 | --> | 1 | --> | 3 | -->
+  //       +---+     +---+     +---+
+  //         |                 | ^
+  //         | #1       #5     | |
+  //         v     +-----------+ |
+  //       +---+<--+    #4       |
+  //       | 2 | ----------------+
+  //       +---+
+  //       |   ^
+  //       +---+
+  //         c
+  test(
+    "product of 4-state, per-transition register automaton with loop has correct values"
+  ) {
+    def baseMaker() =
+      AutomatonBuilder[Int, Char]()
+        .addStates(0 to 16)
+        .setAccepting(3)
+        .setInitial(0)
+        .addTransition(0, 'a', 1)
+        .addTransition(0, '-', 2)
+        .addTransition(1, '-', 3)
+        .addTransition(1, 'b', 0)
+        .addTransition(2, '-', 3)
+        .addTransition(2, 'c', 2)
+        .addTransition(3, '-', 2)
 
-      p addTheory pt
+    val leftAut = baseMaker()
+      .addTransition(0, 'a', 3)
+      .addTransition(3, 'a', 0)
+      .addTransition(2, 'b', 13)
+      .addTransition(2, 'c', 4)
+      .getAutomaton()
 
-      implicit val order = p.order
-      import p._
+    val rightAut = baseMaker()
+      .addTransition(2, '-', 0)
+      .addTransition(0, '-', 0)
+      .addTransition(0, 'a', 16)
+      .addTransition(2, 'b', 16)
+      .addTransition(3, 'e', 16)
+      .addTransition(4, 'd', 16)
+      .setAccepting(0, 1, 2, 3)
+      .getAutomaton()
 
-      val oldImage = presburgerFormulation.parikhImage(
-        constants,
-        TestUtilities
-          .alphabetCounter(alphabet) _
-      )
+    TestUtilities.productsAreEqual(leftAut, rightAut)
 
-      val newImage = pt allowsMonoidValues constants
-
-      val reduced = PresburgerTools.elimQuantifiersWithPreds(
-        Conjunction.conj(oldImage, p.order)
-      )
-
-      p addConclusion (Conjunction.conj(newImage, order) ==>
-        Conjunction.conj(reduced, order))
-
-      val res = p.???
-      val simplifiedNew =
-        pp(simplify(asIFormula(Conjunction.conj(newImage, order))))
-      val simplifiedOld = pp(simplify(asIFormula(reduced)))
-
-      withClue(s"${simplifiedOld} != ${simplifiedNew}")(
-        assert(res == ProverStatus.Valid)
-      )
-    }
   }
 
 }
