@@ -20,7 +20,7 @@ class TransitionSplitter(
   )(predicateAtom: Atom): Seq[Plugin.Action] = trace("TransitionSplitter") {
     implicit val order = goal.order
 
-    val transitionTerms =
+    val (transitionTerms, _) =
       trace("transitionTerms")(
         goalTransitionTerms(goal, predicateAtom(0))
       )

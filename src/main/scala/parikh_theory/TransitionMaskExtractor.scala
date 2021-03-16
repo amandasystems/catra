@@ -13,22 +13,37 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
    * Take a TransitionMask predicate, and extract its indices.
    */
   private def transitionMaskToTuple(atom: Atom) = {
-    val instanceIdTerm :+ _ :+ tIdxTerm :+ tVal = atom.toSeq
+    val instanceIdTerm :+ productOffset :+ tIdxTerm :+ tVal = atom.toSeq
     // TODO in the future, we will need all indices!
-    (instanceIdTerm(0), tIdxTerm.constant.intValue, tVal)
+    (
+      instanceIdTerm(0),
+      productOffset.constant.intValue,
+      tIdxTerm.constant.intValue,
+      tVal
+    )
   }
 
+  /**
+   * Extract the transition terms out of a (proof) Goal, as long as it follows
+   * a given instance. Returns a tuple of the transitions for the given
+   * instance (ordered by transition index), and the maximum depth of product
+   * materialisation encountered.
+   *  TODO: should we just use a separate predicate to log materialisation depth?
+   */
   def goalTransitionTerms(
       goal: Goal,
       instance: LinearCombination
   ) =
     trace(s"TransitionMasks for ${instance} in ${goal}") {
-      goal.facts.predConj
+      val (productOffsets, transitionTerms) = goal.facts.predConj
         .positiveLitsWithPred(transitionMaskPredicate)
         .map(transitionMaskToTuple)
-        .filter { case (i, _, _) => i == instance }
-        .sortBy(_._2)
-        .map(_._3)
+        .filter(_._1 == instance)
+        .sortBy(_._3)
+        .unzip(x => (x._2, x._4))
+
+      (transitionTerms, productOffsets.max)
+
     }
 
   def transitionStatusFromTerm(
