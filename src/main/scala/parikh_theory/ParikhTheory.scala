@@ -34,6 +34,8 @@ trait ParikhTheory[A <: Automaton]
 
   val auts: IndexedSeq[A]
 
+  type Transition = (Any, Any, Any)
+
   /**
    * This method provides the "modulo" aspect by performing the translation
    * from a transition (usually really the transition's label) to a commutative
@@ -46,7 +48,7 @@ trait ParikhTheory[A <: Automaton]
    * NOTE: takes Any argument because Scala's type system isn't sophisticated
    * enough, or I am not sophisticated enough for it. 1-2 of those.
     **/
-  def toMonoid(a: (Any, Any, Any)): Seq[LinearCombination]
+  def toMonoid(a: Transition): Seq[LinearCombination]
 
   /**
    *  This value represents the dimensionality of the sequence returned by
@@ -56,7 +58,7 @@ trait ParikhTheory[A <: Automaton]
 
   // lazy because it depends on auts
   lazy private val monoidMapPredicate =
-    new Predicate(s"MonoidMap_${auts.hashCode}", monoidDimension + 1)
+    new Predicate(s"MonoidMap_${this.hashCode}", monoidDimension + 1)
 
   private val transitionMaskPredicate =
     new Predicate(s"TransitionMask_${this.hashCode}", 4)
@@ -80,10 +82,11 @@ trait ParikhTheory[A <: Automaton]
    * terms. Returns the formula and new offset.
    */
   private def automataClauses(
+      instanceTerm: LinearCombination,
       automataNr: Int,
-      varStartOffset: Int,
+      transitionAndTerms: IndexedSeq[(Transition, LinearCombination)],
       monoidValues: Seq[Term]
-  )(implicit order: TermOrder): (Int, Seq[Formula]) = {
+  )(implicit order: TermOrder): Seq[Formula] = {
     val aut = auts(automataNr)
     val autGraph = aut.toGraph
 
@@ -93,39 +96,26 @@ trait ParikhTheory[A <: Automaton]
     //     .parikhImage(monoidValues, toMonoid _)
     // }
 
-    val transitionTerms = autGraph.edges().indices.map(v).toIndexedSeq
-    val instanceTerm = l(v(transitionTerms.size))
-    val newVarOffset = varStartOffset + transitionTerms.size + 1
-
-    // need to prevent variable capture by the quantifiers added below
-    // TODO can we do this shifting all in one go to save time?
-    val shiftAwayFromQuantifiers =
-      VariableShiftSubst.upShifter[Term](newVarOffset, order)
-    val shiftedMonoidValues = (monoidValues map shiftAwayFromQuantifiers) map (l _)
-
     val transitionMaskInstances =
-      transitionTerms.zipWithIndex
+      transitionAndTerms.unzip._2.zipWithIndex
         .map {
-          case (t, i) =>
+          case (transitionTerm, transitionIdx) =>
             transitionMaskPredicate(
-              Seq(instanceTerm, l(automataNr), l(i), l(t))
+              Seq(instanceTerm, l(automataNr), l(transitionIdx), transitionTerm)
             )
         }
 
     // TODO evaluate whether this pays off!
     val predicateInstances =
       if (autGraph.simpleCycles().isEmpty) Seq()
-      else
-        monoidMapPredicate(instanceTerm +: shiftedMonoidValues) +: transitionMaskInstances
+      else transitionMaskInstances
 
-    (
-      newVarOffset,
-      AutomataFlow(aut).flowEquations(
-        transitionTerms.map(l _).toSeq,
-        monoidValues.map(l _).toSeq,
-        toMonoid _
-      ) +: predicateInstances
-    )
+    AutomataFlow(aut).flowEquations(
+      transitionAndTerms,
+      monoidValues.map(l _).toSeq,
+      toMonoid _
+    ) +: predicateInstances
+
   }
 
   /**
@@ -137,15 +127,42 @@ trait ParikhTheory[A <: Automaton]
   )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
     assert(monoidValues.length == this.monoidDimension)
 
-    val (nrNewTerms, clauses) =
-      (0 until auts.size).foldLeft((0, List[Formula]())) {
-        case ((currentOffset, currentClauses), autId) =>
-          val (newOffset, newClauses) =
-            automataClauses(autId, currentOffset, monoidValues)
-          (newOffset, currentClauses ++ newClauses)
-      }
+    trace(s"nr of automata: ${auts.size}")("")
 
-    val allEquations = exists(nrNewTerms, conj(clauses))
+    val varFactory = new FreshVariables(0)
+    val instanceTerm = varFactory.nextVariable()
+
+    val allTransitionTerms = this.auts.map { a =>
+      a.transitions.map(t => (t, varFactory.nextVariable())).toIndexedSeq
+    }.toIndexedSeq
+
+    // need to prevent variable capture by the quantifiers added below
+    val shiftAwayFromQuantifiers =
+      VariableShiftSubst.upShifter[Term](varFactory.variableCount(), order)
+    val shiftedMonoidValues
+        : Seq[LinearCombination] = (monoidValues map shiftAwayFromQuantifiers) map (l _)
+
+    val clauses = auts.zipWithIndex.flatMap {
+      case (aut, autId) =>
+        automataClauses(
+          instanceTerm,
+          autId,
+          allTransitionTerms(autId),
+          shiftedMonoidValues
+        )
+    }
+
+    trace(s"created ${varFactory.variableCount()} terms in")(clauses)
+
+    val thisMonoidMapInstance =
+      monoidMapPredicate(instanceTerm +: shiftedMonoidValues)
+
+    val allEquations = trace("allEquations before simplification") {
+      exists(
+        varFactory.variableCount(),
+        conj(thisMonoidMapInstance +: clauses)
+      )
+    }
 
     val simplifiedEquations =
       ReduceWithConjunction(Conjunction.TRUE, order)(allEquations)

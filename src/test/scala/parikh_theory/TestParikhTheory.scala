@@ -193,6 +193,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       withClue(s"${clause}")(assert(res == ProverStatus.Sat))
 
     }
+
   }
 
   test("parikh image for trivial automaton works") {
@@ -280,6 +281,63 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .getAutomaton()
 
     TestUtilities.productsAreEqual(leftAut, rightAut)
+
+  }
+
+  test("regression: path not in image appears") {
+    def baseMaker() =
+      AutomatonBuilder[Int, Char]()
+        .addStates(0 to 16)
+        .setAccepting(3)
+        .setInitial(0)
+        .addTransition(0, 'a', 1)
+        .addTransition(0, '-', 2)
+        .addTransition(1, '-', 3)
+        .addTransition(1, 'b', 0)
+        .addTransition(2, '-', 3)
+        .addTransition(2, 'c', 2)
+        .addTransition(3, '-', 2)
+
+    val leftAut = baseMaker()
+      .addTransition(0, 'a', 3)
+      .addTransition(3, 'a', 0)
+      .addTransition(2, 'b', 13)
+      .addTransition(2, 'c', 4)
+      .getAutomaton()
+
+    val rightAut = baseMaker()
+      .addTransition(2, '-', 0)
+      .addTransition(0, '-', 0)
+      .addTransition(0, 'a', 16)
+      .addTransition(2, 'b', 16)
+      .addTransition(3, 'e', 16)
+      .addTransition(4, 'd', 16)
+      .setAccepting(0, 1, 2, 3)
+      .getAutomaton()
+
+    val alphabet = "abcde-".toCharArray
+
+    val theory = ParikhTheory[Automaton](IndexedSeq(leftAut, rightAut))(
+      TestUtilities.alphabetCounter(alphabet) _,
+      alphabet.length
+    )
+
+    SimpleAPI.withProver { p =>
+      val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
+      val a +: b +: _ = constants
+
+      p addTheory theory
+
+      implicit val o = p.order
+
+      p addAssertion (theory allowsMonoidValues constants)
+      p addAssertion (a === 2)
+      p addAssertion (b === 0)
+
+      val res = p.???
+      withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Unsat))
+
+    }
 
   }
 

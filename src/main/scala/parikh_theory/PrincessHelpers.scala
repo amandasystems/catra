@@ -5,7 +5,7 @@ import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.{Plugin, TheoryProcedure}
 import ap.terfor.preds.Atom
 import ap.terfor.conjunctions.Conjunction
-import ap.terfor.Formula
+import ap.terfor.{TermOrder, Formula}
 import ap.theories._
 import scala.annotation.elidable
 import scala.annotation.elidable.FINE
@@ -65,4 +65,20 @@ trait PredicateHandlingProcedure extends TheoryProcedure {
       .positiveLitsWithPred(procedurePredicate)
       .take(1)
       .flatMap(handlePredicateInstance(goal))
+}
+
+/**
+ * A helper to generate fresh variables though interior mutability.
+  **/
+class FreshVariables(private var nextVarIndex: Integer)(
+    implicit order: TermOrder
+) extends Tracing {
+  import ap.terfor.TerForConvenience._
+  def nextVariable() = trace("Fresh variable") {
+    val thisVar = v(nextVarIndex)
+    nextVarIndex += 1
+    l(thisVar)
+  }
+
+  def variableCount() = nextVarIndex
 }

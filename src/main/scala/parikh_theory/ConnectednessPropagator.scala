@@ -5,6 +5,7 @@ import ap.proof.goal.Goal
 import ap.parser.IExpression.Predicate
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.TerForConvenience._
+import ap.terfor.Formula
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -25,7 +26,8 @@ class ConnectednessPropagator[A <: Automaton](
   import transitionExtractor.{
     goalTransitionTerms,
     transitionStatusFromTerm,
-    termMeansDefinitelyAbsent
+    termMeansDefinitelyAbsent,
+    goalAssociatedPredicateInstances
   }
 
   override val procedurePredicate = connectedPredicate
@@ -47,14 +49,30 @@ class ConnectednessPropagator[A <: Automaton](
       // FIXME this is highly inefficient repeat work and should be factored
       // out.
       val isSubsumed = trace("isSubsumed") {
-        !(transitionTerms exists (
+        transitionTerms.isEmpty || (!(transitionTerms exists (
             t => transitionStatusFromTerm(goal, t).isUnknown
-        )) && currentProductDepth == (auts.size + 1)
+        )) && currentProductDepth == (auts.size + 1))
       }
 
+      val transitionMasks = goalAssociatedPredicateInstances(
+        goal,
+        instanceTerm,
+        transitionPredicate
+      )
+
       if (isSubsumed) {
+        val associatedPredicates = transitionMasks ++ goalAssociatedPredicateInstances(
+          goal,
+          instanceTerm,
+          theoryInstance.predicates(0)
+        )
+
+        // FIXME the extraction of the predicates is REALLY ugly!
+
         return trace("Subsumed, schedule actions")(
-          Seq(Plugin.RemoveFacts(predicateAtom))
+          associatedPredicates.map(Plugin.RemoveFacts(_)) :+ Plugin.RemoveFacts(
+            predicateAtom
+          )
         )
       } else {
         return propagateOrSplitConnectedness(
@@ -72,6 +90,13 @@ class ConnectednessPropagator[A <: Automaton](
       currentProductDepth: Int,
       predicateAtom: Atom
   ) = trace("propagateOrSplitConnectedness") {
+
+    val instanceTerm = predicateAtom(0)
+    val transitionMasks: Seq[Formula] = goalAssociatedPredicateInstances(
+      goal,
+      instanceTerm,
+      transitionPredicate
+    )
 
     // first compute current product
     // after that, check if *that* is connected
@@ -108,6 +133,8 @@ class ConnectednessPropagator[A <: Automaton](
     // TODO experiment with branching order and start close to initial
     // states.
 
+    // TODO compute a cut to find which dead transitions contribute to the conflict!
+
     // constrain any terms associated with a transition from a
     // *known* unreachable state to be = 0 ("not used").
     val unreachableActions = trace("unreachableActions") {
@@ -133,7 +160,7 @@ class ConnectednessPropagator[A <: Automaton](
       else
         Seq(
           Plugin.AddAxiom(
-            Seq(predicateAtom),
+            transitionMasks :+ predicateAtom, // FIXME add deadTransitions transitionMask:s
             unreachableConstraints,
             theoryInstance
           )

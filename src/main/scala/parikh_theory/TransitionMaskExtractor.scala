@@ -23,6 +23,17 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
     )
   }
 
+  // NOTE this is based on the fact that the first term is always the instance
+  // in all predicates. There's no typesafe way to express this.
+  def goalAssociatedPredicateInstances(
+      goal: Goal,
+      instance: LinearCombination,
+      predicate: Predicate
+  ) =
+    goal.facts.predConj
+      .positiveLitsWithPred(predicate)
+      .filter(_(0) == instance)
+
   /**
    * Extract the transition terms out of a (proof) Goal, as long as it follows
    * a given instance. Returns a tuple of the transitions for the given
@@ -35,14 +46,20 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
       instance: LinearCombination
   ) =
     trace(s"TransitionMasks for ${instance} in ${goal}") {
-      val (productOffsets, transitionTerms) = goal.facts.predConj
-        .positiveLitsWithPred(transitionMaskPredicate)
-        .map(transitionMaskToTuple)
-        .filter(_._1 == instance)
-        .sortBy(_._3)
-        .unzip(x => (x._2, x._4))
+      val (productOffsets, transitionTerms) =
+        goalAssociatedPredicateInstances(
+          goal,
+          instance,
+          transitionMaskPredicate
+        ).map(transitionMaskToTuple)
+          .sortBy(_._3)
+          .unzip(x => (x._2, x._4))
 
-      (transitionTerms, productOffsets.max)
+      // NOTE we need this check in some instances, notably when the automaton
+      // was cycle-free and thus needed no transition terms. In future versions,
+      // this should lead to the connectedness propagator not being loaded at
+      // all, and then the check for isEmpty should not be needed.
+      (transitionTerms, if (productOffsets.isEmpty) 0 else productOffsets.max)
 
     }
 

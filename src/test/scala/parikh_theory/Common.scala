@@ -143,7 +143,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
         pp(simplify(asIFormula(Conjunction.conj(newImage, order))))
       val simplifiedOld = pp(simplify(asIFormula(reduced)))
 
-      withClue(s"${simplifiedOld} != ${simplifiedNew}")(
+      withClue(s"${simplifiedOld} != ${simplifiedNew} in ${p.partialModel}")(
         assert(res == ProverStatus.Valid)
       )
     }

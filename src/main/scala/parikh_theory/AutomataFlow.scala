@@ -94,21 +94,26 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
   }
 
   // TODO implement an IFormula version of this as well
+  // FIXME the type casts here are really ugly
   def flowEquations(
-      transitionVars: Seq[LinearCombination],
+      transitionAndVar: IndexedSeq[((Any, Any, Any), LinearCombination)],
       monoidVars: Seq[LinearCombination],
       toMonoid: Transition => Seq[LinearCombination]
   ): Conjunction = {
-    val transitionAndVar = trace("transitionAndVar")(
-      aut.transitions.zip(transitionVars.iterator).toSeq
-    )
-
     trace("flowEquations")(
       conj(
-        allNonnegative(transitionVars),
+        allNonnegative(transitionAndVar.unzip._2),
         allNonnegative(monoidVars),
-        asManyIncomingAsOutgoing(transitionAndVar),
-        monoidValuesReachable(monoidVars, transitionAndVar, toMonoid)
+        asManyIncomingAsOutgoing(
+          transitionAndVar
+            .asInstanceOf[IndexedSeq[(Transition, LinearCombination)]]
+        ),
+        monoidValuesReachable(
+          monoidVars,
+          transitionAndVar
+            .asInstanceOf[IndexedSeq[(Transition, LinearCombination)]],
+          toMonoid
+        )
       )
     )
   }
