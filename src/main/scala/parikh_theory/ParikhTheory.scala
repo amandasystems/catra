@@ -56,26 +56,23 @@ trait ParikhTheory[A <: Automaton]
     **/
   val monoidDimension: Int
 
-  // lazy because it depends on auts
-  lazy private val monoidMapPredicate =
+  // Lazy because early init would set the monoidDimension to 0
+  // MonoidMap(s, m1, ..., mn): Instance s maps to monoid values m1...mn
+  lazy val monoidMapPredicate =
     new Predicate(s"MonoidMap_${this.hashCode}", monoidDimension + 1)
 
-  private val transitionMaskPredicate =
+  // TransitionMask(s, a, t, x): Automaton a of instance s maps transition t to term x
+  val transitionMaskPredicate =
     new Predicate(s"TransitionMask_${this.hashCode}", 4)
 
-  override lazy val predicates =
-    Seq(monoidMapPredicate, transitionMaskPredicate)
+  // Connected(s, n): Automaton n of instance s is connected
+  val connectedPredicate =
+    new Predicate(s"Connected_${this.hashCode}", 2)
 
-  def plugin: Option[Plugin] =
-    Some(
-      new ConnectednessPropagator(
-        auts,
-        monoidMapPredicate,
-        transitionMaskPredicate,
-        new TransitionMaskExtractor(transitionMaskPredicate),
-        this
-      )
-    )
+  override lazy val predicates =
+    Seq(monoidMapPredicate, transitionMaskPredicate, connectedPredicate)
+
+  def plugin: Option[Plugin] = Some(new MonoidMapPlugin(this))
 
   /**
    * Generate the clauses for the i:th automaton. Introduces a number of new
@@ -87,15 +84,6 @@ trait ParikhTheory[A <: Automaton]
       transitionAndTerms: IndexedSeq[(Transition, LinearCombination)],
       monoidValues: Seq[Term]
   )(implicit order: TermOrder): Seq[Formula] = {
-    val aut = auts(automataNr)
-    val autGraph = aut.toGraph
-
-    // FIXME adjust the threshold!
-    // if (aut.states.size <= 10 || aut.transitions.size <= 10) {
-    //   return (new PresburgerParikhImage(aut))
-    //     .parikhImage(monoidValues, toMonoid _)
-    // }
-
     val transitionMaskInstances =
       transitionAndTerms.unzip._2.zipWithIndex
         .map {
@@ -105,36 +93,43 @@ trait ParikhTheory[A <: Automaton]
             )
         }
 
-    // TODO evaluate whether this pays off!
-    val predicateInstances =
-      if (autGraph.simpleCycles().isEmpty) Seq()
-      else transitionMaskInstances
-
-    AutomataFlow(aut).flowEquations(
+    val isConnected = connectedPredicate(Seq(instanceTerm, l(automataNr)))
+    val preservesFlow = AutomataFlow(auts(automataNr)).flowEquations(
       transitionAndTerms,
       monoidValues.map(l _).toSeq,
       toMonoid _
-    ) +: predicateInstances
+    )
+
+    isConnected +: preservesFlow +: transitionMaskInstances
 
   }
 
   /**
    * Generate a quantified formula that is satisfiable iff the provided
    * monoid values are possible by any legal path through the automaton.
+   *  This will materialise:
+   *  - the MonoidMap predicate for this instance
+   *  - all TransitionMask predicates for the first automaton
+   *  - the flow equations for the first automaton.
    */
   def allowsMonoidValues(
       monoidValues: Seq[Term]
   )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
-    assert(monoidValues.length == this.monoidDimension)
+    assert(
+      monoidValues.length == this.monoidDimension,
+      s"got ${monoidValues.length} monoid values, monoid dimension is ${monoidDimension}"
+    )
 
     trace(s"nr of automata: ${auts.size}")("")
 
+    // TODO refactor this into a builder pattern for the exists clause?
     val varFactory = new FreshVariables(0)
     val instanceTerm = varFactory.nextVariable()
 
-    val allTransitionTerms = this.auts.map { a =>
-      a.transitions.map(t => (t, varFactory.nextVariable())).toIndexedSeq
-    }.toIndexedSeq
+    val transitionTerms =
+      auts
+        .flatMap(_.transitions.map(t => (t, varFactory.nextVariable())))
+        .toIndexedSeq
 
     // need to prevent variable capture by the quantifiers added below
     val shiftAwayFromQuantifiers =
@@ -142,15 +137,11 @@ trait ParikhTheory[A <: Automaton]
     val shiftedMonoidValues
         : Seq[LinearCombination] = (monoidValues map shiftAwayFromQuantifiers) map (l _)
 
-    val clauses = auts.zipWithIndex.flatMap {
-      case (aut, autId) =>
-        automataClauses(
-          instanceTerm,
-          autId,
-          allTransitionTerms(autId),
-          shiftedMonoidValues
-        )
-    }
+    val clauses =
+      auts.zipWithIndex.flatMap {
+        case (a, i) =>
+          automataClauses(instanceTerm, i, transitionTerms, shiftedMonoidValues)
+      }
 
     trace(s"created ${varFactory.variableCount()} terms in")(clauses)
 

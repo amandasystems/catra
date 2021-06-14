@@ -79,7 +79,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   //       +---+
   //         c
   test(
-    "4-state, per-transition register automaton with loop has correct values"
+    "4-state, per-transition register automaton with loop without product has correct values"
   ) {
     val aut = AutomatonBuilder[Int, Char]()
       .addStates(0 to 3)

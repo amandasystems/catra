@@ -9,10 +9,18 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
     extends Tracing {
   import TransitionSelected.{Present, Absent, Unknown}
 
+  // FIXME make this a nice wrapper class instead
+  def instanceTerm(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._1
+  def automataNr(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._2
+  def transitionNr(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._3
+  def transitionTerm(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._4
+
+  def connectedAutId(connected: Atom) = connected(1).constant.intValue
+
   /**
    * Take a TransitionMask predicate, and extract its indices.
    */
-  private def transitionMaskToTuple(atom: Atom) = {
+  def transitionMaskToTuple(atom: Atom) = {
     val instanceIdTerm :+ productOffset :+ tIdxTerm :+ tVal = atom.toSeq
     // TODO in the future, we will need all indices!
     (
@@ -45,7 +53,7 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
       goal: Goal,
       instance: LinearCombination
   ) =
-    trace(s"TransitionMasks for ${instance} in ${goal}") {
+    trace(s"TransitionMasks for ${instance} in goal age ${goal.age}") {
       val (productOffsets, transitionTerms) =
         goalAssociatedPredicateInstances(
           goal,
@@ -66,7 +74,7 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
   def transitionStatusFromTerm(
       goal: Goal,
       term: LinearCombination
-  ): TransitionSelected = trace(s"selection status for ${term} is ") {
+  ): TransitionSelected = {
     lazy val lowerBound = goal.reduceWithFacts.lowerBound(term)
     lazy val upperBound = goal.reduceWithFacts.upperBound(term)
 
@@ -78,10 +86,21 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
   def termMeansDefinitelyAbsent(
       goal: Goal,
       term: LinearCombination
-  ): Boolean = trace(s"termMeansDefinitelyAbsent(${term})") {
+  ): Boolean = {
     term match {
       case LinearCombination.Constant(x) => x <= 0
       case _                             => goal.reduceWithFacts.upperBound(term).exists(_ <= 0)
+    }
+
+  }
+
+  def termMeansPossiblyAbsent(
+      goal: Goal,
+      term: LinearCombination
+  ): Boolean = {
+    term match {
+      case LinearCombination.Constant(x) => x <= 0
+      case _                             => !goal.reduceWithFacts.lowerBound(term).exists(_ > 0)
     }
 
   }

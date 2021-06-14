@@ -7,13 +7,13 @@ import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.TerForConvenience._
 
 class TransitionSplitter(
-    private val transitionPredicate: Predicate,
     private val transitionExtractor: TransitionMaskExtractor,
     private val theoryInstance: ParikhTheory[_]
 ) extends PredicateHandlingProcedure
     with Tracing {
   import transitionExtractor.{goalTransitionTerms, transitionStatusFromTerm}
 
+  private val transitionPredicate = theoryInstance.transitionMaskPredicate
   override val procedurePredicate = transitionPredicate
   override def handlePredicateInstance(
       goal: Goal

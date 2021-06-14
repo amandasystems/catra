@@ -24,9 +24,16 @@ trait NoAxioms {
   val totalityAxioms: ap.terfor.Formula = Conjunction.TRUE
 }
 
+// TODO convert this to a hierarchical logger writing to some file somewhere
 trait Tracing {
+
+  private val dynTraceEnable = sys.env
+    .getOrElse("OSTRICH_TRACE", "FALSE")
+    .toUpperCase() == "TRUE"
+
   @elidable(FINE)
-  protected def logInfo(message: String) = System.err.println(message)
+  protected def logInfo(message: String) =
+    if (dynTraceEnable) System.err.println(message)
 
   protected def trace[T](message: String)(something: T): T = {
     logInfo(s"trace::${message}(${something})")
@@ -74,7 +81,7 @@ class FreshVariables(private var nextVarIndex: Integer)(
     implicit order: TermOrder
 ) extends Tracing {
   import ap.terfor.TerForConvenience._
-  def nextVariable() = trace("Fresh variable") {
+  def nextVariable() = {
     val thisVar = v(nextVarIndex)
     nextVarIndex += 1
     l(thisVar)
