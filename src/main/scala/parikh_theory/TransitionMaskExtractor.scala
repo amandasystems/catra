@@ -10,10 +10,15 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
   import TransitionSelected.{Present, Absent, Unknown}
 
   // FIXME make this a nice wrapper class instead
-  def instanceTerm(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._1
-  def automataNr(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._2
-  def transitionNr(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._3
-  def transitionTerm(transitionMask: Atom) = transitionMaskToTuple(transitionMask)._4
+  def instanceTerm(transitionMask: Atom) =
+    transitionMaskToTuple(transitionMask)._1
+  // TODO merge this with connectedAutId and make it polymorphic in type
+  def automataNr(transitionMask: Atom) =
+    transitionMaskToTuple(transitionMask)._2
+  def transitionNr(transitionMask: Atom) =
+    transitionMaskToTuple(transitionMask)._3
+  def transitionTerm(transitionMask: Atom) =
+    transitionMaskToTuple(transitionMask)._4
 
   def connectedAutId(connected: Atom) = connected(1).constant.intValue
 

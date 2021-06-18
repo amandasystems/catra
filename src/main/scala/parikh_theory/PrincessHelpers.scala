@@ -9,6 +9,7 @@ import ap.terfor.{TermOrder, Formula}
 import ap.theories._
 import scala.annotation.elidable
 import scala.annotation.elidable.FINE
+import collection.mutable.HashMap
 
 trait NoFunctions {
   val functionPredicateMapping
@@ -22,6 +23,21 @@ trait NoFunctions {
 trait NoAxioms {
   val axioms: Formula = Conjunction.TRUE
   val totalityAxioms: ap.terfor.Formula = Conjunction.TRUE
+}
+
+class Statistics() {
+
+  private val dynTraceEnable = sys.env
+    .getOrElse("OSTRICH_STATS", "FALSE")
+    .toUpperCase() == "TRUE"
+
+  private val counter = HashMap[String, Int]()
+
+  @elidable(FINE)
+  def increment(key: String) = counter(key) = counter.getOrElse(key, 0) + 1
+
+  @elidable(FINE)
+  def report() = System.err.println("stats" + counter) // FIXME
 }
 
 // TODO convert this to a hierarchical logger writing to some file somewhere
@@ -88,4 +104,10 @@ class FreshVariables(private var nextVarIndex: Integer)(
   }
 
   def variableCount() = nextVarIndex
+
+  def exists(conjunction: Conjunction) = ap.terfor.TerForConvenience.exists(
+    variableCount(),
+    conjunction
+  )
+
 }

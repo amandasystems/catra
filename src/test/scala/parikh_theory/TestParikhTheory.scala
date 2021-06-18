@@ -341,4 +341,40 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
   }
 
+  test("minimal product broken") {
+    def baseMaker() =
+      AutomatonBuilder[Int, Char]()
+        .addStates(0 to 1)
+        .setAccepting(1)
+        .setInitial(0)
+        .addTransition(0, 'a', 1)
+
+    val leftAut = baseMaker().getAutomaton()
+    val rightAut = baseMaker().getAutomaton()
+
+    val alphabet = "a".toCharArray
+
+    val theory = ParikhTheory[Automaton](IndexedSeq(leftAut, rightAut))(
+      TestUtilities.alphabetCounter(alphabet) _,
+      alphabet.length
+    )
+
+    SimpleAPI.withProver { p =>
+      val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
+      val a = constants(0)
+
+      p addTheory theory
+
+      implicit val o = p.order
+
+      p addAssertion (theory allowsMonoidValues constants)
+      p addAssertion (a =/= 1)
+
+      val res = p.???
+      withClue(s": ${p}")(assert(res == ProverStatus.Unsat))
+
+    }
+
+  }
+
 }

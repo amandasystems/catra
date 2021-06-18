@@ -69,10 +69,10 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
    *  TODO: How do we express that this multiplication happens on the
    *  monoid's multiplication?
    */
-  private def monoidValuesReachable(
+  def monoidValuesReachable(
       monoidVars: Seq[LinearCombination],
-      transitionAndVar: Seq[(Transition, LinearCombination)],
-      toMonoid: Transition => Seq[LinearCombination]
+      transitionAndVar: IndexedSeq[((Any, Any, Any), LinearCombination)],
+      toMonoid: ((Any, Any, Any)) => Seq[LinearCombination]
   ): Formula = {
     trace("Monoid equations") {
       // This is just a starting vector of the same dimension as the monoid
@@ -80,15 +80,18 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
       val startVectorSum: Seq[LinearCombination] =
         Seq.fill(monoidVars.length)(LinearCombination(IdealInt.ZERO))
       conj(
-        transitionAndVar
-          .foldLeft(startVectorSum) {
-            case (sums, (t, tVar)) =>
-              toMonoid(t)
-                .zip(sums)
-                .map { case (monoidVal, sum) => sum + tVar * monoidVal }
-          }
-          .zip(monoidVars)
-          .map { case (rVar, termSum) => rVar === termSum }
+        conj(
+          transitionAndVar
+            .foldLeft(startVectorSum) {
+              case (sums, (t, tVar)) =>
+                toMonoid(t)
+                  .zip(sums)
+                  .map { case (monoidVal, sum) => sum + tVar * monoidVal }
+            }
+            .zip(monoidVars)
+            .map { case (rVar, termSum) => rVar === termSum }
+        ),
+        allNonnegative(monoidVars)
       )
     }
   }
@@ -96,23 +99,14 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
   // TODO implement an IFormula version of this as well
   // FIXME the type casts here are really ugly
   def flowEquations(
-      transitionAndVar: IndexedSeq[((Any, Any, Any), LinearCombination)],
-      monoidVars: Seq[LinearCombination],
-      toMonoid: Transition => Seq[LinearCombination]
+      transitionAndVar: IndexedSeq[((Any, Any, Any), LinearCombination)]
   ): Conjunction = {
     trace("flowEquations")(
       conj(
         allNonnegative(transitionAndVar.unzip._2),
-        allNonnegative(monoidVars),
         asManyIncomingAsOutgoing(
           transitionAndVar
             .asInstanceOf[IndexedSeq[(Transition, LinearCombination)]]
-        ),
-        monoidValuesReachable(
-          monoidVars,
-          transitionAndVar
-            .asInstanceOf[IndexedSeq[(Transition, LinearCombination)]],
-          toMonoid
         )
       )
     )

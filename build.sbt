@@ -11,7 +11,7 @@ ThisBuild / scalacOptions ++= Seq(
     // "-Xfatal-warnings",
     "-unchecked",
     "-Xlint",
-    "-Xelide-below", "INFO",
+    "-Xelide-below", "0",
     "-feature",
     "-Ywarn-dead-code",
     "-Ywarn-unused"

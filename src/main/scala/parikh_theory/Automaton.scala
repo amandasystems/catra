@@ -1,6 +1,6 @@
 package uuverifiers.parikh_theory
 
-import collection.mutable.HashMap
+import collection.mutable.{HashMap, ArrayBuffer}
 
 /**
  An automaton as far as the Parikh Theory is concerned.
@@ -36,6 +36,48 @@ trait Automaton extends Tracing {
   def isAccept(s: State): Boolean
 
   /// Derived methods ///
+
+  /**
+   *  True if the automaton accepts no string, false otherwise.
+   */
+  def isEmpty(): Boolean = {
+
+    val acceptingStates = states.filter(isAccept).toSet
+
+    acceptingStates.isEmpty || {
+      val g = toGraph
+      val unreachableStates = g.unreachableFrom(initialState).toSet
+      (acceptingStates diff unreachableStates).isEmpty
+    }
+  }
+
+  /**
+   * Filter an automaton, producing a new automaton with a subset of its
+   * previous edges, as defined by a predicate.
+   */
+  def filterTransitions(
+      keepEdge: Transition => Boolean
+  ): Automaton = {
+    val filteredBuilder = AutomatonBuilder[State, Label]()
+
+    this.transitions.filter(keepEdge).foreach {
+      case (from, label, to) =>
+        val involvedStates = Seq(from, to)
+        filteredBuilder
+          .addStates(involvedStates)
+          .addTransition(from, label, to)
+
+        val acceptingStates = involvedStates.filter(isAccept).toSeq
+        filteredBuilder.addStates(acceptingStates)
+        acceptingStates.foreach(filteredBuilder setAccepting _)
+    }
+
+    if (filteredBuilder contains initialState)
+      filteredBuilder.setInitial(initialState).getAutomaton()
+    else REJECT_ALL
+  }
+
+  // TODO write a transitionsBreadthFirst, use for branching
 
   /**
    * Iterate over all transitions
@@ -103,68 +145,110 @@ trait Automaton extends Tracing {
    * Compute the product of two automata, somewhat smallish.
    */
   def &&&[A <: Automaton](that: A): Automaton =
-    trace(s"${this} &&& ${that} gives") {
-      val productBuilder = AutomatonBuilder[ProductState[State], Label]()
+    trace(s"${this} &&& ${that} gives") { this.productWithSources(that)._1 }
 
-      val visitedStates = HashMap[(State, that.State), ProductState[State]]()
-      var statesToVisit = List[(this.State, that.State)]()
+  /**
+   * Compute the product of two automata, returning a mapping from the product's
+    transitions to the term's.
+    **/
+  def productWithSources[A <: Automaton](
+      that: A
+  ): (
+      Automaton,
+      Map[
+        (Any, Any, Any),
+        Seq[(ProductState[State], Label, ProductState[State])]
+      ]
+  ) = {
 
-      def newStateDiscovered(left: this.State, right: that.State) =
-        trace("newStateDiscovered") {
-          val productState
-              : ProductState[State] = stateToProductState(left) union stateToProductState(
-            right
-          )
-          visitedStates += ((left, right) -> productState)
-          statesToVisit = (left, right) +: statesToVisit
-          productBuilder.addStates(Seq(productState))
+    val termToProductEdges =
+      HashMap[
+        (Any, Label, Any),
+        ArrayBuffer[(ProductState[State], Label, ProductState[State])]
+      ]()
 
-          if ((this isAccept left) && (that isAccept right)) {
-            productBuilder setAccepting productState
-          }
+    val productBuilder = AutomatonBuilder[ProductState[State], Label]()
+    val visitedStates = HashMap[(State, that.State), ProductState[State]]()
+    var statesToVisit = List[(this.State, that.State)]()
 
-          productState
-        }
-
-      val initial = trace("product initial state")(
-        newStateDiscovered(this.initialState, that.initialState)
-      )
-      productBuilder.setInitial(initial)
-
-      while (!statesToVisit.isEmpty) {
-        val (nextTarget +: rest) = statesToVisit
-        statesToVisit = rest
-
-        val (thisSourceState, thatSourceState) = nextTarget
-        val fromProductState = visitedStates((thisSourceState, thatSourceState))
-        val overlappingTransitions = transitionsWithOverlappingLabels(
-          this outgoingTransitions thisSourceState,
-          that outgoingTransitions thatSourceState
+    def newStateDiscovered(left: this.State, right: that.State) =
+      trace("newStateDiscovered") {
+        val productState
+            : ProductState[State] = stateToProductState(left) union stateToProductState(
+          right
         )
+        visitedStates += ((left, right) -> productState)
+        statesToVisit = (left, right) +: statesToVisit
+        productBuilder.addStates(Seq(productState))
 
-        overlappingTransitions.foreach {
-          case (label, leftTo, rightTo) =>
-            val toProductState =
-              if (!(visitedStates contains ((leftTo, rightTo))))
-                newStateDiscovered(leftTo, rightTo)
-              else visitedStates((leftTo, rightTo))
-            productBuilder.addTransition(
-              fromProductState,
-              label,
-              toProductState
-            )
+        if ((this isAccept left) && (that isAccept right)) {
+          productBuilder setAccepting trace("product accepting")(productState)
         }
+
+        productState
       }
 
-      productBuilder.getAutomaton
+    val initial = trace("product initial state")(
+      newStateDiscovered(this.initialState, that.initialState)
+    )
+    productBuilder.setInitial(initial)
+
+    while (!statesToVisit.isEmpty) {
+      val (nextTarget +: rest) = statesToVisit
+      statesToVisit = rest
+
+      val (thisSourceState, thatSourceState) = nextTarget
+      val fromProductState = visitedStates((thisSourceState, thatSourceState))
+      val overlappingTransitions = trace(
+        s"overlappingTransitions from ${thisSourceState}/${thatSourceState}"
+      )(
+        transitionsWithOverlappingLabels(
+          this outgoingTransitions thisSourceState,
+          that outgoingTransitions thatSourceState
+        ).toSeq
+      )
+      overlappingTransitions.foreach {
+        case (label, leftTo, rightTo) =>
+          val toProductState =
+            if (!(visitedStates contains ((leftTo, rightTo))))
+              newStateDiscovered(leftTo, rightTo)
+            else visitedStates((leftTo, rightTo))
+
+          productBuilder.addTransition(fromProductState, label, toProductState)
+
+          val productTransition = trace("productTransition")(
+            (fromProductState, label, toProductState)
+          )
+
+          termToProductEdges.getOrElseUpdate(
+            (thisSourceState, label, leftTo),
+            ArrayBuffer()
+          ) += productTransition
+
+          termToProductEdges.getOrElseUpdate(
+            (thatSourceState, label, rightTo),
+            ArrayBuffer()
+          ) += productTransition
+
+          trace("termtoProductEdges")(termToProductEdges)
+      }
     }
+
+    (productBuilder.getAutomaton(), termToProductEdges.mapValues(_.toSeq).toMap)
+  }
 }
 
-class AutomatonBuilder[S, L] {
+// TODO keep track of reachable states and make sure we return REJECT_ALL if unreachable.
+// TODO build minimally
+class AutomatonBuilder[S, L] extends Tracing {
   private var _autStates = Set[S]()
   private var _transitions = Set[(S, L, S)]()
   private var _initial: Option[S] = None
   private var _accepting = Set[S]()
+
+  def contains(s: S) = _autStates contains s
+
+  def contains(t: (S, L, S)) = _transitions contains t
 
   def addStates(statesToAdd: Seq[S]): AutomatonBuilder[S, L] = {
     _autStates ++= statesToAdd
@@ -192,7 +276,8 @@ class AutomatonBuilder[S, L] {
   def getAutomaton(): Automaton = {
     assert(_initial != None)
 
-    if (_accepting.isEmpty) return REJECT_ALL
+    if (_accepting.isEmpty)
+      return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
 
     object Aut extends Automaton {
       type State = S

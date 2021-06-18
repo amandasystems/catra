@@ -74,15 +74,16 @@ trait ParikhTheory[A <: Automaton]
 
   def plugin: Option[Plugin] = Some(new MonoidMapPlugin(this))
 
+  // FIXME separate out the mapping to the monoid values
   /**
    * Generate the clauses for the i:th automaton. Introduces a number of new
    * terms. Returns the formula and new offset.
    */
-  private def automataClauses(
+  def automataClauses(
+      automaton: A,
       instanceTerm: LinearCombination,
       automataNr: Int,
-      transitionAndTerms: IndexedSeq[(Transition, LinearCombination)],
-      monoidValues: Seq[Term]
+      transitionAndTerms: IndexedSeq[(Transition, LinearCombination)]
   )(implicit order: TermOrder): Seq[Formula] = {
     val transitionMaskInstances =
       transitionAndTerms.unzip._2.zipWithIndex
@@ -94,11 +95,8 @@ trait ParikhTheory[A <: Automaton]
         }
 
     val isConnected = connectedPredicate(Seq(instanceTerm, l(automataNr)))
-    val preservesFlow = AutomataFlow(auts(automataNr)).flowEquations(
-      transitionAndTerms,
-      monoidValues.map(l _).toSeq,
-      toMonoid _
-    )
+    val preservesFlow =
+      AutomataFlow(automaton).flowEquations(transitionAndTerms)
 
     isConnected +: preservesFlow +: transitionMaskInstances
 
@@ -126,7 +124,7 @@ trait ParikhTheory[A <: Automaton]
     val varFactory = new FreshVariables(0)
     val instanceTerm = varFactory.nextVariable()
 
-    val transitionTerms =
+    val transitionTerms: IndexedSeq[(Transition, LinearCombination)] =
       auts
         .flatMap(_.transitions.map(t => (t, varFactory.nextVariable())))
         .toIndexedSeq
@@ -140,7 +138,16 @@ trait ParikhTheory[A <: Automaton]
     val clauses =
       auts.zipWithIndex.flatMap {
         case (a, i) =>
-          automataClauses(instanceTerm, i, transitionTerms, shiftedMonoidValues)
+          automataClauses(
+            a,
+            instanceTerm,
+            i,
+            transitionTerms
+          ) :+ AutomataFlow(a).monoidValuesReachable(
+            shiftedMonoidValues,
+            transitionTerms,
+            toMonoid
+          )
       }
 
     trace(s"created ${varFactory.variableCount()} terms in")(clauses)
@@ -149,10 +156,7 @@ trait ParikhTheory[A <: Automaton]
       monoidMapPredicate(instanceTerm +: shiftedMonoidValues)
 
     val allEquations = trace("allEquations before simplification") {
-      exists(
-        varFactory.variableCount(),
-        conj(thisMonoidMapInstance +: clauses)
-      )
+      varFactory.exists(conj(thisMonoidMapInstance +: clauses))
     }
 
     val simplifiedEquations =

@@ -142,8 +142,10 @@ object TestUtilities extends AnyFunSuite with Tracing {
       val simplifiedNew =
         pp(simplify(asIFormula(Conjunction.conj(newImage, order))))
       val simplifiedOld = pp(simplify(asIFormula(reduced)))
+      val model =
+        if (res == ProverStatus.Invalid) p.partialModel.toString() else ""
 
-      withClue(s"${simplifiedOld} != ${simplifiedNew} in ${p.partialModel}")(
+      withClue(s"${simplifiedOld} != ${simplifiedNew} in ${model}")(
         assert(res == ProverStatus.Valid)
       )
     }
