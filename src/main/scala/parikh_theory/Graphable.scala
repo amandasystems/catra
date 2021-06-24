@@ -114,11 +114,12 @@ trait Graphable[Node, Label] {
     val reachableInResidual: Set[Node] =
       residual.allNodes().filter(visitor.nodeVisited(_)).toSet
 
-    this.edges
+    this
+      .edges()
       .filter(
         e =>
-          (reachableInResidual contains e.from) &&
-            !(reachableInResidual contains e.to)
+          (reachableInResidual contains e.from()) &&
+            !(reachableInResidual contains e.to())
       )
       .toSet
   }
@@ -142,7 +143,7 @@ trait Graphable[Node, Label] {
 
     def unvisited(node: Node) = !(depthIndex contains node)
 
-    for (node <- allNodes if unvisited(node)) {
+    for (node <- allNodes() if unvisited(node)) {
       strongConnect(node)
     }
 
@@ -169,21 +170,18 @@ trait Graphable[Node, Label] {
       // Generate a SCC!
       if (lowLink(node) == depthIndex(node)) {
         // pop everything from the stack, set onStack to inCurrentComponent to false
-        val component = new ArrayBuffer[Node]
 
-        breakable {
-          while (!currentComponent.isEmpty) {
-            val (w +: rest) = currentComponent
-            currentComponent = rest
-            inCurrentComponent(w) = false
-            component += w
-
-            if (w == node) {
-              break
-            }
+        val (component, afterComponent) =
+          currentComponent.span(node != _) match {
+            case (wholeComponent, List()) => (wholeComponent, List())
+            case (beforeNode, thisNode +: afterNode) =>
+              (beforeNode :+ thisNode, afterNode)
+            case (_, _) =>
+              (List(), List()) // This is to shut Scala up, rule 1 applies here too.
           }
-        }
 
+        currentComponent = afterComponent
+        component.foreach(inCurrentComponent(_) = false)
         components += component.toSet
       }
 
@@ -221,7 +219,7 @@ trait Graphable[Node, Label] {
         cycles += Set(from)
     }
 
-    var sccs: List[Set[Node]] = stronglyConnectedComponents.toList
+    var sccs: List[Set[Node]] = stronglyConnectedComponents().toList
 
     while (!sccs.isEmpty) {
       val (component +: rest) = sccs
@@ -284,7 +282,8 @@ trait Graphable[Node, Label] {
 
       }
 
-      for (component <- (componentGraph subgraph component.tail).stronglyConnectedComponents
+      for (component <- (componentGraph subgraph component.tail)
+             .stronglyConnectedComponents()
            if component.size > 1) {
 
         sccs = component +: sccs
@@ -305,10 +304,14 @@ trait Graphable[Node, Label] {
 class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
     extends Graphable[N, L] {
 
-  def this(edges: Traversable[(N, L, N)]) = {
+  def this(edges: Iterable[(N, L, N)]) = {
     this(
       edges.map((_._3 -> List())).toMap ++
-        edges.groupBy(_._1).mapValues(_.map(v => (v._3, v._2)).toList).toMap
+        edges
+          .groupBy(_._1)
+          .view
+          .mapValues(_.map(v => (v._3, v._2)).toList)
+          .toMap
     )
   }
 
@@ -322,7 +325,7 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
       .toSeq
   def subgraph(selectedNodes: Set[N]) =
     new MapGraph[N, L](
-      underlying
+      underlying.view
         .filterKeys(selectedNodes contains _)
         .mapValues(nexts => nexts.filter(selectedNodes contains _._1))
         .toMap
@@ -350,7 +353,7 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
 
 object MapGraph {
   implicit def mapToLabellessGraph[N](m: Map[N, List[N]]): MapGraph[N, Unit] =
-    new MapGraph(m.mapValues(_.map(v => (v, ()))).toMap)
+    new MapGraph(m.view.mapValues(_.map(v => (v, ()))).toMap)
   implicit def mapToGraph[N, L](m: Map[N, List[(N, L)]]): MapGraph[N, L] =
     new MapGraph(m)
 }
