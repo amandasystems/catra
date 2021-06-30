@@ -15,14 +15,14 @@ class TestGraphOperations extends AnyFunSuite {
   }
 
   test("BFS marks all nodes visited") {
-    assert((allConnected startBFSFrom 1).visitAll().unvisited().isEmpty)
+    assert((allConnected startBFSFrom 1).visitAll().unvisitedNodes().isEmpty)
   }
 
   test("BFS misses disconnected bit") {
     val g =
       Map(1 -> List(1, 2, 3), 2 -> List(2), 3 -> List(3, 2), 4 -> List())
 
-    assert((g startBFSFrom 1).visitAll().unvisited() == Set(4))
+    assert((g startBFSFrom 1).visitAll().unvisitedNodes() == Set(4))
 
   }
 

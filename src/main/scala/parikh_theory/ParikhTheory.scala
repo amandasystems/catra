@@ -8,6 +8,7 @@ import ap.terfor.substitutions.{VariableShiftSubst}
 import ap.theories._
 import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._
+import AutomataTypes._
 
 // TODO write a LengthCounting mixin which interns one term for length and
 // yields that for each transition
@@ -25,16 +26,14 @@ import ap.terfor.TerForConvenience._
  * WARNING! fields are lazy because of how initialisation works in scala (it's
  * Not Great.)
  */
-trait ParikhTheory[A <: Automaton]
+trait ParikhTheory
     extends Theory
     with NoFunctions
     with NoAxioms
     with Tracing
     with Complete {
 
-  val auts: IndexedSeq[A]
-
-  type Transition = (Any, Any, Any)
+  val auts: IndexedSeq[Automaton]
 
   /**
    * This method provides the "modulo" aspect by performing the translation
@@ -80,7 +79,7 @@ trait ParikhTheory[A <: Automaton]
    * terms. Returns the formula and new offset.
    */
   def automataClauses(
-      automaton: A,
+      automaton: Automaton,
       instanceTerm: LinearCombination,
       automataNr: Int,
       transitionAndTerms: IndexedSeq[(Transition, LinearCombination)]
@@ -172,13 +171,13 @@ trait ParikhTheory[A <: Automaton]
 
 // TODO turn this into a theory builder?
 object ParikhTheory {
-  def apply[A <: Automaton](_auts: IndexedSeq[A])(
-      _toMonoid: Any => Seq[LinearCombination],
+  def apply(_auts: IndexedSeq[Automaton])(
+      _toMonoid: Transition => Seq[LinearCombination],
       _monoidDimension: Int
   ) = {
-    new ParikhTheory[A] {
-      override val auts: IndexedSeq[A] = _auts
-      override def toMonoid(t: (Any, Any, Any)) = _toMonoid(t)
+    new ParikhTheory {
+      override val auts = _auts
+      override def toMonoid(t: Transition) = _toMonoid(t)
       override val monoidDimension = _monoidDimension
 
       TheoryRegistry register this

@@ -4,18 +4,19 @@ import org.scalatest.funsuite.AnyFunSuite
 import ap.SimpleAPI
 import SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience._
+import SymbolicLabelConversions._
 
 class TestParikhTheory extends AnyFunSuite with Tracing {
 
   test("length constraint for trivial automaton works") {
-    val aut = AutomatonBuilder[Int, Unit]()
+    val aut = AutomatonBuilder()
       .addStates(List(0, 1))
       .setInitial(0)
       .setAccepting(1)
-      .addTransition(0, (), 1)
+      .addTransition(0, 'a', 1)
       .getAutomaton()
 
-    val lt = LengthCounting[Automaton](IndexedSeq(aut))
+    val lt = LengthCounting(IndexedSeq(aut))
 
     assert(TestUtilities.onlyReturnsLength(lt, 1))
   }
@@ -27,7 +28,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   // --> | 0 | ---------> H 1 H --------> H 2 H
   //     +---+            #===#           #===#
   test("3-state, 1-register loop-free automaton has correct lengths") {
-    val aut = AutomatonBuilder[Int, Char]()
+    val aut = AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(1, 2)
@@ -36,7 +37,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .addTransition(1, 'b', 2)
       .getAutomaton()
 
-    val lt = LengthCounting[Automaton](IndexedSeq(aut))
+    val lt = LengthCounting(IndexedSeq(aut))
 
     TestUtilities.ensuresAlways(lt) {
       case (lengths, order) =>
@@ -46,7 +47,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("bug #1: 1.smt2 incorrect parikh image (minimised)") {
-    val aut = AutomatonBuilder[Int, Char]()
+    val aut = AutomatonBuilder()
       .addStates(List(0, 1))
       .setAccepting(0, 1)
       .setInitial(0)
@@ -54,7 +55,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .addTransition(1, 'b', 1)
       .getAutomaton()
 
-    val lt = LengthCounting[Automaton](IndexedSeq(aut))
+    val lt = LengthCounting(IndexedSeq(aut))
 
     TestUtilities.ensuresAlways(lt) {
       case (lengths, order) =>
@@ -81,7 +82,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   test(
     "4-state, per-transition register automaton with loop without product has correct values"
   ) {
-    val aut = AutomatonBuilder[Int, Char]()
+    val aut = AutomatonBuilder()
       .addStates(0 to 3)
       .setAccepting(3)
       .setInitial(0)
@@ -110,7 +111,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     import ap.terfor.conjunctions.Conjunction
     import ap.PresburgerTools
 
-    val aut = AutomatonBuilder[Int, Char]()
+    val aut = AutomatonBuilder()
       .addStates(0 to 3)
       .setAccepting(3)
       .setInitial(0)
@@ -121,7 +122,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val alphabet = "ab".toCharArray
 
-    val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
+    val presburgerFormulation = new PresburgerParikhImage(aut)
 
     SimpleAPI.withProver { p =>
       val a = p.createConstantRaw("a")
@@ -154,7 +155,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("two instances of the predicate") {
-    val aut = AutomatonBuilder[Int, Char]()
+    val aut = AutomatonBuilder()
       .addStates(0 to 3)
       .setAccepting(3)
       .setInitial(0)
@@ -169,7 +170,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val alphabet = "abc-".toCharArray
 
-    val theory = ParikhTheory[Automaton](IndexedSeq(aut))(
+    val theory = ParikhTheory(IndexedSeq(aut))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )
@@ -197,7 +198,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("parikh image for trivial automaton works") {
-    val aut = AutomatonBuilder[Int, Char]()
+    val aut = AutomatonBuilder()
       .addStates(List(0, 1))
       .setInitial(0)
       .setAccepting(1)
@@ -210,7 +211,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   test("product parikh image removes non-common transitions") {
 
     def commonBits() =
-      AutomatonBuilder[Int, Char]()
+      AutomatonBuilder()
         .addStates(0 to 3)
         .setAccepting(3)
         .setInitial(0)
@@ -251,7 +252,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     "product of 4-state, per-transition register automaton with loop has correct values"
   ) {
     def baseMaker() =
-      AutomatonBuilder[Int, Char]()
+      AutomatonBuilder()
         .addStates(0 to 16)
         .setAccepting(3)
         .setInitial(0)
@@ -286,7 +287,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
   test("regression: path not in image appears") {
     def baseMaker() =
-      AutomatonBuilder[Int, Char]()
+      AutomatonBuilder()
         .addStates(0 to 16)
         .setAccepting(3)
         .setInitial(0)
@@ -317,7 +318,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val alphabet = "abcde-".toCharArray
 
-    val theory = ParikhTheory[Automaton](IndexedSeq(leftAut, rightAut))(
+    val theory = ParikhTheory(IndexedSeq(leftAut, rightAut))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )
@@ -343,7 +344,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
   test("minimal product broken") {
     def baseMaker() =
-      AutomatonBuilder[Int, Char]()
+      AutomatonBuilder()
         .addStates(0 to 1)
         .setAccepting(1)
         .setInitial(0)
@@ -354,7 +355,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val alphabet = "a".toCharArray
 
-    val theory = ParikhTheory[Automaton](IndexedSeq(leftAut, rightAut))(
+    val theory = ParikhTheory(IndexedSeq(leftAut, rightAut))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )

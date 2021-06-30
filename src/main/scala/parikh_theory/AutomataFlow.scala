@@ -7,24 +7,22 @@ import ap.basetypes.IdealInt
 import ap.basetypes.IdealInt.{ONE, ZERO, MINUS_ONE}
 import EdgeWrapper._
 import ap.terfor.TerForConvenience._
+import AutomataTypes._
 
 /**
  *  A class to generate flow-balancing constraints for an automaton, modulo an
  *  arbitrary mapping for edges.
  */
-class AutomataFlow[A <: Automaton](private val aut: A)(
+class AutomataFlow(private val aut: Automaton)(
     implicit order: TermOrder
 ) extends Tracing {
-
-  // From Label To
-  private type Transition = (aut.State, aut.Label, aut.State)
 
   private def allNonnegative(vars: Seq[Term]) = conj(vars.map(_ >= 0))
 
   // TODO fold this into asManyIncomingAsOutgoing; it's short, single-use, and
   // only makes sense in that context.
   private def asStateFlowSum(
-      stateTerms: Seq[(aut.State, (IdealInt, LinearCombination))]
+      stateTerms: Seq[(State, (IdealInt, LinearCombination))]
   ) = {
     val (state, _) = stateTerms.head
     val initialFlow = l(if (state == aut.initialState) ONE else ZERO)
@@ -71,8 +69,8 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
    */
   def monoidValuesReachable(
       monoidVars: Seq[LinearCombination],
-      transitionAndVar: IndexedSeq[((Any, Any, Any), LinearCombination)],
-      toMonoid: ((Any, Any, Any)) => Seq[LinearCombination]
+      transitionAndVar: IndexedSeq[(Transition, LinearCombination)],
+      toMonoid: (Transition) => Seq[LinearCombination]
   ): Formula = {
     trace("Monoid equations") {
       // This is just a starting vector of the same dimension as the monoid
@@ -97,23 +95,19 @@ class AutomataFlow[A <: Automaton](private val aut: A)(
   }
 
   // TODO implement an IFormula version of this as well
-  // FIXME the type casts here are really ugly
   def flowEquations(
-      transitionAndVar: IndexedSeq[((Any, Any, Any), LinearCombination)]
+      transitionAndVar: IndexedSeq[(Transition, LinearCombination)]
   ): Conjunction = {
     trace("flowEquations")(
       conj(
         allNonnegative(transitionAndVar.unzip._2),
-        asManyIncomingAsOutgoing(
-          transitionAndVar
-            .asInstanceOf[IndexedSeq[(Transition, LinearCombination)]]
-        )
+        asManyIncomingAsOutgoing(transitionAndVar)
       )
     )
   }
 }
 
 object AutomataFlow {
-  def apply[A <: Automaton](a: A)(implicit order: TermOrder) =
+  def apply(a: Automaton)(implicit order: TermOrder) =
     new AutomataFlow(a)(order)
 }

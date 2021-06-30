@@ -2,10 +2,10 @@ package uuverifiers.parikh_theory
 
 import org.scalacheck.Properties
 import org.scalacheck.Prop.{forAll, propBoolean}
+import SymbolicLabelConversions._
 
-class WordAutomaton(var word: String) extends Automaton {
+class WordAutomaton(val word: String) extends Automaton {
   type State = Int
-  type Label = Char
 
   val initialState = 0
   val lastState = word.length
@@ -22,7 +22,7 @@ object WordSpecification extends Properties("WordAutmata") {
 
   property("wordHasCorrectLength") = forAll { (word: String) =>
     val a = new WordAutomaton(word)
-    val lt = LengthCounting[WordAutomaton](Array(a))
+    val lt = LengthCounting(Array(a))
 
     TestUtilities.onlyReturnsLength(lt, word.length)
   }
@@ -34,7 +34,7 @@ object WordSpecification extends Properties("WordAutmata") {
       val alphabet = word.toSet.toSeq.sorted
       val expectedCharCounts = alphabet.map(c => word.count(_ == c))
 
-      val pi = ParikhTheory[WordAutomaton](Array(a))(
+      val pi = ParikhTheory(Array(a))(
         TestUtilities.alphabetCounter(alphabet) _,
         alphabet.length
       )

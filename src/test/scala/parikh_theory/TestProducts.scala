@@ -1,6 +1,8 @@
 package uuverifiers.parikh_theory
 
 import org.scalatest.funsuite.AnyFunSuite
+import SymbolicLabelConversions._
+import AutomataTypes._
 
 // TODO properties to test:
 // product with self is identity
@@ -9,40 +11,41 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class TestProducts extends AnyFunSuite with Tracing {
 
-  def flattenProductStates[A <: Automaton](prod: A) = {
-    prod.states
-      .flatMap(_.asInstanceOf[ProductState[_]].iterator)
-      .toSet
-  }
+  private def prodOriginStates(prod: AnnotatedProduct) =
+    prod.product.states.map(prod.originOf).unzip
 
-  def productContainsAutomata[A1 <: Automaton, A2 <: Automaton](prod: A1)(
-      term: A2
-  ) = {
+  private def selectState(origin: Origin)(tpl: (State, State)) =
+    if (origin == TermOrigin.Left) tpl._1 else tpl._2
 
-    val stateToProductState: Map[term.State, prod.State] = prod.states.flatMap {
-      s =>
-        val ps = s.asInstanceOf[ProductState[term.State]]
-        ps.filter(_.isInstanceOf[term.State])
-          .map(underlyingState => (underlyingState.asInstanceOf[term.State], s))
-    }.toMap
+  private def productContainsAutomata(
+      prod: AnnotatedProduct
+  )(term: Automaton, origin: Origin): Boolean = {
+
+    val stateToProductStates =
+      prod.productStateToTermStates
+        .groupBy(kv => selectState(origin)(kv._2))
+        .mapValues(_.keys.toSeq)
 
     term.transitions.forall {
       case (from, label, to) =>
-        (stateToProductState contains from) &&
-          (stateToProductState contains to) &&
-          (prod.outgoingTransitions(stateToProductState(from)) contains (
-            (
-              stateToProductState(
-                to
-              ),
-              label
-            )
-          ))
+        val statesExist = (stateToProductStates contains from) &&
+          (stateToProductStates contains to)
+
+        val outgoingTransitions = stateToProductStates(from)
+          .flatMap(prod.product.outgoingTransitions)
+          .toSet
+        val possibleTargetStates = stateToProductStates(to)
+
+        val transitionExists = possibleTargetStates.exists(
+          targetProductState =>
+            outgoingTransitions.contains((targetProductState, label))
+        )
+        statesExist && transitionExists
     }
   }
 
   test("trivial product") {
-    val left = AutomatonBuilder[Int, Char]()
+    val left = AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(1, 2)
@@ -51,7 +54,7 @@ class TestProducts extends AnyFunSuite with Tracing {
       .addTransition(1, 'b', 2)
       .getAutomaton()
 
-    val right = AutomatonBuilder[Int, Char]()
+    val right = AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(1, 2)
@@ -60,21 +63,17 @@ class TestProducts extends AnyFunSuite with Tracing {
       .addTransition(1, 'b', 2)
       .getAutomaton()
 
-    val prod = left &&& right
-
-    assert(
-      flattenProductStates(prod) == left.states.toSet
-    )
-
+    val prod = left.productWithSources(right)
+    assert(prodOriginStates(prod)._1.toSet == left.states.toSet)
     val isInProduct = productContainsAutomata(prod) _
 
-    assert(isInProduct(left))
-    assert(isInProduct(right))
+    assert(isInProduct(left, TermOrigin.Left))
+    assert(isInProduct(right, TermOrigin.Right))
 
   }
 
   test("empty product is empty") {
-    val left = AutomatonBuilder[Int, Char]()
+    val left = AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(1, 2)
@@ -90,7 +89,7 @@ class TestProducts extends AnyFunSuite with Tracing {
   }
 
   test("slightly more advanced product") {
-    val left = AutomatonBuilder[Int, Char]()
+    val left = AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(1, 2)
@@ -99,7 +98,7 @@ class TestProducts extends AnyFunSuite with Tracing {
       .addTransition(1, 'b', 2)
       .getAutomaton()
 
-    val right = AutomatonBuilder[Int, Char]()
+    val right = AutomatonBuilder()
       .addStates(List(0, 1, 2, 3))
       .setInitial(0)
       .setAccepting(2)
@@ -110,15 +109,15 @@ class TestProducts extends AnyFunSuite with Tracing {
       .addTransition(3, 'a', 2)
       .getAutomaton()
 
-    val prod = left &&& right
+    val prod = left.productWithSources(right)
 
     assert(
-      flattenProductStates(prod) == left.states.toSet
+      prodOriginStates(prod)._1.toSet == left.states.toSet
     )
 
     val isInProduct = productContainsAutomata(prod) _
 
-    val expectedResult = AutomatonBuilder[Int, Char]()
+    val expectedResult = AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(2)
@@ -126,7 +125,7 @@ class TestProducts extends AnyFunSuite with Tracing {
       .addTransition(1, 'b', 2)
       .getAutomaton()
 
-    assert(isInProduct(expectedResult))
+    assert(isInProduct(expectedResult, TermOrigin.Left))
 
   }
 

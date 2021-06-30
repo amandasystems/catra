@@ -6,16 +6,18 @@ import ap.terfor.conjunctions.Conjunction
 import SimpleAPI.ProverStatus
 import org.scalatest.funsuite.AnyFunSuite
 import ap.terfor.TerForConvenience._
+import AutomataTypes._
+import SymbolicLabel.SingleChar
 
 object TestUtilities extends AnyFunSuite with Tracing {
 
-  def alphabetCounter[T](alphabet: Iterable[T])(t: Any) = {
+  def alphabetCounter[T](alphabet: Iterable[T])(t: Transition) = {
     import ap.terfor.linearcombination.LinearCombination
     import ap.basetypes.IdealInt
     val ONE = LinearCombination(IdealInt.ONE)
     val ZERO = LinearCombination(IdealInt.ZERO)
 
-    val label = t.asInstanceOf[Tuple3[_, T, _]]._2
+    val (_, SingleChar(label), _) = t
     alphabet.map(c => if (c == label) ONE else ZERO).toSeq
   }
 
@@ -31,7 +33,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
     withClue(s"${cs}${description}")(assert(res == expect))
   }
 
-  def ensuresAlways(theory: ParikhTheory[_])(
+  def ensuresAlways(theory: ParikhTheory)(
       lengthConstraints: (IndexedSeq[Term], TermOrder) => Conjunction
   ) = {
     SimpleAPI.withProver { p =>
@@ -41,7 +43,6 @@ object TestUtilities extends AnyFunSuite with Tracing {
       implicit val order = p.order // Adding constants and predicates changes order
 
       p addAssertion ((theory allowsMonoidValues constants))
-
       val constraints = lengthConstraints(constants, order)
       val asserter = assertConstraints(p) _
 
@@ -53,15 +54,19 @@ object TestUtilities extends AnyFunSuite with Tracing {
   def bothImplementationsHaveSameImage(aut: Automaton) = {
     // WARNING: only works for characters (but that's all we have right now)
     val alphabet = trace("alphabet")(
-      aut.transitions.map(_._2.asInstanceOf[Char]).toSet.toIndexedSeq.sorted
+      aut.transitions
+        .map { case (_, SingleChar(c), _) => c }
+        .toSet
+        .toIndexedSeq
+        .sorted
     )
 
-    val pt = ParikhTheory[Automaton](IndexedSeq[Automaton](aut))(
+    val pt = ParikhTheory(IndexedSeq[Automaton](aut))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )
 
-    val presburgerFormulation = new PresburgerParikhImage[Automaton](aut)
+    val presburgerFormulation = new PresburgerParikhImage(aut)
 
     SimpleAPI.withProver { p =>
       val constants = p.createConstantsRaw("a", 0 until pt.monoidDimension)
@@ -101,16 +106,15 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def productsAreEqual(left: Automaton, right: Automaton) = {
-    val leftLabels = left.transitions.map(_._2.asInstanceOf[Char]).toSet
-    val rightLabels = right.transitions.map(_._2.asInstanceOf[Char]).toSet
+    val leftLabels = left.transitions.map(_._2).toSet
+    val rightLabels = right.transitions.map(_._2).toSet
     val alphabet = trace("alphabet")(
       (leftLabels ++ rightLabels).toIndexedSeq.sorted
     )
 
-    val presburgerFormulation =
-      new PresburgerParikhImage[Automaton](left &&& right)
+    val presburgerFormulation = new PresburgerParikhImage(left &&& right)
 
-    val pt = ParikhTheory[Automaton](IndexedSeq[Automaton](left, right))(
+    val pt = ParikhTheory(IndexedSeq[Automaton](left, right))(
       TestUtilities.alphabetCounter(alphabet) _,
       alphabet.length
     )
@@ -153,7 +157,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def onlyReturnsCounts(
-      theory: ParikhTheory[_],
+      theory: ParikhTheory,
       expectedCounts: Seq[Int]
   ) = {
     ensuresAlways(theory) {
@@ -172,7 +176,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def onlyReturnsLength(
-      theory: LengthCounting[_],
+      theory: LengthCounting,
       length: Int
   ) = onlyReturnsCounts(theory, Seq(length))
 }

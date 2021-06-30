@@ -15,9 +15,8 @@ import collection.mutable.HashMap
  * associated with a given predicate, eliminating that predicate upon
  * subsumption.
  */
-class MonoidMapPlugin[A <: Automaton](
-    private val theoryInstance: ParikhTheory[A]
-) extends Plugin
+class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
+    extends Plugin
     with PredicateHandlingProcedure
     with NoAxiomGeneration
     with Tracing {
@@ -37,7 +36,8 @@ class MonoidMapPlugin[A <: Automaton](
   }
 
   // A cache for materialised automata. The first ones are the same as auts.
-  private val materialisedAutomata = ArrayBuffer[A](theoryInstance.auts: _*)
+  private val materialisedAutomata =
+    ArrayBuffer[Automaton](theoryInstance.auts: _*)
 
   override val procedurePredicate = theoryInstance.monoidMapPredicate
 
@@ -141,16 +141,6 @@ class MonoidMapPlugin[A <: Automaton](
     val transitionToTerm = context.autTransitionTerm(autId)(_)
 
     implicit val order = context.goal.order
-    val autGraph = aut.toGraph
-
-    // TODO: we don't care about splitting edges that cannot possibly cause a
-    // disconnect; i.e. *we only care* about critical edges on the path to
-    // some cycle that can still appear (i.e. wose edges are not
-    // known-deselected).
-    // this relates to a MST
-
-    // TODO experiment with branching order and start close to initial
-    // states.
 
     // TODO compute a cut to find which dead transitions contribute to the conflict!
 
@@ -162,20 +152,21 @@ class MonoidMapPlugin[A <: Automaton](
         .toSet
     }
 
-    val knownUnreachableEdges = trace("knownUnreachableEdges") {
-      autGraph
-        .dropEdges(deadTransitions)
-        .unreachableFrom(aut.initialState)
+    val filteredGraph = aut.dropEdges(deadTransitions)
+
+    val knownUnreachableStates = trace("knownUnreachableStates") {
+      filteredGraph.unreachableFrom(aut.initialState)
     }
 
     // val possiblyUnreachableEdges = trace("possiblyUnreachableEdges") {
-    //   autGraph
-    //     .dropEdges(maybeDeadTransitions)
-    //     .unreachableWithFilterFrom(aut.initialState, t => termMeansPossiblyAbsent(goal, transitionToTerm(t)))
+    //   filteredGraph
+    //     .unreachableFrom(
+    //       aut.initialState,
+    //       t => termMeansPossiblyAbsent(context.goal, transitionToTerm(t))
+    //     )
+    //     .flatMap(filteredGraph.transitionsFrom(_))
     // }
-    // FIXME why doesn't this work for subsumption? possiblyUnreachableEdges.isEmpty
-    // FIXME because we also drop the CYCLE edges that may be unreachable!!!
-    // FIXME this requires a custom automata thing where we don't walk an unsure edge, but we don't remove them fully
+    // FIXME why doesn't this work for subsumption? possiblyUnreachableEdges
 
     val unknownEdges = trace("unknownEdges")(
       context.autTransitionTermsUnordered(autId) filter (
@@ -196,13 +187,13 @@ class MonoidMapPlugin[A <: Automaton](
     val unreachableActions = trace("unreachableActions") {
       val unreachableConstraints =
         conj(
-          knownUnreachableEdges
+          knownUnreachableStates
             .flatMap(
-              autGraph.transitionsFrom(_).map(transitionToTerm(_) === 0)
+              aut.transitionsFrom(_).map(transitionToTerm(_) === 0)
             )
         )
 
-      if (unreachableConstraints.isTrue) Seq()
+      if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
       else
         Seq(
           Plugin.AddAxiom(
@@ -230,10 +221,11 @@ class MonoidMapPlugin[A <: Automaton](
       s"materialising product of ${left.transitions.toSeq} and ${right.transitions.toSeq}"
     )("")
 
-    val (product, termToProductEdges) = left.productWithSources(right)
+    val annotatedProduct = left.productWithSources(right)
+    val product = annotatedProduct.product
 
     val newAutomataNr = trace("newAutomataNr")(materialisedAutomata.size)
-    materialisedAutomata += product.asInstanceOf[A]
+    materialisedAutomata += product
 
     val removeTransitionMasks =
       context.transitionMasks.map(Plugin.RemoveFacts(_))
@@ -257,8 +249,7 @@ class MonoidMapPlugin[A <: Automaton](
         newAutomataNr,
         leftId,
         rightId,
-        termToProductEdges
-          .asInstanceOf[Map[(Any, Any, Any), Seq[(Any, Any, Any)]]],
+        annotatedProduct,
         context
       )
 
@@ -271,11 +262,10 @@ class MonoidMapPlugin[A <: Automaton](
       productNr: Int,
       leftNr: Int,
       rightNr: Int,
-      termToProductEdges: Map[(Any, Any, Any), Seq[(Any, Any, Any)]],
+      annotatedProduct: AnnotatedProduct,
       context: Context
   ) = {
     import ap.basetypes.IdealInt.ZERO
-    import scala.language.existentials
 
     implicit val order = context.goal.order
     val varFactory = new FreshVariables(0)
@@ -294,20 +284,21 @@ class MonoidMapPlugin[A <: Automaton](
 
     // - x(t) = sum(e : termProductEdges(t, default=0))
     val bridgingClauses = trace("Bridging clauses") {
-      val productTransitionToLc = transitionToTerm
-        .asInstanceOf[Map[(Any, Any, Any), Term]]
-        .andThen(l(_)(order))
+      val productTransitionToLc = transitionToTerm.andThen(l(_)(order))
 
       Seq(leftNr, rightNr).flatMap(
         autNr => {
           val transitionToTerm = context.autTransitionTerm(autNr)(_)
+          val originTerm =
+            if (autNr == leftNr) TermOrigin.Left else TermOrigin.Right
+          val productTermsFrom = annotatedProduct.resultsOf(originTerm)(_)
 
           materialisedAutomata(autNr).transitions.map(
             termTransition =>
               trace(s"a${autNr} bridge: ${termTransition}")(
-                transitionToTerm(termTransition) === termToProductEdges
-                  .get(termTransition)
-                  .map(
+                transitionToTerm(termTransition) === productTermsFrom(
+                  termTransition
+                ).map(
                     productEdges =>
                       lcSum(productEdges.map(productTransitionToLc))
                   )
@@ -343,6 +334,7 @@ class MonoidMapPlugin[A <: Automaton](
    */
   sealed case class Context(val goal: Goal, val monoidMapPredicateAtom: Atom) {
     val instanceTerm = monoidMapPredicateAtom(0)
+    implicit val order = goal.order
 
     private val transitionTermCache = HashMap[Int, Map[(Any, Any, Any), Term]]()
 
@@ -372,6 +364,10 @@ class MonoidMapPlugin[A <: Automaton](
           .map(automataNr): _*
       )
     }
+
+    // FIXME memoise
+    def transitionStatus(autId: Int)(transition: (Any, Any, Any)) =
+      transitionStatusFromTerm(goal, l(autTransitionTerm(autId)(transition)))
 
     private def getOrUpdateTransitionTermMap(autId: Int) = {
       val autMap: Map[(Any, Any, Any), Term] =
@@ -414,8 +410,6 @@ class MonoidMapPlugin[A <: Automaton](
 
   class TransitionSplitter() extends PredicateHandlingProcedure with Tracing {
 
-    import transitionExtractor.transitionStatusFromTerm
-
     private val transitionPredicate = theoryInstance.transitionMaskPredicate
     override val procedurePredicate = transitionPredicate
 
@@ -428,10 +422,18 @@ class MonoidMapPlugin[A <: Automaton](
 
       val unknownTransitions = trace("unknownTransitions") {
         context.automataWithConnectedPredicate.unsorted
-          .flatMap(context.autTransitionTermsUnordered)
-          .filter(
-            t => transitionStatusFromTerm(goal, t).isUnknown
-          )
+          .flatMap { aNr =>
+            val automaton = materialisedAutomata(aNr)
+            automaton
+              .startBFSFrom(automaton.initialState)
+              .flatMap(automaton.transitionsFrom)
+              .filter(
+                context.transitionStatus(aNr)(_).isUnknown
+              )
+              .map(context.autTransitionTerm(aNr))
+
+          }
+
       }
 
       trace("unknownActions") {
@@ -446,7 +448,6 @@ class MonoidMapPlugin[A <: Automaton](
         val splittingActions = trace("splittingActions") {
           unknownTransitions
             .map(transitionToSplit(_))
-            .toSeq
         }
 
         if (splittingActions.isEmpty) Seq() else Seq(splittingActions.head)

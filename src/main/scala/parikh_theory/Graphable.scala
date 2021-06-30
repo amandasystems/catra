@@ -26,8 +26,11 @@ trait Graphable[Node, Label] {
   type Cycle = Set[Node]
   type Edge = (Node, Label, Node)
 
-  class BFSVisitor(val graph: Graphable[Node, Label], val startNode: Node)
-      extends Iterator[Node] {
+  class BFSVisitor(
+      val graph: Graphable[Node, Label],
+      val startNode: Node,
+      val walkWhen: ((Node, Label, Node)) => Boolean
+  ) extends Iterator[Node] {
 
     private val nodeUnseen = MSet(graph.allNodes(): _*)
     private val toVisit = MQueue[Node](startNode)
@@ -40,7 +43,9 @@ trait Graphable[Node, Label] {
     override def next() = {
       val thisNode = toVisit.dequeue()
 
-      for (edge @ (_, label, neighbour) <- graph.transitionsFrom(thisNode)
+      for (edge @ (_, label, neighbour) <- graph
+             .transitionsFrom(thisNode)
+             .filter(walkWhen)
            if nodeUnseen contains neighbour) {
         nodeUnseen -= neighbour
         toVisit enqueue neighbour
@@ -49,7 +54,7 @@ trait Graphable[Node, Label] {
 
       thisNode
     }
-    def unvisited() = nodeUnseen.toSet
+    def unvisitedNodes(): Set[Node] = nodeUnseen.toSet
     def nodeVisited(node: Node) = !(nodeUnseen contains node)
     def pathTo(endNode: Node): Option[Seq[Edge]] = {
       if (!(graph hasNode endNode)) {
@@ -78,8 +83,11 @@ trait Graphable[Node, Label] {
     }
   }
 
-  def startBFSFrom(startNode: Node) =
-    new BFSVisitor(this, startNode)
+  def startBFSFrom(
+      startNode: Node,
+      walkWhen: ((Node, Label, Node)) => Boolean = _ => true
+  ) =
+    new BFSVisitor(this, startNode, walkWhen)
 
   def neighbours(node: Node): Seq[Node] = transitionsFrom(node).map(_.to())
 
@@ -124,10 +132,13 @@ trait Graphable[Node, Label] {
       .toSet
   }
 
-  def unreachableFrom(startNode: Node) = {
-    val it = startBFSFrom(startNode)
-    it.foreach(identity) // perform iteration
-    it.unvisited.toSet
+  def unreachableFrom(
+      startNode: Node,
+      walkWhen: ((Node, Label, Node)) => Boolean = _ => true
+  ): Set[Node] = {
+    val visitor: BFSVisitor = startBFSFrom(startNode, walkWhen)
+    visitor.foreach(identity) // perform iteration
+    visitor.unvisitedNodes()
   }
 
   // Find the strongly connected components of a graph using Tarjan's
@@ -148,7 +159,6 @@ trait Graphable[Node, Label] {
     }
 
     def strongConnect(node: Node): Unit = {
-      import scala.util.control.Breaks._
 
       depthIndex(node) = smallestFreeIndex
       lowLink(node) = smallestFreeIndex
@@ -214,7 +224,7 @@ trait Graphable[Node, Label] {
     val cycles: ArrayBuffer[Cycle] = ArrayBuffer()
 
     // handle self-edges first; Johnson's ignores them
-    for ((from, _, to) <- edges) {
+    for ((from, _, to) <- edges()) {
       if (to == from)
         cycles += Set(from)
     }

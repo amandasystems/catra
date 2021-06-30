@@ -4,17 +4,16 @@ import ap.terfor.TerForConvenience._
 import scala.collection.mutable.{ArrayBuffer, BitSet => MBitSet}
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
-import compat._
+import AutomataTypes._
 
-class PresburgerParikhImage[A <: Automaton](private val aut: A)
-    extends Tracing {
+class PresburgerParikhImage(private val aut: Automaton) extends Tracing {
   private lazy val stateSeq = aut.states.toIndexedSeq
   private lazy val state2Index =
     trace("state2Index")(stateSeq.iterator.zipWithIndex.toMap)
 
   def parikhImage(
       charCounts: Seq[Term],
-      toCharIncrement: aut.Transition => Seq[LinearCombination]
+      toCharIncrement: Transition => Seq[LinearCombination]
   )(implicit order: TermOrder): Formula = trace("PresburgerParikhImage") {
     lazy val preStates = {
       val preStates =
@@ -81,7 +80,7 @@ class PresburgerParikhImage[A <: Automaton](private val aut: A)
             case (_, i) => v(i)
           })
           val zVars = refStates
-            .zip(Stream from prodVars.size)
+            .zip(LazyList from prodVars.size)
             .unsorted
             .map {
               case (state, index) =>

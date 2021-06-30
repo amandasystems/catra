@@ -25,19 +25,30 @@ trait NoAxioms {
   val totalityAxioms: ap.terfor.Formula = Conjunction.TRUE
 }
 
-class Statistics() {
-
+object Statistics {
   private val dynTraceEnable = sys.env
     .getOrElse("OSTRICH_STATS", "FALSE")
     .toUpperCase() == "TRUE"
 
+  private def report(stats: Statistics) = {
+    // import java.io._
+
+    // val file = new File("ostrich-stats.txt")
+    // val bw = new BufferedWriter(new FileWriter(file, true))
+    // bw.write("stats" + stats.counter + "\n")
+    // bw.close()
+    System.err.println("stats" + stats.counter) // FIXME
+  }
+}
+
+class Statistics() {
   private val counter = HashMap[String, Int]()
 
   @elidable(FINE)
   def increment(key: String) = counter(key) = counter.getOrElse(key, 0) + 1
 
   @elidable(FINE)
-  def report() = System.err.println("stats" + counter) // FIXME
+  def report() = Statistics.report(this)
 }
 
 // TODO convert this to a hierarchical logger writing to some file somewhere
