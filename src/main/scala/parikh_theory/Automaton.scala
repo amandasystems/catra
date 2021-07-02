@@ -2,6 +2,7 @@ package uuverifiers.parikh_theory
 
 import collection.mutable.{HashMap, ArrayBuffer}
 import scala.language.implicitConversions
+import EdgeWrapper._
 
 object AutomataTypes {
   type State = Int
@@ -55,6 +56,26 @@ trait Automaton
 
   /// Derived methods ///
 
+  /**
+   * Run the automaton on an input.
+   *
+   * @param input
+   * @return true if the automaton accepts input, false otherwise
+   */
+  def accepts(input: String): Boolean = {
+    var currentStates = Seq(initialState)
+    for (c <- input) {
+      currentStates = currentStates
+        .flatMap(
+          currentState =>
+            transitionsFrom(currentState).filter(_.label().contains(c))
+        )
+        .map(_.to())
+    }
+
+    currentStates.exists(isAccept)
+  }
+
   def ++(that: Automaton) = {
     val builder = AutomatonBuilder(this)
     // add all states of that, incremented
@@ -75,11 +96,10 @@ trait Automaton
     ???
   }
 
-  // FIXME this will not be true once we allow symbolic labels!
-  def alphabet(): Iterator[SymbolicLabel] =
-    transitions.map {
-      case (_, label, _) => label
-    }
+  // FIXME this is really ugly! Maybe we should intead just return a range
+  // between the lowest and tallest character? Or just...remove the method.
+  def alphabet(): Iterator[Char] =
+    transitions.flatMap(_.label().iterate().toSet).toSet.toSeq.sorted.iterator
 
   /**
    *  True if the automaton accepts no string, false otherwise.
@@ -104,11 +124,11 @@ trait Automaton
     val filteredBuilder = AutomatonBuilder()
 
     this.transitions.filter(keepEdge).foreach {
-      case (from, label, to) =>
+      case t@(from, label, to) =>
         val involvedStates = Seq(from, to)
         filteredBuilder
           .addStates(involvedStates)
-          .addTransition(from, label, to)
+          .addTransitionTuple(t)
 
         val acceptingStates = involvedStates.filter(isAccept).toSeq
         filteredBuilder.addStates(acceptingStates)
@@ -148,9 +168,7 @@ trait Automaton
 
   def addEdges(edgesToAdd: Iterable[Transition]) = {
     val builder = AutomatonBuilder(this)
-    edgesToAdd.foreach {
-      case (from, label, to) => builder.addTransition(from, label, to)
-    }
+    edgesToAdd.foreach(builder.addTransitionTuple)
     builder.getAutomaton()
   }
 
@@ -163,7 +181,7 @@ trait Automaton
 
     // This will fail if labels have incompatible type
     val labelToRightStates = right
-      .map { case (s, l) => l -> s }
+      .map(_.swap)
       .toSeq
       .groupBy(_._1)
       .view
@@ -188,7 +206,7 @@ trait Automaton
    * Compute the product of two automata, returning a mapping from the product's
     transitions to the term's.
     **/
-  def productWithSources(that: Automaton): AnnotatedProduct = {
+  def productWithSources(that: Automaton): AnnotatedProduct = { // FIXME this does NOT WORK for advanced edge labels!
     // NOTE We have to tag keys with the origin of the term, since there is no
     // guarantee that transitions are unique between automata.
     val termToProductEdges =
@@ -311,6 +329,9 @@ class AutomatonBuilder extends Tracing {
     this
   }
 
+  def addTransitionTuple(t: (State, Label, State)) =
+    (this.addTransition _).tupled(t)
+
   def getAutomaton(): Automaton = {
     assert(_initial != None)
 
@@ -343,12 +364,10 @@ object AutomatonBuilder {
   def apply() = new AutomatonBuilder()
   def apply(aut: Automaton) = {
     val builder = new AutomatonBuilder()
-    builder.setInitial(aut.initialState)
     builder.addStates(aut.states)
+    builder.setInitial(aut.initialState)
     builder.setAccepting(aut.states.filter(aut.isAccept).toSeq: _*)
-    aut.transitions.foreach {
-      case (from, label, to) => builder.addTransition(from, label, to)
-    }
+    aut.transitions.foreach(builder.addTransitionTuple)
     builder
   }
 }
@@ -365,9 +384,11 @@ sealed abstract class SymbolicLabel
     extends Product
     with Serializable
     with Ordered[SymbolicLabel] {
+  def iterate(): Iterator[Char]
   def subtract(that: SymbolicLabel): SymbolicLabel
   def intersect(that: SymbolicLabel): SymbolicLabel
   def isEmpty(): Boolean
+  def contains(ch: Char) = this.overlaps(SymbolicLabel.SingleChar(ch))
   def overlaps(that: SymbolicLabel) = !this.intersect(that).isEmpty()
   def upperBoundExclusive(): Option[Char]
   override def compare(that: SymbolicLabel) = {
@@ -391,6 +412,15 @@ object SymbolicLabel {
       case _                => SingleChar(fromInclusive)
     }
 
+  final case object NoChar extends SymbolicLabel {
+    override def overlaps(that: SymbolicLabel) = false
+    override def intersect(that: SymbolicLabel) = this
+    override def isEmpty() = true
+    override def subtract(that: SymbolicLabel) = this
+    override def upperBoundExclusive() = Some(0.toChar)
+    override def iterate() = Iterator()
+  }
+
   final case class SingleChar(c: Char) extends SymbolicLabel {
     override def subtract(that: SymbolicLabel) = that match {
       case NoChar          => this
@@ -404,33 +434,36 @@ object SymbolicLabel {
       // avoided that in order to keep this safe against future
       // refactorings. --Amanda
     }
-    override def overlaps(that: SymbolicLabel) = ???
-    override def intersect(that: SymbolicLabel) = ???
+
+    override def intersect(that: SymbolicLabel) = that match {
+      case AnyChar               => this // Redundant but OK
+      case SingleChar(otherChar) => if (otherChar == this.c) this else NoChar
+      case CharRange(lower, upper) =>
+        if (c >= lower && c <= upper) this else NoChar
+      case NoChar => NoChar
+    }
     override def isEmpty() = false
     override def upperBoundExclusive() = Some((c + 1).toChar)
+    override def iterate() = Iterator(c)
 
   }
+
+  final case class CharRange(from: Char, toInclusive: Char)
+      extends SymbolicLabel {
+    override def subtract(that: SymbolicLabel) = ???
+    override def intersect(that: SymbolicLabel) = that.intersect(this)
+    override def isEmpty() = false
+    override def upperBoundExclusive() = Some((toInclusive + 1).toChar)
+    override def iterate() = (from to toInclusive).iterator
+  }
+
   final case object AnyChar extends SymbolicLabel {
     override def overlaps(that: SymbolicLabel) = true
     override def intersect(that: SymbolicLabel) = that
     override def isEmpty() = false
     override def subtract(that: SymbolicLabel) = ???
     override def upperBoundExclusive() = None
-  }
-  final case object NoChar extends SymbolicLabel {
-    override def overlaps(that: SymbolicLabel) = false
-    override def intersect(that: SymbolicLabel) = this
-    override def isEmpty() = true
-    override def subtract(that: SymbolicLabel) = this
-    override def upperBoundExclusive() = Some(0.toChar)
-  }
-  final case class CharRange(from: Char, toInclusive: Char)
-      extends SymbolicLabel {
-    override def subtract(that: SymbolicLabel) = ???
-    override def overlaps(that: SymbolicLabel) = ???
-    override def intersect(that: SymbolicLabel) = ???
-    override def isEmpty() = false
-    override def upperBoundExclusive() = Some((toInclusive + 1).toChar)
+    override def iterate() = (Char.MinValue to Char.MaxValue).iterator
   }
 }
 

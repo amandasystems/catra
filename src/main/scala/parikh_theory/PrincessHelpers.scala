@@ -37,7 +37,7 @@ object Statistics {
     // val bw = new BufferedWriter(new FileWriter(file, true))
     // bw.write("stats" + stats.counter + "\n")
     // bw.close()
-    System.err.println("stats" + stats.counter) // FIXME
+    if(dynTraceEnable) System.err.println("stats" + stats.counter) // FIXME
   }
 }
 

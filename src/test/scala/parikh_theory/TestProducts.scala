@@ -24,6 +24,7 @@ class TestProducts extends AnyFunSuite with Tracing {
     val stateToProductStates =
       prod.productStateToTermStates
         .groupBy(kv => selectState(origin)(kv._2))
+        .view
         .mapValues(_.keys.toSeq)
 
     term.transitions.forall {
@@ -126,7 +127,27 @@ class TestProducts extends AnyFunSuite with Tracing {
       .getAutomaton()
 
     assert(isInProduct(expectedResult, TermOrigin.Left))
+  }
 
+  test("product with range-char label works") {
+    val left = AutomatonBuilder()
+      .addStates(Seq(0, 1))
+      .setInitial(0)
+      .setAccepting(1)
+      .addTransition(0, SymbolicLabel('a', 'z'), 1)
+      .getAutomaton()
+
+    val right = AutomatonBuilder()
+      .addStates(Seq(0, 1))
+      .setInitial(0)
+      .setAccepting(1)
+      .addTransition(0, SymbolicLabel('c'), 1)
+      .getAutomaton()
+
+    val prod = left.productWithSources(right)
+
+    assert(prod.product.transitions.toSeq == Seq(0, SymbolicLabel('c'), 1))
+    assert(prod.product.accepts("c"))
   }
 
 }
