@@ -124,7 +124,7 @@ trait Automaton
     val filteredBuilder = AutomatonBuilder()
 
     this.transitions.filter(keepEdge).foreach {
-      case t@(from, label, to) =>
+      case t @ (from, label, to) =>
         val involvedStates = Seq(from, to)
         filteredBuilder
           .addStates(involvedStates)

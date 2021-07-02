@@ -19,8 +19,10 @@ class TestRegex extends AnyFunSuite with Tracing {
     val wordAutomaton = Regex("hej").onceOrMore().toAutomaton()
     assert(wordAutomaton accepts "hej")
     assert(wordAutomaton accepts "hejhej")
+    assert(wordAutomaton accepts "hejhejhej")
     assert(!(wordAutomaton accepts ""))
     assert(!(wordAutomaton accepts "he"))
+    assert(!(wordAutomaton accepts "hejh"))
   }
 
 }
