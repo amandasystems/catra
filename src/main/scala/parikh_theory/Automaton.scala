@@ -114,25 +114,27 @@ trait Automaton
       .mkString("\n")
   }
 
+  // TODO move this into the graph trait
+  def walkFrom(currentStates: Seq[State], c: Char): Seq[State] =
+    trace(s"walkFrom(${currentStates})") {
+      val applicableMoves =
+        currentStates
+          .flatMap(
+            currentState =>
+              transitionsFrom(currentState)
+                .filter(_.label().contains(c))
+          )
+      applicableMoves.map(_.to())
+    }
+
   /**
    * Run the automaton on an input.
    *
    * @param input
    * @return true if the automaton accepts input, false otherwise
    */
-  def accepts(input: String): Boolean = {
-    var currentStates = Seq(initialState)
-    for (c <- input) {
-      currentStates = currentStates
-        .flatMap(
-          currentState =>
-            transitionsFrom(currentState).filter(_.label().contains(c))
-        )
-        .map(_.to())
-    }
-
-    currentStates.exists(isAccept)
-  }
+  def accepts(input: String): Boolean =
+    input.toSeq.foldLeft(Seq(initialState))(walkFrom).exists(isAccept)
 
   def ++(that: Automaton) = {
     val builder = AutomatonBuilder(this)
@@ -604,7 +606,7 @@ sealed case class AnnotatedProduct(
 
   private def stateAnnotation(productState: AutomataTypes.State) = {
     val (leftState, rightState) = originOf(productState)
-    s"L${leftState} & R${rightState}"
+    s"${productState} = ${leftState}/${rightState}"
   }
 
   def toDot() =

@@ -167,14 +167,10 @@ class TestProducts extends AnyFunSuite with Tracing {
 
     val prod = email.productWithSources(xss)
 
-    email.dumpDotFile("email.dot")
-    xss.dumpDotFile("xss.dot")
-    prod.dumpDotFile("prod.dot")
-
     assert(!prod.product.accepts("hello"))
     assert(!prod.product.accepts("<xss>"))
     assert(!prod.product.accepts("<script>"))
-    assert(prod.product.accepts("<script>@foo.com"))
+    assert(prod.product.accepts("s<script>@foo.com"))
     assert(prod.product.accepts("foo@<script>.com"))
   }
 
