@@ -32,7 +32,6 @@ trait ParikhTheory
     with NoAxioms
     with Tracing
     with Complete {
-
   val auts: IndexedSeq[Automaton]
 
   /**
@@ -71,7 +70,9 @@ trait ParikhTheory
   override lazy val predicates =
     Seq(monoidMapPredicate, transitionMaskPredicate, connectedPredicate)
 
-  def plugin: Option[Plugin] = Some(new MonoidMapPlugin(this))
+  lazy private val monoidMapPlugin = new MonoidMapPlugin(this)
+
+  def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
   // FIXME separate out the mapping to the monoid values
   /**
@@ -123,10 +124,11 @@ trait ParikhTheory
     val varFactory = new FreshVariables(0)
     val instanceTerm = varFactory.nextVariable()
 
-    val transitionTerms: IndexedSeq[(Transition, LinearCombination)] =
-      auts
-        .flatMap(_.transitions.map(t => (t, varFactory.nextVariable())))
-        .toIndexedSeq
+    val autTransitionTerms
+        : IndexedSeq[IndexedSeq[(Transition, LinearCombination)]] =
+      auts.map(
+        _.transitions.map(t => (t, varFactory.nextVariable())).toIndexedSeq
+      )
 
     // need to prevent variable capture by the quantifiers added below
     val shiftAwayFromQuantifiers =
@@ -141,10 +143,10 @@ trait ParikhTheory
             a,
             instanceTerm,
             i,
-            transitionTerms
+            autTransitionTerms(i)
           ) :+ AutomataFlow(a).monoidValuesReachable(
             shiftedMonoidValues,
-            transitionTerms,
+            autTransitionTerms(i),
             toMonoid
           )
       }
@@ -166,6 +168,8 @@ trait ParikhTheory
     // TODO also add analysis for simple automata, or perhaps do that earlier?
     simplifiedEquations
   }
+
+  def dumpGraphs() = monoidMapPlugin.dumpGraphs()
 
 }
 

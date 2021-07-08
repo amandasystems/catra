@@ -3,6 +3,7 @@ package uuverifiers.parikh_theory
 import org.scalatest.funsuite.AnyFunSuite
 import SymbolicLabelConversions._
 import AutomataTypes._
+import RegexImplicits._
 
 // TODO properties to test:
 // product with self is identity
@@ -146,8 +147,35 @@ class TestProducts extends AnyFunSuite with Tracing {
 
     val prod = left.productWithSources(right)
 
-    assert(prod.product.transitions.toSeq == Seq(0, SymbolicLabel('c'), 1))
+    assert(prod.product.transitions.toSeq == Seq((0, SymbolicLabel('c'), 1)))
     assert(prod.product.accepts("c"))
+  }
+
+
+  test("email and xss works") {
+    val email = Regex.AnyChar.onceOrMore()
+      .followedBy("@")
+      .followedBy(Regex.AnyChar.onceOrMore())
+      .followedBy(".")
+      .followedBy(Regex.AnyChar.onceOrMore())
+      .toAutomaton()
+
+    val xss = Regex.AnyChar.onceOrMore()
+      .followedBy("<script>")
+      .followedBy(Regex.AnyChar.onceOrMore())
+      .toAutomaton()
+
+    val prod = email.productWithSources(xss)
+
+    email.dumpDotFile("email.dot")
+    xss.dumpDotFile("xss.dot")
+    prod.dumpDotFile("prod.dot")
+
+    assert(!prod.product.accepts("hello"))
+    assert(!prod.product.accepts("<xss>"))
+    assert(!prod.product.accepts("<script>"))
+    assert(prod.product.accepts("<script>@foo.com"))
+    assert(prod.product.accepts("foo@<script>.com"))
   }
 
 }

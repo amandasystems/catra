@@ -9,6 +9,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.SortedSet
 import ap.terfor.conjunctions.Conjunction
 import collection.mutable.HashMap
+import AutomataTypes._
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -98,7 +99,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
     }
 
-  // TODO use Context here to inject more information!
   private def handleSplitting(context: Context) = trace("handleSplitting") {
     stats.increment("handleSplitting")
     val splitter = new TransitionSplitter()
@@ -336,7 +336,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val instanceTerm = monoidMapPredicateAtom(0)
     implicit val order = goal.order
 
-    private val transitionTermCache = HashMap[Int, Map[(Any, Any, Any), Term]]()
+    private val transitionTermCache = HashMap[Int, Map[Transition, Term]]()
 
     lazy val connectedInstances = trace("connectedInstances")(
       goalAssociatedPredicateInstances(
@@ -366,11 +366,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
 
     // FIXME memoise
-    def transitionStatus(autId: Int)(transition: (Any, Any, Any)) =
+    def transitionStatus(autId: Int)(transition: Transition) =
       transitionStatusFromTerm(goal, l(autTransitionTerm(autId)(transition)))
 
     private def getOrUpdateTransitionTermMap(autId: Int) = {
-      val autMap: Map[(Any, Any, Any), Term] =
+      val autMap: Map[Transition, Term] =
         transitionTermCache.getOrElseUpdate(
           autId,
           trace(s"getOrUpdateTransitionTermMap::compute(${autId})")(
@@ -382,7 +382,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       autMap
     }
 
-    def autTransitionTerm(autId: Int)(transition: (Any, Any, Any)): Term =
+    def autTransitionTerm(autId: Int)(transition: Transition): Term =
       getOrUpdateTransitionTermMap(autId)(transition)
 
     def autTransitionTermsUnordered(autId: Int) =
@@ -453,6 +453,16 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         if (splittingActions.isEmpty) Seq() else Seq(splittingActions.head)
 
       }
+    }
+  }
+
+  def dumpGraphs() = {
+    materialisedAutomata.zipWithIndex.foreach {
+      case (a, i) =>
+        // TODO extract transition labels and annotate the graph with them
+        a.dumpDotFile(
+          s"monoidMapTheory-${this.theoryInstance.hashCode()}-aut-${i}.dot"
+        )
     }
   }
 

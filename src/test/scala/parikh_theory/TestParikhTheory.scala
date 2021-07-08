@@ -288,35 +288,26 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   test("regression: path not in image appears") {
     def baseMaker() =
       AutomatonBuilder()
-        .addStates(0 to 16)
+        .addStates(0 to 3)
         .setAccepting(3)
         .setInitial(0)
-        .addTransition(0, 'a', 1)
-        .addTransition(0, '-', 2)
-        .addTransition(1, '-', 3)
-        .addTransition(1, 'b', 0)
-        .addTransition(2, '-', 3)
+        .addTransition(0, 'e', 1)
+        .addTransition(0, 'e', 2)
+        .addTransition(1, 'a', 1)
+        .addTransition(1, 'b', 3)
+        .addTransition(2, 'd', 3)
         .addTransition(2, 'c', 2)
-        .addTransition(3, '-', 2)
 
     val leftAut = baseMaker()
-      .addTransition(0, 'a', 3)
-      .addTransition(3, 'a', 0)
-      .addTransition(2, 'b', 13)
-      .addTransition(2, 'c', 4)
+      .addStates(Seq(4))
+      .setAccepting(4)
+      .addTransition(0, 'a', 4)
       .getAutomaton()
 
     val rightAut = baseMaker()
-      .addTransition(2, '-', 0)
-      .addTransition(0, '-', 0)
-      .addTransition(0, 'a', 16)
-      .addTransition(2, 'b', 16)
-      .addTransition(3, 'e', 16)
-      .addTransition(4, 'd', 16)
-      .setAccepting(0, 1, 2, 3)
       .getAutomaton()
 
-    val alphabet = "abcde-".toCharArray
+    val alphabet = "abcde".toCharArray
 
     val theory = ParikhTheory(IndexedSeq(leftAut, rightAut))(
       TestUtilities.alphabetCounter(alphabet) _,
@@ -325,18 +316,38 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     SimpleAPI.withProver { p =>
       val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
-      val a +: b +: _ = constants
+      val vars = alphabet.zip(constants).toMap
 
       p addTheory theory
 
       implicit val o = p.order
 
       p addAssertion (theory allowsMonoidValues constants)
-      p addAssertion (a === 2)
-      p addAssertion (b === 0)
+      p scope {
+        p addAssertion (vars('c') === 2)
+        p addAssertion (vars('e') === 0)
 
-      val res = p.???
-      withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Unsat))
+        val res = p.???
+        withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Unsat))
+      }
+
+      p scope {
+        p addAssertion (vars('d') === vars('b'))
+        val res = p.???
+        withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Unsat))
+      }
+
+      p scope {
+        p addAssertion (vars('a') === vars('c'))
+        val res = p.???
+          withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Sat))
+
+        p scope {
+          p addAssertion (vars('a') =/= 0)
+          val res = p.???
+          withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Unsat))
+        }
+      }
 
     }
 
@@ -370,6 +381,48 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
       p addAssertion (theory allowsMonoidValues constants)
       p addAssertion (a =/= 1)
+
+      val res = p.???
+      withClue(s": ${p}")(assert(res == ProverStatus.Unsat))
+
+    }
+
+  }
+
+  test("ostrich bug reconstruction") {
+    import SymbolicLabel.{CharRange, SingleChar}
+
+    val leftAut =
+      AutomatonBuilder()
+        .addStates(0 to 1)
+        .setAccepting(1)
+        .setInitial(0)
+        .addTransition(0, SingleChar('c'), 1)
+        .getAutomaton()
+
+    val rightAut = AutomatonBuilder()
+      .addStates(0 to 2)
+      .setAccepting(0, 1)
+      .setInitial(2)
+      .addTransition(0, SingleChar('c'), 1)
+      .addTransition(1, CharRange(0, 'x'), 0)
+      .addTransition(1, SingleChar('y'), 2)
+      .addTransition(1, CharRange('z', Char.MaxValue), 0)
+      .addTransition(2, CharRange(0, 'w'), 0)
+      .addTransition(2, SingleChar('x'), 1)
+      .addTransition(2, CharRange('y', Char.MaxValue), 0)
+      .getAutomaton()
+
+    val theory = LengthCounting(IndexedSeq(leftAut, rightAut))
+
+    SimpleAPI.withProver { p =>
+      val length = p.createConstantRaw("length")
+
+      p addTheory theory
+
+      implicit val o = p.order
+
+      p addAssertion (theory allowsMonoidValues IndexedSeq(length))
 
       val res = p.???
       withClue(s": ${p}")(assert(res == ProverStatus.Unsat))

@@ -1,6 +1,7 @@
 package uuverifiers.parikh_theory
 
 import org.scalatest.funsuite.AnyFunSuite
+import RegexImplicits._
 
 class TestRegex extends AnyFunSuite with Tracing {
 
@@ -23,6 +24,21 @@ class TestRegex extends AnyFunSuite with Tracing {
     assert(!(wordAutomaton accepts ""))
     assert(!(wordAutomaton accepts "he"))
     assert(!(wordAutomaton accepts "hejh"))
+  }
+
+  test("followedBy") {
+    val aut = Regex.AnyChar.followedBy("h").toAutomaton()
+    assert(aut accepts "ah")
+  }
+
+  test("slightlyComplicated") {
+    val email = Regex.AnyChar.onceOrMore()
+      .followedBy("@")
+      .followedBy(Regex.AnyChar.onceOrMore())
+      .followedBy(".com")
+      .toAutomaton()
+
+    assert(email accepts "hej@bobo.com")
   }
 
 }
