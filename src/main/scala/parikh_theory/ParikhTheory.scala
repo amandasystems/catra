@@ -112,62 +112,63 @@ trait ParikhTheory
    */
   def allowsMonoidValues(
       monoidValues: Seq[Term]
-  )(implicit order: TermOrder): Formula = trace("allowsMonoidValues") {
-    assert(
-      monoidValues.length == this.monoidDimension,
-      s"got ${monoidValues.length} monoid values, monoid dimension is ${monoidDimension}"
-    )
-
-    trace(s"nr of automata: ${auts.size}")("")
-
-    // TODO refactor this into a builder pattern for the exists clause?
-    val varFactory = new FreshVariables(0)
-    val instanceTerm = varFactory.nextVariable()
-
-    val autTransitionTerms
-        : IndexedSeq[IndexedSeq[(Transition, LinearCombination)]] =
-      auts.map(
-        _.transitions.map(t => (t, varFactory.nextVariable())).toIndexedSeq
+  )(implicit order: TermOrder): Formula =
+    trace(s"allowsMonoidValues(${monoidValues})") {
+      assert(
+        monoidValues.length == this.monoidDimension,
+        s"got ${monoidValues.length} monoid values, monoid dimension is ${monoidDimension}"
       )
 
-    // need to prevent variable capture by the quantifiers added below
-    val shiftAwayFromQuantifiers =
-      VariableShiftSubst.upShifter[Term](varFactory.variableCount(), order)
-    val shiftedMonoidValues
-        : Seq[LinearCombination] = (monoidValues map shiftAwayFromQuantifiers) map (l _)
+      trace(s"nr of automata: ${auts.size}")("")
 
-    val clauses =
-      auts.zipWithIndex.flatMap {
-        case (a, i) =>
-          automataClauses(
-            a,
-            instanceTerm,
-            i,
-            autTransitionTerms(i)
-          ) :+ AutomataFlow(a).monoidValuesReachable(
-            shiftedMonoidValues,
-            autTransitionTerms(i),
-            toMonoid
-          )
+      // TODO refactor this into a builder pattern for the exists clause?
+      val varFactory = new FreshVariables(0)
+      val instanceTerm = varFactory.nextVariable()
+
+      val autTransitionTerms
+          : IndexedSeq[IndexedSeq[(Transition, LinearCombination)]] =
+        auts.map(
+          _.transitions.map(t => (t, varFactory.nextVariable())).toIndexedSeq
+        )
+
+      // need to prevent variable capture by the quantifiers added below
+      val shiftAwayFromQuantifiers =
+        VariableShiftSubst.upShifter[Term](varFactory.variableCount(), order)
+      val shiftedMonoidValues
+          : Seq[LinearCombination] = (monoidValues map shiftAwayFromQuantifiers) map (l _)
+
+      val clauses =
+        auts.zipWithIndex.flatMap {
+          case (a, i) =>
+            automataClauses(
+              a,
+              instanceTerm,
+              i,
+              autTransitionTerms(i)
+            ) :+ AutomataFlow(a).monoidValuesReachable(
+              shiftedMonoidValues,
+              autTransitionTerms(i),
+              toMonoid
+            )
+        }
+
+      trace(s"created ${varFactory.variableCount()} terms in")(clauses)
+
+      val thisMonoidMapInstance =
+        monoidMapPredicate(instanceTerm +: shiftedMonoidValues)
+
+      val allEquations = trace("allEquations before simplification") {
+        varFactory.exists(conj(thisMonoidMapInstance +: clauses))
       }
 
-    trace(s"created ${varFactory.variableCount()} terms in")(clauses)
+      val simplifiedEquations =
+        ReduceWithConjunction(Conjunction.TRUE, order)(allEquations)
 
-    val thisMonoidMapInstance =
-      monoidMapPredicate(instanceTerm +: shiftedMonoidValues)
-
-    val allEquations = trace("allEquations before simplification") {
-      varFactory.exists(conj(thisMonoidMapInstance +: clauses))
+      // TODO check if the flow equations have just one solution, in that case just return that.
+      // Use  simplifiedEquations.quans: check if empty, and WHAT MORE???
+      // TODO also add analysis for simple automata, or perhaps do that earlier?
+      simplifiedEquations
     }
-
-    val simplifiedEquations =
-      ReduceWithConjunction(Conjunction.TRUE, order)(allEquations)
-
-    // TODO check if the flow equations have just one solution, in that case just return that.
-    // Use  simplifiedEquations.quans: check if empty, and WHAT MORE???
-    // TODO also add analysis for simple automata, or perhaps do that earlier?
-    simplifiedEquations
-  }
 
   def dumpGraphs() = monoidMapPlugin.dumpGraphs()
 

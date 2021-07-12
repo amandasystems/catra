@@ -340,7 +340,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       p scope {
         p addAssertion (vars('a') === vars('c'))
         val res = p.???
-          withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Sat))
+        withClue(s": ${p.partialModel}")(assert(res == ProverStatus.Sat))
 
         p scope {
           p addAssertion (vars('a') =/= 0)
@@ -389,7 +389,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
   }
 
-  test("ostrich bug reconstruction") {
+  test("ostrich bug reconstruction #1") {
     import SymbolicLabel.{CharRange, SingleChar}
 
     val leftAut =
@@ -423,9 +423,41 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       implicit val o = p.order
 
       p addAssertion (theory allowsMonoidValues IndexedSeq(length))
-
+      p addAssertion length > 1
       val res = p.???
-      withClue(s": ${p}")(assert(res == ProverStatus.Unsat))
+
+      withClue("")(assert(res == ProverStatus.Unsat))
+
+    }
+  }
+
+  test("ostrich bug#2 reconstruction") {
+    import SymbolicLabel.CharRange
+
+    val leftAut = AutomatonBuilder()
+      .addStates(0 to 2)
+      .setAccepting(2)
+      .setInitial(0)
+      .addTransition(0, CharRange(0, 'g'), 0)
+      .addTransition(0, 'h', 1)
+      .addTransition(1, 'i', 2)
+      .addTransition(2, CharRange(0, Char.MaxValue), 2)
+      .getAutomaton()
+
+    val rightAut = Regex("ahia").toAutomaton()
+
+    val theory = LengthCounting(IndexedSeq(leftAut, rightAut))
+
+    SimpleAPI.withProver { p =>
+      val length = p.createConstantRaw("length")
+      p addTheory theory
+      implicit val o = p.order
+
+      p addAssertion (theory allowsMonoidValues IndexedSeq(length))
+      p addAssertion (length > 1)
+      val res = p.???
+
+      withClue(s": ${p}")(assert(res == ProverStatus.Sat))
 
     }
 

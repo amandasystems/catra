@@ -32,7 +32,8 @@ class TestRegex extends AnyFunSuite with Tracing {
   }
 
   test("slightlyComplicated") {
-    val email = Regex.AnyChar.onceOrMore()
+    val email = Regex.AnyChar
+      .onceOrMore()
       .followedBy("@")
       .followedBy(Regex.AnyChar.onceOrMore())
       .followedBy(".com")

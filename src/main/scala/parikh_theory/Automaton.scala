@@ -58,10 +58,13 @@ trait Automaton
   /// Derived methods ///
 
   def toDot() =
-    toDot(labelAnnotator = _.toString(), stateAnnotator = _.toString())
+    toDot(
+      transitionAnnotator = _.label().toString(),
+      stateAnnotator = _.toString()
+    )
 
   def toDot(
-      labelAnnotator: Label => String,
+      transitionAnnotator: Transition => String,
       stateAnnotator: State => String
   ): String = {
 
@@ -77,8 +80,8 @@ trait Automaton
       val quotedState = quote(stateAnnotator(s))
       builder ++= s"${s} [shape=${shape},label=${quotedState}];\n"
       transitionsFrom(s).foreach {
-        case (from, label, to) =>
-          val quotedLabel = quote(labelAnnotator(label))
+        case t @ (from, _, to) =>
+          val quotedLabel = quote(transitionAnnotator(t))
           builder ++= s"${from} -> ${to} [label=${quotedLabel}]\n"
       }
     }
@@ -275,7 +278,7 @@ trait Automaton
   private def transitionsWithOverlappingLabels(
       left: Iterator[(State, SymbolicLabel)],
       right: Iterator[(State, SymbolicLabel)]
-  ): Seq[(SymbolicLabel, State, State)] = {
+  ): Seq[(SymbolicLabel, SymbolicLabel, SymbolicLabel, State, State)] = {
     // NOTE: by sorting both lists by alternating lower and upper bounds, the
     // search can be accelerated by skipping ranges that can never overlap.
     // NOTE: we need to revisit the lists so we store the results of the
@@ -288,7 +291,13 @@ trait Automaton
         rightValues
           .map {
             case (rightState, rightLabel) =>
-              (leftLabel.intersect(rightLabel), leftState, rightState)
+              (
+                leftLabel intersect rightLabel,
+                leftLabel,
+                rightLabel,
+                leftState,
+                rightState
+              )
           }
           .filter(!_._1.isEmpty())
     }
@@ -353,25 +362,29 @@ trait Automaton
         ).toSeq
       )
       overlappingTransitions.foreach {
-        case (label, leftTo, rightTo) =>
+        case (newLabel, leftOldLabel, rightOldLabel, leftTo, rightTo) =>
           val toProductState =
             if (!(knownProductStates contains ((leftTo, rightTo))))
               newStateDiscovered(leftTo, rightTo)
             else knownProductStates((leftTo, rightTo))
 
-          productBuilder.addTransition(fromProductState, label, toProductState)
+          productBuilder.addTransition(
+            fromProductState,
+            newLabel,
+            toProductState
+          )
 
           val productTransition = trace("productTransition")(
-            (fromProductState, label, toProductState)
+            (fromProductState, newLabel, toProductState)
           )
 
           termToProductEdges.getOrElseUpdate(
-            (TermOrigin.Left, (thisSourceState, label, leftTo)),
+            (TermOrigin.Left, (thisSourceState, leftOldLabel, leftTo)),
             ArrayBuffer()
           ) += productTransition
 
           termToProductEdges.getOrElseUpdate(
-            (TermOrigin.Right, (thatSourceState, label, rightTo)),
+            (TermOrigin.Right, (thatSourceState, rightOldLabel, rightTo)),
             ArrayBuffer()
           ) += productTransition
 
@@ -510,13 +523,16 @@ sealed abstract class SymbolicLabel
 }
 
 object SymbolicLabel {
+  // TODO do something better; only escape characters that are unprintable
+  private def formatChar(c: Char): String =
+    if (c.isLetterOrDigit) c.toString() else c.toInt.toString()
   def apply() = NoChar
   def apply(c: Char) = SingleChar(c)
   def apply(fromInclusive: Char, toInclusive: Char) =
-    toInclusive - fromInclusive match {
-      case diff if diff < 0 => NoChar
-      case diff if diff > 0 => CharRange(fromInclusive, toInclusive)
-      case _                => SingleChar(fromInclusive)
+    (fromInclusive, toInclusive) match {
+      case _ if fromInclusive > toInclusive  => NoChar
+      case _ if fromInclusive == toInclusive => SingleChar(fromInclusive)
+      case _                                 => CharRange(fromInclusive, toInclusive)
     }
 
   final case object NoChar extends SymbolicLabel {
@@ -557,18 +573,23 @@ object SymbolicLabel {
     override def isEmpty() = false
     override def upperBoundExclusive() = Some((c + 1).toChar)
     override def iterate() = Iterator(c)
-    override def toString() = c.toString()
+    override def toString() = formatChar(c)
 
   }
 
   final case class CharRange(from: Char, toInclusive: Char)
       extends SymbolicLabel {
     override def subtract(that: SymbolicLabel) = ???
-    override def intersect(that: SymbolicLabel) = that.intersect(this)
+    override def intersect(that: SymbolicLabel): SymbolicLabel = that match {
+      case CharRange(thatFrom, thatToInclusive) =>
+        SymbolicLabel(thatFrom max from, thatToInclusive max toInclusive)
+      case _ => that.intersect(this)
+    }
     override def isEmpty() = false
     override def upperBoundExclusive() = Some((toInclusive + 1).toChar)
     override def iterate() = (from to toInclusive).iterator
-    override def toString() = s"[${from}, ${toInclusive}]"
+    override def toString() =
+      s"[${formatChar(from)}, ${formatChar(toInclusive)}]"
   }
 
   final case object AnyChar extends SymbolicLabel {
@@ -601,8 +622,8 @@ sealed case class AnnotatedProduct(
 ) extends GraphvizDumper {
 
   // TODO reverse lookup and show the label origins!
-  private def labelAnnotation(productLabel: AutomataTypes.Label) =
-    productLabel.toString()
+  private def labelAnnotation(t: AutomataTypes.Transition) =
+    t.label().toString()
 
   private def stateAnnotation(productState: AutomataTypes.State) = {
     val (leftState, rightState) = originOf(productState)
@@ -611,12 +632,23 @@ sealed case class AnnotatedProduct(
 
   def toDot() =
     product.toDot(
-      labelAnnotator = labelAnnotation,
+      transitionAnnotator = labelAnnotation,
       stateAnnotator = stateAnnotation
     )
 
   def originOf(productState: AutomataTypes.State) =
     productStateToTermStates(productState)
+
+  def originOfTransition(t: AutomataTypes.Transition) = {
+    val (leftOrigin, rightOrigin) = termTransitionToProductTransitions
+      .filter(_._2 contains t)
+      .keys
+      .toSet
+      .toSeq
+      .partition(_._1 == TermOrigin.Left)
+
+    (leftOrigin(0)._2, rightOrigin(0)._2)
+  }
 
   def resultsOf(
       leftOrRight: TermOrigin.TermOrigin

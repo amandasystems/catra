@@ -4,12 +4,14 @@ import ap.terfor.preds.Atom
 import ap.terfor.Term
 import ap.proof.goal.Goal
 import ap.terfor.linearcombination.LinearCombination
+import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.TerForConvenience._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.SortedSet
 import ap.terfor.conjunctions.Conjunction
 import collection.mutable.HashMap
 import AutomataTypes._
+import EdgeWrapper._
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -291,22 +293,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           val transitionToTerm = context.autTransitionTerm(autNr)(_)
           val originTerm =
             if (autNr == leftNr) TermOrigin.Left else TermOrigin.Right
-          val productTermsFrom = annotatedProduct.resultsOf(originTerm)(_)
+
+          def productTermsSum(t: Transition) = trace(s"${autNr}::${t}Σ") {
+            annotatedProduct.resultsOf(originTerm)(t) match {
+              case Some(productTransitions) =>
+                lcSum(productTransitions.map(productTransitionToLc))
+              case None => l(ZERO)
+            }
+          }
 
           materialisedAutomata(autNr).transitions.map(
             termTransition =>
               trace(s"a${autNr} bridge: ${termTransition}")(
-                transitionToTerm(termTransition) === productTermsFrom(
-                  termTransition
-                ).map(
-                    productEdges =>
-                      lcSum(productEdges.map(productTransitionToLc))
-                  )
-                  .getOrElse(
-                    trace(
-                      s"a${autNr}::${termTransition} not in product ${productNr}"
-                    )(l(ZERO))
-                  )
+                trace("LHS")(transitionToTerm(termTransition)) === trace("RHS")(
+                  productTermsSum(termTransition)
+                )
               )
           )
         }
@@ -314,14 +315,49 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-    // FIXME maybe simplify?
+    new GraphvizDumper {
+      private def markTransitionTerms(t: Transition) = {
+        s"${t.label()} ${annotatedProduct.originOfTransition(t)}: ${transitionToTerm(t)}"
+      }
+
+      private def markProductStates(productState: State) = {
+        val (leftState, rightState) = annotatedProduct.originOf(productState)
+        s"${productState} = ${leftState}/${rightState}"
+      }
+
+      def toDot() = annotatedProduct.product.toDot(
+        transitionAnnotator = markTransitionTerms(_),
+        stateAnnotator = markProductStates(_)
+      )
+
+    }.dumpDotFile(s"monoidMapTheory-${this.theoryInstance
+      .hashCode()}-aut-${leftNr}x${rightNr}-is-${productNr}.dot")
+
+    context
+      .filteredAutomaton(leftNr)
+      .dumpDotFile(
+        s"monoidMapTheory-${this.theoryInstance
+          .hashCode()}-goal-${context.goal.age}-aut-${leftNr}.dot"
+      )
+    context
+      .filteredAutomaton(rightNr)
+      .dumpDotFile(
+        s"monoidMapTheory-${this.theoryInstance
+          .hashCode()}-goal-${context.goal.age}-aut-${rightNr}.dot"
+      )
+
+    val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
+
+    // TODO why does it crash when I use thse?
+    val simplifiedEquations =
+      ReduceWithConjunction(Conjunction.TRUE, context.order)(equations)
 
     Seq(
       Plugin.AddAxiom(
         context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
           rightNr
         ) :+ context.monoidMapPredicateAtom,
-        varFactory.exists(conj(newClauses ++ bridgingClauses)),
+        simplifiedEquations,
         theoryInstance
       )
     )
@@ -453,6 +489,25 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         if (splittingActions.isEmpty) Seq() else Seq(splittingActions.head)
 
       }
+    }
+  }
+
+  def dumpGraphs(context: Context) = {
+    materialisedAutomata.zipWithIndex.foreach {
+      case (a, i) =>
+        new GraphvizDumper {
+          private def markTransitionTerms(t: Transition) = {
+            s"${t.label()}: ${context.autTransitionTerm(i)(t)}"
+          }
+
+          def toDot() = a.toDot(
+            transitionAnnotator = markTransitionTerms(_),
+            stateAnnotator = _.toString()
+          )
+
+        }.dumpDotFile(
+          s"monoidMapTheory-${this.theoryInstance.hashCode()}-aut-${i}.dot"
+        )
     }
   }
 

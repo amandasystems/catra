@@ -62,6 +62,10 @@ trait Tracing {
   protected def logInfo(message: String) =
     if (dynTraceEnable) System.err.println(message)
 
+  @elidable(FINE)
+  protected def logException(e: Throwable) =
+    e.printStackTrace()
+
   protected def trace[T](message: String)(something: T): T = {
     logInfo(s"trace::${message}(${something})")
 
@@ -88,17 +92,21 @@ trait NoAxiomGeneration {
  procedure handling the first instance of that predicate under the assumption
  that instances will be handled and eliminated one by one.
  */
-trait PredicateHandlingProcedure extends TheoryProcedure {
+trait PredicateHandlingProcedure extends TheoryProcedure with Tracing {
   val procedurePredicate: IExpression.Predicate
   def handlePredicateInstance(goal: Goal)(
       predicateAtom: Atom
   ): Seq[Plugin.Action]
 
   override def handleGoal(goal: Goal): Seq[Plugin.Action] =
-    goal.facts.predConj
-      .positiveLitsWithPred(procedurePredicate)
-      .take(1)
-      .flatMap(handlePredicateInstance(goal))
+    try {
+      goal.facts.predConj
+        .positiveLitsWithPred(procedurePredicate)
+        .take(1) // Why can't we do all of them!?
+        .flatMap(handlePredicateInstance(goal))
+    } catch {
+      case e: Throwable => logException(e); throw e
+    }
 }
 
 /**

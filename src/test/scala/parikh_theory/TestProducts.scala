@@ -151,16 +151,17 @@ class TestProducts extends AnyFunSuite with Tracing {
     assert(prod.product.accepts("c"))
   }
 
-
   test("email and xss works") {
-    val email = Regex.AnyChar.onceOrMore()
+    val email = Regex.AnyChar
+      .onceOrMore()
       .followedBy("@")
       .followedBy(Regex.AnyChar.onceOrMore())
       .followedBy(".")
       .followedBy(Regex.AnyChar.onceOrMore())
       .toAutomaton()
 
-    val xss = Regex.AnyChar.onceOrMore()
+    val xss = Regex.AnyChar
+      .onceOrMore()
       .followedBy("<script>")
       .followedBy(Regex.AnyChar.onceOrMore())
       .toAutomaton()
@@ -172,6 +173,28 @@ class TestProducts extends AnyFunSuite with Tracing {
     assert(!prod.product.accepts("<script>"))
     assert(prod.product.accepts("s<script>@foo.com"))
     assert(prod.product.accepts("foo@<script>.com"))
+  }
+
+  test("ostrich bug#2 reconstruction") {
+    val leftAut = AutomatonBuilder()
+      .addStates(0 to 2)
+      .setAccepting(2)
+      .setInitial(0)
+      .addTransition(0, SymbolicLabel(0, 'g'), 0)
+      .addTransition(0, 'h', 1)
+      .addTransition(1, 'i', 2)
+      .addTransition(2, SymbolicLabel(0, Char.MaxValue), 2)
+      .getAutomaton()
+
+    val rightAut = Regex("ahia").toAutomaton()
+
+    leftAut.dumpDotFile()
+    rightAut.dumpDotFile()
+
+    val prod = leftAut.productWithSources(rightAut)
+    prod.dumpDotFile()
+
+    assert(!prod.product.isEmpty())
   }
 
 }
