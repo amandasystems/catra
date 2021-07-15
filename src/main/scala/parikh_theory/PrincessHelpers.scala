@@ -85,7 +85,9 @@ trait Complete extends Theory {
 }
 
 trait NoAxiomGeneration {
-  def generateAxioms(_goal: Goal) = None
+  /* We have to pretend to be using the argument to shut up the compiler
+     warnings, and this is a cheap way of doing so. */
+  def generateAxioms(goal: Goal) = goal match { case _ => None }
 }
 
 /** Provide a function to handle a predicate, automatically become a theory

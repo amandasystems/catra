@@ -4,7 +4,7 @@ import ap.terfor.preds.Atom
 import ap.terfor.Term
 import ap.proof.goal.Goal
 import ap.terfor.linearcombination.LinearCombination
-import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
+import ap.terfor.conjunctions.ReduceWithConjunction
 import ap.terfor.TerForConvenience._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.SortedSet
@@ -12,6 +12,8 @@ import ap.terfor.conjunctions.Conjunction
 import collection.mutable.HashMap
 import AutomataTypes._
 import EdgeWrapper._
+import scala.annotation.elidable
+import scala.annotation.elidable.FINE
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -128,6 +130,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         materialiseProduct(left, right, context)
       case fst +: snd +: _ =>
         materialiseProduct(fst, snd, context)
+      case _ =>
+        throw new IllegalArgumentException(
+          knownConnectedAutomataNrs mkString ","
+        )
     }
   }
 
@@ -236,7 +242,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       .map(Plugin.RemoveFacts(_))
 
     // TODO figure out how to generate a nice blocking clause
-    val productClauses = if (product.isEmpty()) {
+    val productClauses = if (product.isEmpty) {
       Seq(
         Plugin.AddAxiom(
           context.autTransitionMasks(leftId) ++ context.autTransitionMasks(
@@ -315,36 +321,41 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-    new GraphvizDumper {
-      private def markTransitionTerms(t: Transition) = {
-        s"${t.label()} ${annotatedProduct.originOfTransition(t)}: ${transitionToTerm(t)}"
-      }
+    @elidable(FINE)
+    def dumpProductGraphs() = {
+      new GraphvizDumper {
+        private def markTransitionTerms(t: Transition) = {
+          s"${t.label()} ${annotatedProduct.originOfTransition(t)}: ${transitionToTerm(t)}"
+        }
 
-      private def markProductStates(productState: State) = {
-        val (leftState, rightState) = annotatedProduct.originOf(productState)
-        s"${productState} = ${leftState}/${rightState}"
-      }
+        private def markProductStates(productState: State) = {
+          val (leftState, rightState) = annotatedProduct.originOf(productState)
+          s"${productState} = ${leftState}/${rightState}"
+        }
 
-      def toDot() = annotatedProduct.product.toDot(
-        transitionAnnotator = markTransitionTerms(_),
-        stateAnnotator = markProductStates(_)
-      )
+        def toDot() = annotatedProduct.product.toDot(
+          transitionAnnotator = markTransitionTerms(_),
+          stateAnnotator = markProductStates(_)
+        )
 
-    }.dumpDotFile(s"monoidMapTheory-${this.theoryInstance
-      .hashCode()}-aut-${leftNr}x${rightNr}-is-${productNr}.dot")
+      }.dumpDotFile(s"monoidMapTheory-${this.theoryInstance
+        .hashCode()}-aut-${leftNr}x${rightNr}-is-${productNr}.dot")
 
-    context
-      .filteredAutomaton(leftNr)
-      .dumpDotFile(
-        s"monoidMapTheory-${this.theoryInstance
-          .hashCode()}-goal-${context.goal.age}-aut-${leftNr}.dot"
-      )
-    context
-      .filteredAutomaton(rightNr)
-      .dumpDotFile(
-        s"monoidMapTheory-${this.theoryInstance
-          .hashCode()}-goal-${context.goal.age}-aut-${rightNr}.dot"
-      )
+      context
+        .filteredAutomaton(leftNr)
+        .dumpDotFile(
+          s"monoidMapTheory-${this.theoryInstance
+            .hashCode()}-goal-${context.goal.age}-aut-${leftNr}.dot"
+        )
+      context
+        .filteredAutomaton(rightNr)
+        .dumpDotFile(
+          s"monoidMapTheory-${this.theoryInstance
+            .hashCode()}-goal-${context.goal.age}-aut-${rightNr}.dot"
+        )
+    }
+
+    dumpProductGraphs()
 
     val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
 
@@ -444,6 +455,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val monoidValues = monoidMapPredicateAtom.tail
   }
 
+
   class TransitionSplitter() extends PredicateHandlingProcedure with Tracing {
 
     private val transitionPredicate = theoryInstance.transitionMaskPredicate
@@ -461,34 +473,22 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           .flatMap { aNr =>
             val automaton = materialisedAutomata(aNr)
             automaton
-              .startBFSFrom(automaton.initialState)
-              .flatMap(automaton.transitionsFrom)
+              .transitionsBreadthFirst()
               .filter(
                 context.transitionStatus(aNr)(_).isUnknown
               )
               .map(context.autTransitionTerm(aNr))
-
           }
-
       }
 
-      trace("unknownActions") {
-        def transitionToSplit(transitionTerm: LinearCombination) =
-          Plugin.AxiomSplit(
-            Seq(),
-            Seq(transitionTerm <= 0, transitionTerm > 0)
-              .map(eq => (conj(eq), Seq())),
-            theoryInstance
-          )
+      def transitionToSplit(tTerm: LinearCombination) =
+        Plugin.AxiomSplit(
+          Seq(),
+          Seq(tTerm <= 0, tTerm > 0).map(ineq => (conj(ineq), Seq())),
+          theoryInstance
+        )
 
-        val splittingActions = trace("splittingActions") {
-          unknownTransitions
-            .map(transitionToSplit(_))
-        }
-
-        if (splittingActions.isEmpty) Seq() else Seq(splittingActions.head)
-
-      }
+      unknownTransitions.map(transitionToSplit(_)).take(1).toSeq
     }
   }
 

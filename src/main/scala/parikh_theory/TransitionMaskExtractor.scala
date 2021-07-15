@@ -26,8 +26,8 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
    * Take a TransitionMask predicate, and extract its indices.
    */
   def transitionMaskToTuple(atom: Atom) = {
-    val instanceIdTerm :+ productOffset :+ tIdxTerm :+ tVal = atom.toSeq
-    // TODO in the future, we will need all indices!
+    val instanceIdTerm :+ productOffset :+ tIdxTerm :+ tVal =
+      atom.toSeq: @unchecked
     (
       instanceIdTerm(0),
       productOffset.constant.intValue,

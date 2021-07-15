@@ -12,6 +12,7 @@ import scala.collection.mutable.{
 }
 import scala.language.implicitConversions
 import scala.math.min
+import scala.collection.mutable.ArrayDeque
 
 trait Graphable[Node, Label] {
   def transitionsFrom(node: Node): Seq[(Node, Label, Node)]
@@ -43,13 +44,11 @@ trait Graphable[Node, Label] {
     override def next() = {
       val thisNode = toVisit.dequeue()
 
-      for (edge @ (_, label, neighbour) <- graph
-             .transitionsFrom(thisNode)
-             .filter(walkWhen)
-           if nodeUnseen contains neighbour) {
-        nodeUnseen -= neighbour
-        toVisit enqueue neighbour
-        connectingEdge(neighbour) = Some(edge)
+      for (edge <- graph.transitionsFrom(thisNode).filter(walkWhen)
+           if nodeUnseen contains edge.to()) {
+        nodeUnseen -= edge.to()
+        toVisit enqueue edge.to()
+        connectingEdge(edge.to()) = Some(edge)
       }
 
       thisNode
@@ -208,14 +207,12 @@ trait Graphable[Node, Label] {
         blocked: MSet[Node],
         noCircuit: MHashMap[Node, MSet[Node]]
     ) = {
-      var stack = List(thisNode)
+      val stack = ArrayDeque(thisNode)
       while (!stack.isEmpty) {
-        val (node +: rest) = stack
-        stack = rest
-
+        val node = stack.removeHead()
         if (blocked contains node) {
           blocked -= node
-          stack = stack ++ noCircuit.getOrElse(node, Set())
+          stack :++ noCircuit.getOrElse(node, Set())
           noCircuit -= node
         }
       }
@@ -229,11 +226,10 @@ trait Graphable[Node, Label] {
         cycles += Set(from)
     }
 
-    var sccs: List[Set[Node]] = stronglyConnectedComponents().toList
+    val sccs = ArrayDeque[Set[Node]]() :++ stronglyConnectedComponents()
 
     while (!sccs.isEmpty) {
-      val (component +: rest) = sccs
-      sccs = rest
+      val component = sccs.removeHead()
       val componentGraph = subgraph(component.toSet)
 
       val startNode = component.head
@@ -273,8 +269,8 @@ trait Graphable[Node, Label] {
         val (thisNode, neighbours) = stack.head
         var thisNodeNextOnStack = true
         if (!neighbours.isEmpty) {
-          val (nextNode +: remainingNeighbours) = neighbours
-          stack(0) = (thisNode, remainingNeighbours)
+          val nextNode = neighbours.head
+          stack(0) = (thisNode, neighbours.tail)
 
           if (nextNode == startNode) {
             closed ++= path
@@ -296,7 +292,7 @@ trait Graphable[Node, Label] {
              .stronglyConnectedComponents()
            if component.size > 1) {
 
-        sccs = component +: sccs
+        sccs prepend component
       }
 
     }

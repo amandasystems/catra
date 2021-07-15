@@ -17,7 +17,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
     val ONE = LinearCombination(IdealInt.ONE)
     val ZERO = LinearCombination(IdealInt.ZERO)
 
-    val (_, SingleChar(label), _) = t
+    val (_, SingleChar(label), _) = t: @unchecked
     alphabet.map(c => if (c == label) ONE else ZERO).toSeq
   }
 
@@ -52,14 +52,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def bothImplementationsHaveSameImage(aut: Automaton) = {
-    // WARNING: only works for characters (but that's all we have right now)
-    val alphabet = trace("alphabet")(
-      aut.transitions
-        .map { case (_, SingleChar(c), _) => c }
-        .toSet
-        .toIndexedSeq
-        .sorted
-    )
+    val alphabet = aut.alphabet().toSeq
 
     val pt = ParikhTheory(IndexedSeq[Automaton](aut))(
       TestUtilities.alphabetCounter(alphabet) _,

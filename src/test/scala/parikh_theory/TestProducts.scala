@@ -187,14 +187,9 @@ class TestProducts extends AnyFunSuite with Tracing {
       .getAutomaton()
 
     val rightAut = Regex("ahia").toAutomaton()
-
-    leftAut.dumpDotFile()
-    rightAut.dumpDotFile()
-
     val prod = leftAut.productWithSources(rightAut)
-    prod.dumpDotFile()
-
-    assert(!prod.product.isEmpty())
+    val actualProduct = prod.product
+    assert(!actualProduct.isEmpty)
   }
 
 }

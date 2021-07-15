@@ -1,6 +1,6 @@
 package uuverifiers.parikh_theory
 
-import collection.mutable.{HashMap, ArrayBuffer}
+import collection.mutable.{HashMap, ArrayBuffer, Queue}
 import scala.language.implicitConversions
 import EdgeWrapper._
 
@@ -56,6 +56,24 @@ trait Automaton
   def isAccept(s: State): Boolean
 
   /// Derived methods ///
+
+  def alphabet(): Iterator[Char] = {
+    val min = transitions.flatMap(t => t.label() match {
+      case SymbolicLabel.AnyChar => Seq(Char.MinValue)
+      case SymbolicLabel.NoChar => Seq()
+      case SymbolicLabel.SingleChar(c) => Seq(c)
+      case SymbolicLabel.CharRange(low, _) => Seq(low)
+    }).min
+
+    val max = transitions.flatMap(t => t.label() match {
+      case SymbolicLabel.AnyChar => Seq(Char.MinValue)
+      case SymbolicLabel.NoChar => Seq()
+      case SymbolicLabel.SingleChar(c) => Seq(c)
+      case SymbolicLabel.CharRange(low, _) => Seq(low)
+    }).max
+
+    (min to max).iterator
+  }
 
   def toDot() =
     toDot(
@@ -189,18 +207,11 @@ trait Automaton
     ???
   }
 
-  // FIXME this is really ugly! Maybe we should intead just return a range
-  // between the lowest and tallest character? Or just...remove the method.
-  def alphabet(): Iterator[Char] =
-    transitions.flatMap(_.label().iterate().toSet).toSet.toSeq.sorted.iterator
-
   /**
    *  True if the automaton accepts no string, false otherwise.
    */
-  def isEmpty(): Boolean = {
-
+  lazy val isEmpty: Boolean = {
     val acceptingStates = states.filter(isAccept).toSet
-
     acceptingStates.isEmpty || {
       val unreachableStates = this.unreachableFrom(initialState)
       (acceptingStates diff unreachableStates).isEmpty
@@ -228,7 +239,7 @@ trait Automaton
         acceptingStates.foreach(filteredBuilder setAccepting _)
     }
 
-    if (filteredBuilder contains initialState)
+    if (filteredBuilder containsState initialState)
       filteredBuilder.setInitial(initialState).getAutomaton()
     else REJECT_ALL
   }
@@ -324,13 +335,13 @@ trait Automaton
     val productBuilder = AutomatonBuilder()
     // this, that to product
     val knownProductStates = HashMap[(State, State), State]()
-    var statesToVisit = List[(State, State)]()
+    val statesToVisit = Queue[(State, State)]()
 
     def newStateDiscovered(left: State, right: State) =
       trace("newStateDiscovered") {
         val productState = productBuilder.getNewState()
         knownProductStates += ((left, right) -> productState)
-        statesToVisit = (left, right) +: statesToVisit
+        statesToVisit enqueue ((left, right))
         productBuilder.addStates(Seq(productState))
 
         if ((this isAccept left) && (that isAccept right)) {
@@ -346,8 +357,7 @@ trait Automaton
     productBuilder.setInitial(initial)
 
     while (!statesToVisit.isEmpty) {
-      val (nextTarget +: rest) = statesToVisit
-      statesToVisit = rest
+      val nextTarget = statesToVisit.dequeue()
 
       val (thisSourceState, thatSourceState) = nextTarget
       val fromProductState = knownProductStates(
@@ -410,9 +420,9 @@ class AutomatonBuilder extends Tracing {
   private var _initial: Option[State] = None
   private var _accepting = Set[State]()
 
-  def contains(s: State) = _autStates contains s
+  def containsState(s: State) = _autStates contains s
 
-  def contains(t: Transition) = _transitions contains t
+  def containsTransition(t: Transition) = _transitions contains t
 
   def addStates(statesToAdd: Iterable[State]): AutomatonBuilder = {
     _autStates ++= statesToAdd
@@ -498,7 +508,7 @@ object REJECT_ALL extends Automaton {
   override def isAccept(_s: AutomataTypes.State) = false
   override def outgoingTransitions(_from: AutomataTypes.State) = Iterator.empty
   override def states = Seq.empty
-  override def isEmpty() = true
+  override lazy val isEmpty = true
 }
 
 sealed abstract class SymbolicLabel
