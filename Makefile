@@ -1,5 +1,6 @@
+DEPS=$(latexmk -deps main.tex)
 dotfiles = $(wildcard *.dot)
-all_automata = $(patsubst %.dot,%.png,${dotfiles})
+all_automata = $(patsubst %.dot,%.pdf,${dotfiles})
 
 
 
@@ -14,15 +15,22 @@ montage.png: ${all_automata}
 								${all_automata} $@
 
 
-%.png: %.dot
-	dot -Tpng -o $@ $<
+%.pdf: %.dot
+	dot -Tpdf -o $@ $<
 
 # -Earrowsize=0.5 -Efontsize=9.0
 
 clean:
 	${RM} ${all_automata}
+	latexmk -c
 
 veryclean:
 	${MAKE} clean
 	${RM} *.dot
 	${RM} montage.png
+	${RM} trace.tex
+	${RM} trace-*
+
+
+trace.pdf: trace.tex ${DEPS} ${all_automata}
+	latexmk -pdf $< 

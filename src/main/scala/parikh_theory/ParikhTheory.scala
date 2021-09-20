@@ -54,6 +54,10 @@ trait ParikhTheory
     **/
   val monoidDimension: Int
 
+  /** The prefix to use when dumping dot files for automata, etc.
+   **/
+  lazy val filePrefix: String = s"ParikhTheory_${this.hashCode}"
+
   // Lazy because early init would set the monoidDimension to 0
   // MonoidMap(s, m1, ..., mn): Instance s maps to monoid values m1...mn
   lazy val monoidMapPredicate =
@@ -70,7 +74,13 @@ trait ParikhTheory
   override lazy val predicates =
     Seq(monoidMapPredicate, transitionMaskPredicate, connectedPredicate)
 
-  lazy private val monoidMapPlugin = new MonoidMapPlugin(this)
+  lazy val monoidMapPlugin = new MonoidMapPlugin(this)
+
+  /**
+   * A hook to do something whenever an action is taken. Typically used for
+   * logging and debugging. The default is to do...nothing.
+   */
+     def actionHook(context: monoidMapPlugin.Context, action: String, actions: Seq[Plugin.Action]): Unit = {}
 
   def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
@@ -112,7 +122,7 @@ trait ParikhTheory
    */
   def allowsMonoidValues(
       monoidValues: Seq[Term]
-  )(implicit order: TermOrder): Formula =
+  )(implicit order: TermOrder): Conjunction =
     trace(s"allowsMonoidValues(${monoidValues})") {
       assert(
         monoidValues.length == this.monoidDimension,

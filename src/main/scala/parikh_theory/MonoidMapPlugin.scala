@@ -97,6 +97,17 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
         stats.report()
 
+        // This cast is necessary to make the code compile because Scala cannot
+        // figure out that these two instances of associated types are the same at
+        // the current stage. In general, these problems are a sign that the
+        // architecture is not fully sound, and that we should perhaps not use
+        // callbacks (or associated types) this way. Please send help.
+        theoryInstance.actionHook(
+          context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
+          "Subsume",
+          Seq()
+        )
+
         removeAssociatedPredicates :+ removeThisPredicateInstance
       } else {
         Seq()
@@ -105,6 +116,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
   private def handleSplitting(context: Context) = trace("handleSplitting") {
     stats.increment("handleSplitting")
+
     val splitter = new TransitionSplitter()
 
     goalState(context.goal) match {
@@ -166,16 +178,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       filteredGraph.unreachableFrom(aut.initialState)
     }
 
-    // val possiblyUnreachableEdges = trace("possiblyUnreachableEdges") {
-    //   filteredGraph
-    //     .unreachableFrom(
-    //       aut.initialState,
-    //       t => termMeansPossiblyAbsent(context.goal, transitionToTerm(t))
-    //     )
-    //     .flatMap(filteredGraph.transitionsFrom(_))
-    // }
-    // FIXME why doesn't this work for subsumption? possiblyUnreachableEdges
-
     val unknownEdges = trace("unknownEdges")(
       context.autTransitionTermsUnordered(autId) filter (
           t => transitionStatusFromTerm(context.goal, t).isUnknown
@@ -187,8 +189,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       .isEmpty
 
     val subsumeActions =
-      if (allTransitionsAssigned) Seq(Plugin.RemoveFacts(connectedInstance))
-      else Seq()
+      if (allTransitionsAssigned) {
+        // This cast is necessary to make the code compile because Scala cannot
+        // figure out that these two instances of associated types are the same at
+        // the current stage. In general, these problems are a sign that the
+        // architecture is not fully sound, and that we should perhaps not use
+        // callbacks (or associated types) this way. Please send help.
+        theoryInstance.actionHook(
+          context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
+          "SubsumeConnected",
+          Seq()
+        )
+
+        Seq(Plugin.RemoveFacts(connectedInstance))
+
+      } else Seq()
 
     // constrain any terms associated with a transition from a
     // *known* unreachable state to be = 0 ("not used").
@@ -202,14 +217,27 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         )
 
       if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
-      else
-        Seq(
+      else {
+
+        val actions = Seq(
           Plugin.AddAxiom(
             myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
             unreachableConstraints,
             theoryInstance
           )
         )
+        // This cast is necessary to make the code compile because Scala cannot
+        // figure out that these two instances of associated types are the same at
+        // the current stage. In general, these problems are a sign that the
+        // architecture is not fully sound, and that we should perhaps not use
+        // callbacks (or associated types) this way. Please send help.
+        theoryInstance.actionHook(
+          context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
+          "Propagate-Connected",
+          actions
+        )
+        actions
+      }
     }
 
     unreachableActions ++ subsumeActions
@@ -222,6 +250,17 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ) = {
     stats.increment("materialiseProduct")
+
+    // This cast is necessary to make the code compile because Scala cannot
+    // figure out that these two instances of associated types are the same at
+    // the current stage. In general, these problems are a sign that the
+    // architecture is not fully sound, and that we should perhaps not use
+    // callbacks (or associated types) this way. Please send help.
+    theoryInstance.actionHook(
+      context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
+      "MaterialiseProduct",
+      Seq()
+    )
 
     val left = context.filteredAutomaton(leftId)
     val right = context.filteredAutomaton(rightId)
@@ -338,20 +377,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           stateAnnotator = markProductStates(_)
         )
 
-      }.dumpDotFile(s"monoidMapTheory-${this.theoryInstance
-        .hashCode()}-aut-${leftNr}x${rightNr}-is-${productNr}.dot")
+      }.dumpDotFile(
+        s"${this.theoryInstance.filePrefix}-aut-${leftNr}x${rightNr}-is-${productNr}.dot"
+      )
 
       context
         .filteredAutomaton(leftNr)
         .dumpDotFile(
-          s"monoidMapTheory-${this.theoryInstance
-            .hashCode()}-goal-${context.goal.age}-aut-${leftNr}.dot"
+          s"${this.theoryInstance.filePrefix}-goal-${context.goal.age}-aut-${leftNr}.dot"
         )
       context
         .filteredAutomaton(rightNr)
         .dumpDotFile(
-          s"monoidMapTheory-${this.theoryInstance
-            .hashCode()}-goal-${context.goal.age}-aut-${rightNr}.dot"
+          s"${this.theoryInstance.filePrefix}-goal-${context.goal.age}-aut-${rightNr}.dot"
         )
     }
 
@@ -455,7 +493,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val monoidValues = monoidMapPredicateAtom.tail
   }
 
-
   class TransitionSplitter() extends PredicateHandlingProcedure with Tracing {
 
     private val transitionPredicate = theoryInstance.transitionMaskPredicate
@@ -469,10 +506,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       implicit val order = goal.order
 
       val unknownTransitions = trace("unknownTransitions") {
-        context.automataWithConnectedPredicate.unsorted
+        context.automataWithConnectedPredicate.unsorted.toSeq
           .flatMap { aNr =>
-            val automaton = materialisedAutomata(aNr)
-            automaton
+            materialisedAutomata(aNr)
               .transitionsBreadthFirst()
               .filter(
                 context.transitionStatus(aNr)(_).isUnknown
@@ -488,12 +524,28 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           theoryInstance
         )
 
-      unknownTransitions.map(transitionToSplit(_)).take(1).toSeq
+      val split = unknownTransitions.map(transitionToSplit(_)).take(1).toSeq
+
+      // This cast is necessary to make the code compile because Scala cannot
+      // figure out that these two instances of associated types are the same at
+      // the current stage. In general, these problems are a sign that the
+      // architecture is not fully sound, and that we should perhaps not use
+      // callbacks (or associated types) this way. Please send help.
+      theoryInstance.actionHook(
+        context.asInstanceOf[theoryInstance.monoidMapPlugin.Context],
+        "Split",
+        split
+      )
+
+      split
     }
   }
 
-  def dumpGraphs(context: Context) = {
-    materialisedAutomata.zipWithIndex.foreach {
+  def dumpGraphs(
+      context: Context,
+      fileNamePrefix: String = s"${this.theoryInstance.filePrefix}"
+  ) = {
+    materialisedAutomata.zipWithIndex.map {
       case (a, i) =>
         new GraphvizDumper {
           private def markTransitionTerms(t: Transition) = {
@@ -505,10 +557,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             stateAnnotator = _.toString()
           )
 
-        }.dumpDotFile(
-          s"monoidMapTheory-${this.theoryInstance.hashCode()}-aut-${i}.dot"
-        )
-    }
+        }.dumpDotFile(fileNamePrefix + s"-aut-${i}.dot")
+        fileNamePrefix + s"-aut-${i}.dot"
+    }.toSeq
   }
 
   def dumpGraphs() = {
