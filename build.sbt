@@ -9,7 +9,7 @@ ThisBuild / scalacOptions ++= Seq(
     //"-Xfatal-warnings",
     "-unchecked",
     "-Xlint",
-    "-Xelide-below", "INFO",
+    // "-Xelide-below", "INFO",
     "-feature",
     "-opt-inline-from:**",
     "-opt:l:method",
@@ -27,6 +27,7 @@ ThisBuild / resolvers += ("uuverifiers" at "http://logicrunch.research.it.uu.se/
   .withAllowInsecureProtocol(true)
 
 ThisBuild / libraryDependencies += princess
+ThisBuild / libraryDependencies += fastparse
 
 lazy val root = (project in file("."))
   .settings(

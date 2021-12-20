@@ -463,4 +463,54 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
   }
 
+  test("Register automaton with two orthogonal registers works") {
+    import SymbolicLabel.SingleChar
+
+    val leftAut = AutomatonBuilder()
+      .addStates(Seq(0, 1))
+      .setAccepting(1)
+      .setInitial(0)
+      .addTransition(0, 'a', 1)
+      .getAutomaton()
+
+    val rightAut = AutomatonBuilder()
+      .addStates(Seq(2, 3))
+      .setAccepting(3)
+      .setInitial(2)
+      .addTransition(2, 'a', 3)
+      .getAutomaton()
+
+    val counters = Seq("x", "y")
+    val counterToIncrement =
+      Map[AutomataTypes.Transition, Map[String, Int]](
+        (0, SingleChar('a'), 1) -> Map("x" -> 1),
+        (2, SingleChar('a'), 3) -> Map("y" -> 1)
+      )
+
+    val theory = new RegisterCounting(
+      counters,
+      IndexedSeq(leftAut, rightAut),
+      counterToIncrement
+    )
+
+    SimpleAPI.withProver { p =>
+      val constants = counters.map(p.createConstantRaw(_)).toIndexedSeq
+      p addTheory theory
+      implicit val o = p.order
+
+      p addAssertion (theory allowsMonoidValues constants)
+      val res = p.???
+
+      withClue(s": ${p}")(assert(res == ProverStatus.Sat))
+
+    }
+  }
+
+  test("Generated length regression") {
+    val a = Regex("").toAutomaton()
+    val lt = LengthCounting(IndexedSeq(a))
+
+    TestUtilities.onlyReturnsLength(lt, 0)
+  }
+
 }

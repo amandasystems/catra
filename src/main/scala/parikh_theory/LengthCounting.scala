@@ -6,7 +6,7 @@ import AutomataTypes.Transition
 
 trait LengthCounting extends ParikhTheory {
   override def toMonoid(_t: Transition) =
-    Seq(LinearCombination(IdealInt.ONE))
+    Seq(Some(LinearCombination(IdealInt.ONE)))
 
   override val monoidDimension = 1
 }

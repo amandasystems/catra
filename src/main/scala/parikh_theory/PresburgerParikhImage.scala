@@ -13,7 +13,7 @@ class PresburgerParikhImage(private val aut: Automaton) extends Tracing {
 
   def parikhImage(
       charCounts: Seq[Term],
-      toCharIncrement: Transition => Seq[LinearCombination]
+      toCharIncrement: Transition => Seq[Option[LinearCombination]]
   )(implicit order: TermOrder): Formula = trace("PresburgerParikhImage") {
     lazy val preStates = {
       val preStates =
@@ -22,7 +22,8 @@ class PresburgerParikhImage(private val aut: Automaton) extends Tracing {
         )
 
       for (transition @ (from, label, to) <- aut.transitions) {
-        val vector = toCharIncrement(transition).toList
+        // TODO implement the full register automaton calculus here!
+        val vector = toCharIncrement(transition).map(_.get).toList
         preStates(state2Index(to)) += ((state2Index(from), vector))
       }
 

@@ -454,11 +454,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     def transitionStatus(autId: Int)(transition: Transition) =
       transitionStatusFromTerm(goal, l(autTransitionTerm(autId)(transition)))
 
-    private def getOrUpdateTransitionTermMap(autId: Int) = {
+    def getOrUpdateTransitionTermMap(autId: Int) = {
       val autMap: Map[Transition, Term] =
         transitionTermCache.getOrElseUpdate(
           autId,
-          trace(s"getOrUpdateTransitionTermMap::compute(${autId})")(
+          trace(s"getOrUpdateTransitionTermMap::materialise(aut=${autId})")(
             materialisedAutomata(autId).transitions
               .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
               .toMap
@@ -475,10 +475,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     // FIXME memoise
     def autTransitionMasks(autId: Int) =
-      transitionMasks
-        .filter(automataNr(_) == autId)
-        .sortBy(transitionNr)
-        .toIndexedSeq
+      trace(s"autTransitionMasks(aut=$autId)") {
+        transitionMasks
+          .filter(automataNr(_) == autId)
+          .sortBy(transitionNr)
+          .toIndexedSeq
+      }
 
     // FIXME excellent candidate for memoisation!
     def filteredAutomaton(autId: Int) =
@@ -548,12 +550,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     materialisedAutomata.zipWithIndex.map {
       case (a, i) =>
         new GraphvizDumper {
+          // NOTE: this is a brittle mapping since it will break silently if the
+          // order in ParikhTheory.automataClauses changes...
+          val transitionToIdx = a.transitions.zipWithIndex.toMap
+
           private def markTransitionTerms(t: Transition) = {
-            s"${t.label()}: ${context.autTransitionTerm(i)(t)}"
+            // This is necessary because we might be called after all
+            // TransitionMask predicates are eliminated, which means that we do
+            // not have any information about the labelling.
+            val transitionTermMap = context.getOrUpdateTransitionTermMap(i)
+            val term = transitionTermMap.get(t).getOrElse("No term")
+            s"${t.label()}: ${transitionToIdx(t)}/$term"
           }
 
           def toDot() = a.toDot(
-            transitionAnnotator = markTransitionTerms(_),
+            transitionAnnotator = markTransitionTerms _,
             stateAnnotator = _.toString()
           )
 

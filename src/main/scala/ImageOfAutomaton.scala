@@ -30,6 +30,7 @@ object Tex {
   // TODO this is a stub, use the builder pattern for generating a LaTeX
   // document.
   def documentBuilder() = { object DocumentBuilder {} }
+  def monospace(s: String) = { s"\\texttt{$s}" }
 }
 
 object ImageOfAutomaton extends App {
@@ -170,6 +171,8 @@ object ImageOfAutomaton extends App {
       s"${predicateToTex(predicate)}(${argStr})"
     }
     case IEquation(left, right) => s"${termToTex(left)} = ${termToTex(right)}"
+    case IBoolLit(true)         => "\\top"
+    case IBoolLit(false)        => "\\bot"
     case _ => {
       println("Missing case")
       println(f.getClass)
@@ -187,22 +190,30 @@ object ImageOfAutomaton extends App {
     }
   }
 
-  def readAutomata(filename: String): Automaton = {
+  def readAutomata(filename: String): IndexedSeq[Automaton] = {
     import SymbolicLabelConversions._
 
     // DODGE: just return a canned automaton
-    AutomatonBuilder()
-      .addStates(0 to 3)
-      .setAccepting(3)
-      .setInitial(0)
-      .addTransition(0, 'a', 1)
-      .addTransition(0, 'b', 2)
-      .addTransition(1, 'c', 3)
-      .addTransition(1, 'd', 0)
-      .addTransition(2, 'e', 3)
-      .addTransition(2, 'f', 2)
-      .addTransition(3, 'g', 2)
-      .getAutomaton()
+    IndexedSeq(
+      AutomatonBuilder()
+        .addStates(0 to 2)
+        .setAccepting(2)
+        .setInitial(0)
+        .addTransition(0, 'a', 1)
+        .addTransition(0, 'd', 2)
+        .addTransition(1, 'b', 1)
+        .addTransition(1, 'c', 2)
+        .getAutomaton(),
+      AutomatonBuilder()
+        .addStates(0 to 2)
+        .setAccepting(2)
+        .setInitial(0)
+        .addTransition(0, 'a', 1)
+        .addTransition(0, 'c', 2)
+        .addTransition(1, 'd', 1)
+        .addTransition(1, 'c', 2)
+        .getAutomaton()
+    )
   }
 
   def dumpTexSnippet(tex: String) = {
@@ -258,7 +269,7 @@ object ImageOfAutomaton extends App {
     writeFiles = false
     SimpleAPI.withProver { p =>
       p addTheory theory
-      val constants = p.createConstantsRaw("y", 0 until theory.monoidDimension)
+      val constants = alphabet.map(c => p.createConstantRaw(c.toString())).toSeq
       implicit val o = p.order
       val isInImage = theory allowsMonoidValues constants
       val parikhImage = p.scope {
@@ -289,16 +300,26 @@ object ImageOfAutomaton extends App {
     dumpTexSnippet("\\include{preamble}\n")
     dumpTexSnippet("\\begin{document}\n")
 
-    aut.dumpDotFile("trace-0.dot")
-    dumpTexSnippet(
-      automataFigure("trace-0.dot", caption = "The automata before processing")
-    )
+    for ((aut, i) <- automata.zipWithIndex) {
+      aut.dumpDotFile(s"trace-$i.dot")
+      dumpTexSnippet(
+        automataFigure(
+          s"trace-$i.dot",
+          caption = s"Automata $i before processing."
+        )
+      )
+    }
 
     SimpleAPI.withProver { p =>
       p addTheory theory
-      val constants = p.createConstantsRaw("y", 0 until theory.monoidDimension)
-
+      val constants = alphabet.map(c => p.createConstantRaw(c.toString())).toSeq
       implicit val o = p.order
+
+      for ((constant, letter) <- constants zip alphabet) {
+        val monospaceLetter = Tex.monospace(letter.toString())
+        val symbol = Tex.inlineMath(termToTex(constant))
+        dumpTexSnippet(s"$monospaceLetter = $symbol\n")
+      }
 
       val isInImage = theory allowsMonoidValues constants
       p.addAssertion(isInImage)
@@ -307,25 +328,26 @@ object ImageOfAutomaton extends App {
       dumpEquation(p.asIFormula(isInImage))
 
       println(p.checkSat(true))
-      val partialSolution = p.partialModelAsFormula
+    // FIXME only dump if we HAVE a model!
+    // val partialSolution = p.partialModelAsFormula
 
-      dumpTexSnippet(Tex.section("Final assignment"))
-      dumpEquation(partialSolution)
+    // dumpTexSnippet(Tex.section("Final assignment"))
+    // dumpEquation(partialSolution)
     }
     dumpTexSnippet("\\end{document}\n")
     texWriter.close()
     "make trace.pdf" !
   }
 
-  val aut = readAutomata("myFile.txt")
-  val alphabet = aut.alphabet().toSeq
+  val automata = readAutomata("myFile.txt")
+  val alphabet = automata(0).alphabet().toSeq
   var writeFiles = true
 
   // DODGE: we should have multiple automata
   val theory = new ParikhTheory {
     var nrInvocations = 0
     override lazy val filePrefix: String = "log"
-    override val auts = IndexedSeq(aut)
+    override val auts = automata
 
     override def toMonoid(t: Transition) = {
       import ap.terfor.linearcombination.LinearCombination
@@ -335,7 +357,7 @@ object ImageOfAutomaton extends App {
 
       // TODO implement this for real symbolic labels!
       val (_, SingleChar(label), _) = t: @unchecked
-      alphabet.map(c => if (c == label) ONE else ZERO).toSeq
+      alphabet.map(c => if (c == label) Some(ONE) else Some(ZERO)).toSeq
 
     }
 
@@ -358,7 +380,7 @@ object ImageOfAutomaton extends App {
         this.monoidMapPlugin.dumpGraphs(context, s"trace-${nrInvocations}")
       dumpTexSnippet(
         dumpedFiles
-          .map(dot => automataFigure(dot))
+          .map(dot => automataFigure(dot, caption = dot))
           .mkString("\n") + "\n"
       )
       SimpleAPI.withProver { p =>

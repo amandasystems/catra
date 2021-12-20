@@ -18,7 +18,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
     val ZERO = LinearCombination(IdealInt.ZERO)
 
     val (_, SingleChar(label), _) = t: @unchecked
-    alphabet.map(c => if (c == label) ONE else ZERO).toSeq
+    alphabet.map(c => if (c == label) Some(ONE) else Some(ZERO)).toSeq
   }
 
   private def assertConstraints(

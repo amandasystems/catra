@@ -35,18 +35,18 @@ trait ParikhTheory
   val auts: IndexedSeq[Automaton]
 
   /**
-   * This method provides the "modulo" aspect by performing the translation
-   * from a transition (usually really the transition's label) to a commutative
+   * This method provides the "modulo" aspect by performing the translation from
+   * a transition (usually really the transition's label) to a commutative
    * monoid (M).
    *
    * Must always return something of length monoidDimension.
    *
-   * For example length-counting would map all transitions representing a
-   * single character (typically all transitions) to 1.
-   * NOTE: takes Any argument because Scala's type system isn't sophisticated
-   * enough, or I am not sophisticated enough for it. 1-2 of those.
+   * For example length-counting would map all transitions representing a single
+   * character (typically all transitions) to 1. Note: we use Option here to
+   * differentiate "no opinion" from increments. In this sense, a toMonoid(t)(i) =
+   * None means "taking transition t does not alter the value of variable i."
     **/
-  def toMonoid(a: Transition): Seq[LinearCombination]
+  def toMonoid(a: Transition): Seq[Option[LinearCombination]]
 
   /**
    *  This value represents the dimensionality of the sequence returned by
@@ -80,7 +80,11 @@ trait ParikhTheory
    * A hook to do something whenever an action is taken. Typically used for
    * logging and debugging. The default is to do...nothing.
    */
-     def actionHook(context: monoidMapPlugin.Context, action: String, actions: Seq[Plugin.Action]): Unit = {}
+  def actionHook(
+      context: monoidMapPlugin.Context,
+      action: String,
+      actions: Seq[Plugin.Action]
+  ): Unit = {}
 
   def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
@@ -187,7 +191,7 @@ trait ParikhTheory
 // TODO turn this into a theory builder?
 object ParikhTheory {
   def apply(_auts: IndexedSeq[Automaton])(
-      _toMonoid: Transition => Seq[LinearCombination],
+      _toMonoid: Transition => Seq[Option[LinearCombination]],
       _monoidDimension: Int
   ) = {
     new ParikhTheory {

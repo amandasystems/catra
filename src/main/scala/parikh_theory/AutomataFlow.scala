@@ -70,25 +70,44 @@ class AutomataFlow(private val aut: Automaton)(
   def monoidValuesReachable(
       monoidVars: Seq[LinearCombination],
       transitionAndVar: IndexedSeq[(Transition, LinearCombination)],
-      toMonoid: (Transition) => Seq[LinearCombination]
+      toMonoid: (Transition) => Seq[Option[LinearCombination]]
   ): Formula = {
     trace("Monoid equations") {
+
+      if (transitionAndVar.isEmpty) {
+        // Edge case: we have no transitions and so the monoid can only have zero values.
+        return conj(monoidVars.map(_ === 0))
+      }
+
       // This is just a starting vector of the same dimension as the monoid
-      // values.
-      val startVectorSum: Seq[LinearCombination] =
-        Seq.fill(monoidVars.length)(LinearCombination(IdealInt.ZERO))
+      // values. We start with no constraints, represented by None.
+      val startMonoidIncrements: Seq[Option[LinearCombination]] =
+        Seq.fill(monoidVars.length)(None)
+
+      // The right-hand side of the equation of the individual monoid values, or
+      // None if there isn't one.
+      val monoidIncrements = transitionAndVar.foldLeft(startMonoidIncrements) {
+        case (rhsEs, (t, tVar)) =>
+          toMonoid(t).zip(rhsEs).map {
+            case (None, counterRhs) => counterRhs
+            case (Some(counterOffset), Some(counterRhs)) =>
+              Some(counterRhs + tVar * counterOffset)
+            case (Some(counterOffset), None) => Some(tVar * counterOffset)
+          }
+      }
+
+      val transitionsConsistentWithMonoidValues =
+        monoidIncrements.zip(monoidVars).map {
+          case (Some(counterIncrements), counterVar) =>
+            counterVar === counterIncrements
+          // This nonsense is here to make it very clear that we are imposing no
+          // constraints in this case. These no-op clauses impose an unnecessary
+          // overhead, but it is probably not a problem.
+          case (None, _) => Conjunction.TRUE
+        }
+
       conj(
-        conj(
-          transitionAndVar
-            .foldLeft(startVectorSum) {
-              case (sums, (t, tVar)) =>
-                toMonoid(t)
-                  .zip(sums)
-                  .map { case (monoidVal, sum) => sum + tVar * monoidVal }
-            }
-            .zip(monoidVars)
-            .map { case (rVar, termSum) => rVar === termSum }
-        ),
+        conj(transitionsConsistentWithMonoidValues),
         allNonnegative(monoidVars)
       )
     }
