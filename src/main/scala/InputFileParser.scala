@@ -112,7 +112,7 @@ sealed case class Instance(
     constraints: Seq[Formula]
 )
 
-object InputFileParser {
+object InputFileParser extends Tracing {
   import fastparse._
   import JavaWhitespace._
 
@@ -148,27 +148,30 @@ object InputFileParser {
     (builder.getAutomaton(), counterOffsets)
   }
 
-  def documentToInstance(fragments: Seq[DocumentFragment]): Instance = {
-    var groupedAutomata: Seq[Seq[Automaton]] = Seq()
-    var transitionToOffsets: TransitionToCounterOffsets = Map()
-    var counters = List[Counter]()
-    var constraints = List[Formula]()
+  def documentToInstance(fragments: Seq[DocumentFragment]): Instance =
+    trace("documentToInstance") {
+      var groupedAutomata: Seq[Seq[Automaton]] = Seq()
+      var transitionToOffsets: TransitionToCounterOffsets = Map()
+      var counters = List[Counter]()
+      var constraints = List[Formula]()
 
-    for (fragment <- fragments) {
-      fragment match {
-        // FIXME warn about empty groups!
-        case AutomatonGroup(a) if a.isEmpty => ()
-        case AutomatonGroup(group) => {
-          groupedAutomata =
-            groupedAutomata.appended(group.map(_.automaton).toSeq)
-          group.foreach{a => a.offsets.foreach(transitionToOffsets += _)}
+      for (fragment <- fragments) {
+        fragment match {
+          // FIXME warn about empty groups!
+          case AutomatonGroup(a) if a.isEmpty => ()
+          case AutomatonGroup(group) => {
+            groupedAutomata =
+              groupedAutomata.appended(group.map(_.automaton).toSeq)
+            group.foreach { a =>
+              a.offsets.foreach(transitionToOffsets += _)
+            }
+          }
+          case cs: CounterDefinition => counters ++= cs.counters
+          case f: Formula            => constraints ::= f
         }
-        case cs: CounterDefinition => counters ++= cs.counters
-        case f: Formula            => constraints ::= f
       }
+      Instance(counters, groupedAutomata, transitionToOffsets, constraints)
     }
-    Instance(counters, groupedAutomata, transitionToOffsets, constraints)
-  }
 
   def digit[_ : P] = P(CharIn("0-9"))
   def asciiLetter[_ : P] = CharIn("A-Z") | CharIn("a-z")

@@ -58,19 +58,29 @@ trait Automaton
   /// Derived methods ///
 
   def alphabet(): Iterator[Char] = {
-    val min = transitions.flatMap(t => t.label() match {
-      case SymbolicLabel.AnyChar => Seq(Char.MinValue)
-      case SymbolicLabel.NoChar => Seq()
-      case SymbolicLabel.SingleChar(c) => Seq(c)
-      case SymbolicLabel.CharRange(low, _) => Seq(low)
-    }).min
+    val min = transitions
+      .flatMap(
+        t =>
+          t.label() match {
+            case SymbolicLabel.AnyChar           => Seq(Char.MinValue)
+            case SymbolicLabel.NoChar            => Seq()
+            case SymbolicLabel.SingleChar(c)     => Seq(c)
+            case SymbolicLabel.CharRange(low, _) => Seq(low)
+          }
+      )
+      .min
 
-    val max = transitions.flatMap(t => t.label() match {
-      case SymbolicLabel.AnyChar => Seq(Char.MinValue)
-      case SymbolicLabel.NoChar => Seq()
-      case SymbolicLabel.SingleChar(c) => Seq(c)
-      case SymbolicLabel.CharRange(low, _) => Seq(low)
-    }).max
+    val max = transitions
+      .flatMap(
+        t =>
+          t.label() match {
+            case SymbolicLabel.AnyChar           => Seq(Char.MinValue)
+            case SymbolicLabel.NoChar            => Seq()
+            case SymbolicLabel.SingleChar(c)     => Seq(c)
+            case SymbolicLabel.CharRange(low, _) => Seq(low)
+          }
+      )
+      .max
 
     (min to max).iterator
   }
@@ -303,7 +313,9 @@ trait Automaton
           .map {
             case (rightState, rightLabel) =>
               (
-                leftLabel intersect rightLabel,
+                trace(s"${leftLabel} INTERSECT ${rightLabel}")(
+                  leftLabel intersect rightLabel
+                ),
                 leftLabel,
                 rightLabel,
                 leftState,
@@ -588,13 +600,17 @@ object SymbolicLabel {
   }
 
   final case class CharRange(from: Char, toInclusive: Char)
-      extends SymbolicLabel {
+      extends SymbolicLabel
+      with Tracing {
     override def subtract(that: SymbolicLabel) = ???
-    override def intersect(that: SymbolicLabel): SymbolicLabel = that match {
-      case CharRange(thatFrom, thatToInclusive) =>
-        SymbolicLabel(thatFrom max from, thatToInclusive max toInclusive)
-      case _ => that.intersect(this)
-    }
+    override def intersect(that: SymbolicLabel): SymbolicLabel =
+      trace(s"${this} INTERSECTS ${that}") {
+        that match {
+          case CharRange(thatFrom, thatToInclusive) =>
+            SymbolicLabel(thatFrom max from, thatToInclusive min toInclusive)
+          case _ => that.intersect(this)
+        }
+      }
     override def isEmpty() = false
     override def upperBoundExclusive() = Some((toInclusive + 1).toChar)
     override def iterate() = (from to toInclusive).iterator
