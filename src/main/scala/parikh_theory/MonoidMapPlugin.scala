@@ -34,7 +34,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     transitionStatusFromTerm,
     termMeansDefinitelyAbsent,
     goalAssociatedPredicateInstances,
-    automataNr,
+    transitionMaskAutomataNr,
     transitionNr,
     transitionTerm,
     connectedAutId
@@ -277,7 +277,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val removeTransitionMasks =
       context.transitionMasks.map(Plugin.RemoveFacts(_))
     val removeConnectedPredicates = context.connectedInstances
-      .filter(m => automataNr(m) == leftId || automataNr(m) == rightId)
+      .filter(m => connectedAutId(m) == leftId || connectedAutId(m) == rightId)
       .map(Plugin.RemoveFacts(_))
 
     // TODO figure out how to generate a nice blocking clause
@@ -446,7 +446,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     lazy val activeAutomata = trace("activeAutomata") {
       SortedSet(
         transitionMasks
-          .map(automataNr): _*
+          .map(transitionMaskAutomataNr): _*
       )
     }
 
@@ -477,7 +477,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     def autTransitionMasks(autId: Int) =
       trace(s"autTransitionMasks(aut=$autId)") {
         transitionMasks
-          .filter(automataNr(_) == autId)
+          .filter(transitionMaskAutomataNr(_) == autId)
           .sortBy(transitionNr)
           .toIndexedSeq
       }

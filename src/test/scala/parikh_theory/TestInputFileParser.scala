@@ -19,7 +19,7 @@ class TestInputFileParser extends AnyFunSuite {
   }
 
   test("parse a constraint with and") {
-    tryParse("constraint -2x = z ∧ y > 3;")
+    tryParse("constraint -2x = z && y > 3;")
   }
 
   test("parse a constraint with negated atom") {
@@ -69,4 +69,12 @@ class TestInputFileParser extends AnyFunSuite {
     tryParse("constraint y = z + -x + -17r;")
   }
 
+  test("parse constraint with parenthesis") {
+    tryParse("constraint (y = z);")
+  }
+
+  test("parse constraint with three AND") {
+    tryParse("constraint all_7_0_len = aut_len_cnt_30 && all_7_0_len = aut_len_cnt_29 && all_7_0_len = aut_len_cnt_28;")
+  }
+  
 }

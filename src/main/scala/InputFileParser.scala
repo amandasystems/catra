@@ -25,9 +25,11 @@ sealed case class Atom(
     val right = rhs.toPrincess(counterConstants)
 
     inequality match {
-      case LessThan    => left < right
-      case GreaterThan => left > right
-      case Equals      => left === right
+      case LessThan           => left < right
+      case GreaterThan        => left > right
+      case Equals             => left === right
+      case GreaterThanOrEqual => left >= right
+      case LessThanOrEqual    => left <= right
     }
   }
 }
@@ -51,12 +53,14 @@ sealed trait Inequality
 case object LessThan extends Inequality
 case object GreaterThan extends Inequality
 case object Equals extends Inequality
+case object GreaterThanOrEqual extends Inequality
+case object LessThanOrEqual extends Inequality
 
 sealed trait Formula extends DocumentFragment {
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
 }
 
-sealed case class And(left: Atom, right: Atom) extends Formula {
+sealed case class And(left: Formula, right: Formula) extends Formula {
 
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
@@ -64,7 +68,7 @@ sealed case class And(left: Atom, right: Atom) extends Formula {
     left.toPrincess(counterConstants) &&& right.toPrincess(counterConstants)
 
 }
-sealed case class Or(left: Atom, right: Atom) extends Formula {
+sealed case class Or(left: Formula, right: Formula) extends Formula {
 
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
@@ -112,6 +116,7 @@ sealed case class Instance(
     constraints: Seq[Formula]
 )
 
+// TODO parentheses
 object InputFileParser extends Tracing {
   import fastparse._
   import JavaWhitespace._
@@ -148,6 +153,8 @@ object InputFileParser extends Tracing {
     (builder.getAutomaton(), counterOffsets)
   }
 
+  // TODO ensure register offsets are on disjoint transitions
+  // TODO ensure register offsets only increment declared registers
   def documentToInstance(fragments: Seq[DocumentFragment]): Instance =
     trace("documentToInstance") {
       var groupedAutomata: Seq[Seq[Automaton]] = Seq()
@@ -174,7 +181,7 @@ object InputFileParser extends Tracing {
     }
 
   def digit[_ : P] = P(CharIn("0-9"))
-  def asciiLetter[_ : P] = CharIn("A-Z") | CharIn("a-z")
+  def asciiLetter[_ : P] = CharIn("A-Z") | CharIn("a-z") | "_"
 
   def counterType[_ : P] = P("int").!
 
@@ -188,6 +195,8 @@ object InputFileParser extends Tracing {
   def inequalitySymbol[_ : P]: P[Inequality] =
     P(
       "=".!.map(_ => Equals)
+        | ">=".!.map(_ => GreaterThanOrEqual)
+        | ">=".!.map(_ => LessThanOrEqual)
         | ">".!.map(_ => GreaterThan)
         | "<".!.map(_ => LessThan)
     )
@@ -216,17 +225,20 @@ object InputFileParser extends Tracing {
     case (Some(_), atom) => atom.negated()
   }
 
+  def parenOrAtom[_ : P]: P[Atom] = P("(" ~ parenOrAtom ~ ")" | atomOrNotAtom)
+
+  // TODO the parenthesis handling here is not elegant
   def formula[_ : P]: P[Formula] =
     P(
-      (atomOrNotAtom ~ "∧" ~ atomOrNotAtom)
+      (parenOrAtom ~ ("&&" ~/ formula))
         .map {
           case (left, right) => And(left, right)
         }
-        | (atomOrNotAtom ~ "∨" ~ atomOrNotAtom)
+        | (parenOrAtom ~ ("||" ~/ formula))
           .map {
             case (left, right) => Or(left, right)
           }
-        | atomOrNotAtom
+        | parenOrAtom
     )
 
   def sequenceOfIdentifiers[_ : P]: P[Seq[String]] =
@@ -269,13 +281,13 @@ object InputFileParser extends Tracing {
           Transition(from, to, label, increments.getOrElse(Map()).toMap)
       }
 
-  def constraintDefinition[_ : P]: P[Formula] = P("constraint" ~ formula)
+  def constraintDefinition[_ : P]: P[Formula] = P("constraint" ~/ formula)
   def automatonBody[_ : P]: P[(Automaton, TransitionToCounterOffsets)] =
     P("{" ~ (init | accepting | transition).rep ~ "}")
       .map(automatonFromFragments(_))
 
   def automatonDefinition[_ : P]: P[NamedCounterAutomaton] =
-    P("automaton" ~ identifier ~ automatonBody).map {
+    P("automaton" ~/ identifier ~ automatonBody).map {
       case (name, (a, offsets)) => NamedCounterAutomaton(name, a, offsets)
     }
 
@@ -287,7 +299,7 @@ object InputFileParser extends Tracing {
     P(asciiLetter.rep(1) ~ (digit | asciiLetter | "_").rep(0)).!
   def counterDefinition[_ : P]: P[CounterDefinition] =
     P(
-      "counter" ~ counterType ~ identifier.rep(sep = ",", min = 1)
+      "counter" ~/ counterType ~ identifier.rep(sep = ",", min = 1)
     ).map {
       case (_, counters) => {
         // TODO handle types when we have them.
@@ -296,7 +308,7 @@ object InputFileParser extends Tracing {
     }
 
   def productDefinition[_ : P]: P[AutomatonGroup] = {
-    P("intersect" ~ "{" ~ (automatonDefinition ~ ";").rep() ~ "}")
+    P("synchronised" ~/ "{" ~ (automatonDefinition ~ ";").rep() ~ "}")
       .map(AutomatonGroup(_))
   }
 

@@ -58,6 +58,8 @@ trait Tracing {
     .getOrElse("OSTRICH_TRACE", "FALSE")
     .toUpperCase() == "TRUE"
 
+  lazy private val context = this.getClass.getName
+
   @elidable(FINE)
   protected def logInfo(message: String) =
     if (dynTraceEnable) System.err.println(message)
@@ -66,8 +68,8 @@ trait Tracing {
   protected def logException(e: Throwable) =
     e.printStackTrace()
 
-  protected def trace[T](message: String)(something: T): T = {
-    logInfo(s"trace::${message}(${something})")
+  protected def trace[T](message: String = "")(something: T): T = {
+    logInfo(s"trace::${context}::${message}(${something})")
 
     something
   }

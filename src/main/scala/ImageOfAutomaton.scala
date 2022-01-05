@@ -33,7 +33,7 @@ object Tex {
   def monospace(s: String) = { s"\\texttt{$s}" }
 }
 
-object ImageOfAutomaton extends App {
+object ImageOfAutomaton  {
 
   import java.io._
 

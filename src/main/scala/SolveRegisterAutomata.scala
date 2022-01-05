@@ -1,10 +1,10 @@
 package uuverifiers.parikh_theory
 import ap.SimpleAPI
+import scala.util.{Success, Failure, Try}
 
-object SolveRegisterAutomata extends App {
+object SolveRegisterAutomata extends App with Tracing {
   import fastparse.Parsed.{Failure, Success}
   // TODO mode: get the image as a presburger formula
-  // TODO ensure register offsets are on disjoint transitions
 
   def solveSatisfy(instance: Instance) = {
 
@@ -27,9 +27,9 @@ object SolveRegisterAutomata extends App {
       implicit val o = p.order
 
       for (constraint <- instance.constraints) {
-        println(constraint)
-        println(constraint.toPrincess (counterToSolverConstant))
-        p.addAssertion(constraint toPrincess counterToSolverConstant)
+        p.addAssertion(
+          trace("add constraint")(constraint toPrincess counterToSolverConstant)
+        )
       }
 
       for (theory <- theories) {
@@ -63,16 +63,26 @@ object SolveRegisterAutomata extends App {
   // https://stackoverflow.com/questions/2315912/best-way-to-parse-command-line-parameters
   import scala.io.Source
 
-  val result = InputFileParser.parse(Source.fromFile("input").mkString(""))
+  val arguments = CommandLineOptions.parse(args).get
 
-  // TODO some sort of monadised failure management here?
-  result match {
-    case Success(instance, _) => {
-      solveSatisfy(instance)
+  for (fileName <- arguments.inputFiles) {
+    val fileContents = Source.fromFile(fileName).mkString("")
+    println(fileName)
+    val parseStart = System.nanoTime()
+    val parsed = InputFileParser.parse(fileContents)
+    val parseTime = (System.nanoTime() - parseStart).toDouble / 1_000_000_000
+    val runStart = System.nanoTime()
+    parsed match {
+      case Success(instance, _) => {
+        solveSatisfy(instance)
+      }
+      case Failure(expected, _, extra) => {
+        println(expected)
+        println(extra.trace().longMsg)
+      }
     }
-    case Failure(expected, _, extra) => {
-      println(expected)
-      println(extra.trace().longMsg)
-    }
+    val runtime = (System.nanoTime() - runStart).toDouble / 1_000_000_000
+    println(s"==== run: ${runtime}s parse: ${parseTime}s ====")
+
   }
 }

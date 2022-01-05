@@ -12,9 +12,9 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
   // FIXME make this a nice wrapper class instead
   def instanceTerm(transitionMask: Atom) =
     transitionMaskToTuple(transitionMask)._1
-  // TODO merge this with connectedAutId and make it polymorphic in type
-  def automataNr(transitionMask: Atom) =
+  def transitionMaskAutomataNr(transitionMask: Atom) = {
     transitionMaskToTuple(transitionMask)._2
+  }
   def transitionNr(transitionMask: Atom) =
     transitionMaskToTuple(transitionMask)._3
   def transitionTerm(transitionMask: Atom) =
@@ -26,6 +26,7 @@ class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
    * Take a TransitionMask predicate, and extract its indices.
    */
   def transitionMaskToTuple(atom: Atom) = {
+    assert(atom.pred == transitionMaskPredicate)
     val instanceIdTerm :+ productOffset :+ tIdxTerm :+ tVal =
       atom.toSeq: @unchecked
     (
