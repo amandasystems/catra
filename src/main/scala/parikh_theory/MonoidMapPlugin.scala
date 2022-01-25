@@ -59,28 +59,39 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   override def handlePredicateInstance(
       goal: Goal
   )(predicateAtom: Atom): Seq[Plugin.Action] =
-    trace("MonoidMapPlugin") {
+    trace("handlePredicateInstance") {
       val context = Context(goal, predicateAtom)
       stats.increment("handlePredicateInstance")
 
+      implicit class RichSeq[T](left: Seq[T]) {
+        def ifNoActions(right: => Seq[T]): Seq[T] =
+          if (left.nonEmpty) {
+            left
+          } else {
+            right
+          }
+      }
+
       // FIXME!!!
-      val materialiseActions =
+      val materialiseActions: Seq[Plugin.Action] =
         if (context.activeAutomata.size > 1)
           handleMaterialise(context)
         else Seq()
 
-      handleMonoidMapSubsumption(context) ++ context.connectedInstances.flatMap(
-        handleConnectedInstance(_, context)
-      ) ++ materialiseActions ++ handleSplitting(context)
+      materialiseActions
+        .ifNoActions(handleMonoidMapSubsumption(context))
+        .ifNoActions(handleConnectedInstances(context))
+        .ifNoActions(handleSplitting(context))
     }
 
-  private def handleMonoidMapSubsumption(context: Context) =
+  private def handleMonoidMapSubsumption(
+      context: Context
+  ) =
     trace("handleMonoidMapSubsumption") {
       import context.{
         activeAutomata,
         connectedInstances,
-        monoidMapPredicateAtom,
-        transitionMasks
+        monoidMapPredicateAtom
       }
 
       val productIsDone =
@@ -90,8 +101,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         trace("isSubsumed")(productIsDone && allAutomataGuaranteedConnected)
 
       if (isSubsumed) {
-        val removeAssociatedPredicates =
-          transitionMasks.map(Plugin.RemoveFacts(_))
+        // shouldn't all transition masks be gone by the subsumption of all conected?
+        // val removeAssociatedPredicates =
+        //   transitionMasks.map(Plugin.RemoveFacts(_))
+        val removeAssociatedPredicates = Seq()
         val removeThisPredicateInstance =
           Plugin.RemoveFacts(monoidMapPredicateAtom)
 
@@ -149,100 +162,113 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
   }
 
+  private def handleConnectedInstances(context: Context) =
+    context.connectedInstances
+      .flatMap(handleConnectedInstance(_, context))
+
   // TODO make this a PredicateHandlingProcedure?
   private def handleConnectedInstance(
       connectedInstance: Atom,
       context: Context
-  ) = trace(s"handleConnectedInstance ${connectedInstance}") {
+  ): Seq[Plugin.Action] =
+    trace(s"handleConnectedInstance ${connectedInstance}") {
 
-    val autId = connectedAutId(connectedInstance)
-    val myTransitionMasks = context.autTransitionMasks(autId)
-    val aut = materialisedAutomata(autId)
-    val transitionToTerm = context.autTransitionTerm(autId)(_)
+      val autId = connectedAutId(connectedInstance)
+      val myTransitionMasks = context.autTransitionMasks(autId)
 
-    implicit val order = context.goal.order
-
-    // TODO compute a cut to find which dead transitions contribute to the conflict!
-
-    val deadTransitions = trace("deadTransitions") {
-      aut.transitions
-        .filter(
-          t => termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
-        )
-        .toSet
-    }
-
-    val filteredGraph = aut.dropEdges(deadTransitions)
-
-    val knownUnreachableStates = trace("knownUnreachableStates") {
-      filteredGraph.unreachableFrom(aut.initialState)
-    }
-
-    val unknownEdges = trace("unknownEdges")(
-      context.autTransitionTermsUnordered(autId) filter (
-          t => transitionStatusFromTerm(context.goal, t).isUnknown
-      )
-    )
-
-    val allTransitionsAssigned = unknownEdges.isEmpty || context
-      .autTransitionTermsUnordered(autId)
-      .isEmpty
-
-    val subsumeActions =
-      if (allTransitionsAssigned) {
-        // This cast is necessary to make the code compile because Scala cannot
-        // figure out that these two instances of associated types are the same at
-        // the current stage. In general, these problems are a sign that the
-        // architecture is not fully sound, and that we should perhaps not use
-        // callbacks (or associated types) this way. Please send help.
-        theoryInstance.actionHook(
-          context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
-          "SubsumeConnected",
-          Seq()
-        )
-
-        Seq(Plugin.RemoveFacts(connectedInstance))
-
-      } else Seq()
-
-    // constrain any terms associated with a transition from a
-    // *known* unreachable state to be = 0 ("not used").
-    val unreachableActions = trace("unreachableActions") {
-      val unreachableConstraints =
-        conj(
-          knownUnreachableStates
-            .flatMap(
-              aut.transitionsFrom(_).map(transitionToTerm(_) === 0)
-            )
-        )
-
-      if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
-      else {
-
-        val actions = Seq(
-          Plugin.AddAxiom(
-            myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
-            unreachableConstraints,
-            theoryInstance
-          )
-        )
-        // This cast is necessary to make the code compile because Scala cannot
-        // figure out that these two instances of associated types are the same at
-        // the current stage. In general, these problems are a sign that the
-        // architecture is not fully sound, and that we should perhaps not use
-        // callbacks (or associated types) this way. Please send help.
-        theoryInstance.actionHook(
-          context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
-          "Propagate-Connected",
-          actions
-        )
-        actions
+      if (myTransitionMasks.isEmpty) {
+        trace(
+          s"W: ${connectedInstance} had no transitionMasks, probably because it's already been cleaned out by materialisation"
+        )()
+        return Seq(Plugin.RemoveFacts(connectedInstance))
       }
+
+      val aut = materialisedAutomata(autId)
+      val transitionToTerm = context.autTransitionTerm(autId)(_)
+
+      implicit val order = context.goal.order
+
+      // TODO compute a cut to find which dead transitions contribute to the conflict!
+
+      val deadTransitions = trace("deadTransitions") {
+        aut.transitions
+          .filter(
+            t => termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
+          )
+          .toSet
+      }
+
+      val filteredGraph = aut.dropEdges(deadTransitions)
+
+      val knownUnreachableStates = trace("knownUnreachableStates") {
+        filteredGraph.unreachableFrom(aut.initialState)
+      }
+
+      val unknownEdges = trace("unknownEdges")(
+        context.autTransitionTermsUnordered(autId) filter (
+            t => transitionStatusFromTerm(context.goal, t).isUnknown
+        )
+      )
+
+      val allTransitionsAssigned = unknownEdges.isEmpty || context
+        .autTransitionTermsUnordered(autId)
+        .isEmpty
+
+      val subsumeActions =
+        if (allTransitionsAssigned) {
+          // This cast is necessary to make the code compile because Scala cannot
+          // figure out that these two instances of associated types are the same at
+          // the current stage. In general, these problems are a sign that the
+          // architecture is not fully sound, and that we should perhaps not use
+          // callbacks (or associated types) this way. Please send help.
+          theoryInstance.actionHook(
+            context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
+            "SubsumeConnected",
+            Seq()
+          )
+
+          Seq(Plugin.RemoveFacts(connectedInstance))
+
+        } else Seq()
+
+      // constrain any terms associated with a transition from a
+      // *known* unreachable state to be = 0 ("not used").
+      val unreachableActions = trace("unreachableActions") {
+        val unreachableConstraints =
+          conj(
+            knownUnreachableStates
+              .flatMap(
+                aut.transitionsFrom(_).map(transitionToTerm(_) === 0)
+              )
+          )
+
+        if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
+        else {
+
+          val actions = Seq(
+            Plugin.AddAxiom(
+              myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
+              unreachableConstraints,
+              theoryInstance
+            )
+          )
+          // This cast is necessary to make the code compile because Scala cannot
+          // figure out that these two instances of associated types are the same at
+          // the current stage. In general, these problems are a sign that the
+          // architecture is not fully sound, and that we should perhaps not use
+          // callbacks (or associated types) this way. Please send help.
+          theoryInstance.actionHook(
+            context.asInstanceOf[this.theoryInstance.monoidMapPlugin.Context],
+            "Propagate-Connected",
+            actions
+          )
+          actions
+        }
+      }
+
+      unreachableActions ++ subsumeActions
+
     }
-
-    unreachableActions ++ subsumeActions
-
-  }
 
   private def materialiseProduct(
       leftId: Int,
@@ -361,7 +387,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
 
     @elidable(FINE)
-    def dumpProductGraphs() = {
+    def dumpProductGraphs(): Unit = {
+      if (!dynTraceEnable) {
+        return
+      }
+
       new GraphvizDumper {
         private def markTransitionTerms(t: Transition) = {
           s"${t.label()} ${annotatedProduct.originOfTransition(t)}: ${transitionToTerm(t)}"

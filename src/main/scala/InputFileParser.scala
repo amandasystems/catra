@@ -203,7 +203,7 @@ object InputFileParser extends Tracing {
 
   def constantOrIdentifier[_ : P]: P[Term] =
     P(
-      (constant ~ identifier.!).map {
+      (constant ~ "*".? ~ identifier.!).map {
         case (k, x) =>
           CounterWithCoefficient(k, Counter(x))
       }

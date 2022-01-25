@@ -436,6 +436,11 @@ class AutomatonBuilder extends Tracing {
 
   def containsTransition(t: Transition) = _transitions contains t
 
+  def addState(s: State): AutomatonBuilder = {
+    _autStates += s
+    this
+  }
+
   def addStates(statesToAdd: Iterable[State]): AutomatonBuilder = {
     _autStates ++= statesToAdd
     this

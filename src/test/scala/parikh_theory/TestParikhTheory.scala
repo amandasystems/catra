@@ -513,4 +513,72 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     TestUtilities.onlyReturnsLength(lt, 0)
   }
 
+  test(
+    "peterc-pyex-doc-cav17-zz/experiments/8-600-1-7200/packages/httplib2/httplib2-cache-control/7b3cd462dc3df6b4ebfe7d49caccce971b746e012985547d646f8062.smt2/parikh-constraints-4.par crash, minimised"
+  ) {
+    import SymbolicLabel.CharRange
+
+    val counters = List(
+      "all_2_0",
+      "aut_len_cnt_7",
+      "aut_len_cnt_8"
+    )
+
+    val increments: Map[AutomataTypes.Transition, Map[String, Int]] =
+      Map(
+        (8, CharRange(0, 60), 8) -> Map("all_2_0" -> 1),
+        (9, CharRange(0, 43), 9) -> Map("aut_len_cnt_7" -> 1),
+        (11, CharRange(0, 65535), 11) -> Map("aut_len_cnt_8" -> 1)
+      )
+
+    val theories = List(
+      new RegisterCounting(
+        counters,
+        Seq(
+          AutomatonBuilder()
+            .addStates(List(8))
+            .setInitial(8)
+            .setAccepting(8)
+            .addTransition(8, CharRange(0, 60), 8)
+            .getAutomaton(),
+          AutomatonBuilder()
+            .addStates(List(9))
+            .setInitial(9)
+            .setAccepting(9)
+            .addTransition(9, CharRange(0, 43), 9)
+            .getAutomaton(),
+          AutomatonBuilder()
+            .addStates(List(10, 11))
+            .setInitial(10)
+            .setAccepting(11)
+            .addTransition(11, CharRange(0, 65535), 11)
+            .getAutomaton()
+        ),
+        increments
+      )
+    )
+
+    SimpleAPI.withProver { p =>
+      // Needs to happen first because it may affect order?
+      theories.foreach(p addTheory _)
+
+      val counterToSolverConstant = counters
+        .map(c => (c, p.createConstantRaw(c)))
+        .toMap
+
+      implicit val o = p.order
+
+      for (theory <- theories) {
+        val isInImage = theory allowsMonoidValues counters.map(
+          counterToSolverConstant(_)
+        )
+        p.addAssertion(isInImage)
+      }
+
+      val satStatus = p.checkSat(true)
+      println(satStatus.toString.toLowerCase())
+
+    }
+  }
+
 }

@@ -54,7 +54,7 @@ class Statistics() {
 // TODO convert this to a hierarchical logger writing to some file somewhere
 trait Tracing {
 
-  private val dynTraceEnable = sys.env
+  protected val dynTraceEnable = sys.env
     .getOrElse("OSTRICH_TRACE", "FALSE")
     .toUpperCase() == "TRUE"
 

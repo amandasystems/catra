@@ -74,7 +74,13 @@ class TestInputFileParser extends AnyFunSuite {
   }
 
   test("parse constraint with three AND") {
-    tryParse("constraint all_7_0_len = aut_len_cnt_30 && all_7_0_len = aut_len_cnt_29 && all_7_0_len = aut_len_cnt_28;")
+    tryParse(
+      "constraint all_7_0_len = aut_len_cnt_30 && all_7_0_len = aut_len_cnt_29 && all_7_0_len = aut_len_cnt_28;"
+    )
   }
-  
+
+  test("parse constraint with coefficient and *") {
+    tryParse("constraint (-1*all_1_0 + 1 >= 0);");
+  }
+
 }
