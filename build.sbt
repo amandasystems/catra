@@ -1,21 +1,22 @@
 import Dependencies._
 
-ThisBuild / scalaVersion     := "2.13.5"
-ThisBuild / version          := "0.1.0-SNAPSHOT"
-ThisBuild / organization     := "uuverifiers"
+ThisBuild / scalaVersion := "2.13.5"
+ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
-    "-deprecation",
-    //"-Xfatal-warnings",
-    "-unchecked",
-    "-Xlint",
-    "-Xelide-below", "INFO",
-    "-feature",
-    "-opt-inline-from:**",
-    "-opt:l:method",
-    "-opt:l:inline",
-    "-Ywarn-dead-code",
-    "-Ywarn-unused"
+  "-deprecation",
+  //"-Xfatal-warnings",
+  "-unchecked",
+  "-Xlint",
+  "-Xelide-below",
+  "INFO",
+  "-feature",
+  "-opt-inline-from:**",
+  "-opt:l:method",
+  "-opt:l:inline",
+  "-Ywarn-dead-code",
+  "-Ywarn-unused"
 )
 
 // ThisBuild / coverageMinimum := 60
@@ -31,7 +32,7 @@ ThisBuild / libraryDependencies += fastparse
 
 lazy val root = (project in file("."))
   .settings(
-    name := "Parikh Theory",
+    name := "catra",
     libraryDependencies += scalaTest % Test,
-    libraryDependencies += scalaCheck % Test,
+    libraryDependencies += scalaCheck % Test
   )

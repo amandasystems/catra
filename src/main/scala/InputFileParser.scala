@@ -30,6 +30,7 @@ sealed case class Atom(
       case Equals             => left === right
       case GreaterThanOrEqual => left >= right
       case LessThanOrEqual    => left <= right
+      case NotEquals          => left =/= right
     }
   }
 }
@@ -55,6 +56,7 @@ case object GreaterThan extends Inequality
 case object Equals extends Inequality
 case object GreaterThanOrEqual extends Inequality
 case object LessThanOrEqual extends Inequality
+case object NotEquals extends Inequality
 
 sealed trait Formula extends DocumentFragment {
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
@@ -188,6 +190,8 @@ object InputFileParser extends Tracing {
   def constant[_ : P]: P[Int] =
     P("-".? ~ ("0" | (CharIn("1-9") ~ digit.rep(0)))).!.map(_.toInt)
 
+  // FIXME I don't like how NotEquals isn't negated equals, but there is no
+  // clean way I can think of to fix it.
   def atom[_ : P]: P[Atom] = (sum ~ inequalitySymbol ~ sum).map {
     case (lhs, inequality, rhs) => Atom(lhs, inequality, rhs)
   }
@@ -199,6 +203,7 @@ object InputFileParser extends Tracing {
         | ">=".!.map(_ => LessThanOrEqual)
         | ">".!.map(_ => GreaterThan)
         | "<".!.map(_ => LessThan)
+        | "!=".!.map(_ => NotEquals)
     )
 
   def constantOrIdentifier[_ : P]: P[Term] =
@@ -219,26 +224,31 @@ object InputFileParser extends Tracing {
         .map(Sum(_))
     )
 
-  def negation[_ : P] = P("¬").map(_ => true)
-  def atomOrNotAtom[_ : P]: P[Atom] = P(negation.? ~ atom).map {
-    case (None, atom)    => atom
-    case (Some(_), atom) => atom.negated()
-  }
+  def unaryExpression[_ : P]: P[Atom] =
+    P(
+      "(" ~ unaryExpression ~ ")"
+        | ("¬" ~ unaryExpression).map(_.negated())
+        | atom
+    )
 
-  def parenOrAtom[_ : P]: P[Atom] = P("(" ~ parenOrAtom ~ ")" | atomOrNotAtom)
+  def andExpression[_ : P]: P[Formula] =
+    P((unaryExpression | "(" ~ formula ~ ")") ~ "&&" ~ formula).map {
+      case (l, r) => And(l, r)
+    }
+  def orExpression[_ : P]: P[Formula] =
+    P((unaryExpression | "(" ~ formula ~ ")") ~ "||" ~ formula).map {
+      case (l, r) => Or(l, r)
+    }
+
+  def binaryExpression[_ : P]: P[Formula] = P(andExpression | orExpression)
 
   // TODO the parenthesis handling here is not elegant
   def formula[_ : P]: P[Formula] =
     P(
-      (parenOrAtom ~ ("&&" ~/ formula))
-        .map {
-          case (left, right) => And(left, right)
-        }
-        | (parenOrAtom ~ ("||" ~/ formula))
-          .map {
-            case (left, right) => Or(left, right)
-          }
-        | parenOrAtom
+      andExpression
+        | orExpression
+        | unaryExpression
+        | "(" ~ formula ~ ")"
     )
 
   def sequenceOfIdentifiers[_ : P]: P[Seq[String]] =
@@ -273,7 +283,7 @@ object InputFileParser extends Tracing {
         (Counter(counterName), coefficient * offset)
     }
   def counterIncrements[_ : P]: P[Seq[(Counter, Int)]] =
-    P("{" ~ counterOperation.rep(min = 0, sep = ";") ~ "}")
+    P("{" ~ counterOperation.rep(min = 0, sep = ",") ~ "}")
   def transition[_ : P]: P[Transition] =
     P(identifier ~ "->" ~ identifier ~ labelRange ~ counterIncrements.? ~ ";")
       .map {
