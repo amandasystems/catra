@@ -10,14 +10,8 @@ automaton Aut_all_5_2_0 {
   s0 -> s0 [59, 65535] {all_5_2_len += 1};
   s1 -> s0 [0, 46] {all_5_2_len += 1};
   s1 -> s2 [47, 47] {all_5_2_len += 1};
-  s1 -> s0 [48, 57] {all_5_2_len += 1};
-  s1 -> s1 [58, 58] {all_5_2_len += 1};
   s1 -> s0 [59, 65535] {all_5_2_len += 1};
-  s2 -> s0 [0, 46] {all_5_2_len += 1};
-  s2 -> s0 [48, 57] {all_5_2_len += 1};
-  s2 -> s1 [58, 58] {all_5_2_len += 1};
-  s2 -> s0 [59, 65535] {all_5_2_len += 1};
-  accepting s0, s1, s2;
+  accepting s0;
 };
 };
 synchronised {  // Automata constraining all_5_1
