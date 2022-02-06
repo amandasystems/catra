@@ -5,22 +5,29 @@ import ap.terfor.linearcombination.LinearCombination
 import ap.parser.IExpression.Predicate
 import ap.terfor.preds.Atom
 
-class TransitionMaskExtractor(private val transitionMaskPredicate: Predicate)
-    extends Tracing {
+class TransitionMaskExtractor(
+    private val transitionMaskPredicate: Predicate,
+    private val connectedPredicate: Predicate
+) extends Tracing {
   import TransitionSelected.{Present, Absent, Unknown}
 
   // FIXME make this a nice wrapper class instead
   def instanceTerm(transitionMask: Atom) =
     transitionMaskToTuple(transitionMask)._1
-  def transitionMaskAutomataNr(transitionMask: Atom) = {
-    transitionMaskToTuple(transitionMask)._2
-  }
   def transitionNr(transitionMask: Atom) =
     transitionMaskToTuple(transitionMask)._3
   def transitionTerm(transitionMask: Atom) =
     transitionMaskToTuple(transitionMask)._4
-
-  def connectedAutId(connected: Atom) = connected(1).constant.intValue
+    
+  def autId(connectedOrTransitionMask: Atom): Int =
+    connectedOrTransitionMask.pred match {
+      case `transitionMaskPredicate` =>
+        transitionMaskToTuple(connectedOrTransitionMask)._2
+      case `connectedPredicate` =>
+        connectedOrTransitionMask(1).constant.intValue
+      case unknown =>
+        throw new IllegalArgumentException(s"Unknown predicate ${unknown}")
+    }
 
   /**
    * Take a TransitionMask predicate, and extract its indices.

@@ -119,6 +119,7 @@ trait Automaton
     builder.toString()
   }
 
+  // TODO maybe apply sorting to transitionsFrom here for Full Determinism
   def transitionsBreadthFirst() =
     this.startBFSFrom(initialState).flatMap(transitionsFrom)
 
@@ -257,9 +258,7 @@ trait Automaton
   /**
    * Iterate over all transitions
    */
-  def transitions: Iterator[Transition] =
-    for (s1 <- states.iterator; (s2, lbl) <- outgoingTransitions(s1))
-      yield (s1, lbl, s2)
+  lazy val transitions = transitionsBreadthFirst().toSeq
 
   def allNodes() = states.toSeq
   def edges() = transitions.toSeq

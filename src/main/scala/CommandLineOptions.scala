@@ -7,22 +7,30 @@ import java.nio.file.Paths
 import java.nio.file.Path
 import java.nio.file.FileVisitResult
 import java.nio.file.attribute.BasicFileAttributes
-import java.io.IOException
+import java.io.{IOException, File}
+
+sealed trait RunMode
+case object SolveSatisfy extends RunMode
+case object FindImage extends RunMode
 
 sealed case class CommandLineOptions(
     inputFiles: Seq[String],
     timeout_ms: Option[Long],
-    trace: Boolean
+    dumpSMTDir: Option[File],
+    trace: Boolean,
+    runMode: RunMode
 ) {}
 
 object CommandLineOptions {
   private val fileSystem = FileSystems.getDefault()
   private val fileExtension = ".par"
+  var runMode: RunMode = SolveSatisfy
 
   /// Option fields
   private var timeout_ms: Option[Long] = None
   private var trace = false
   private var inputFiles: Seq[String] = Seq()
+  private var dumpSMTDir: Option[File] = None
 
   private val usage =
     s"""
@@ -31,12 +39,15 @@ object CommandLineOptions {
     Available subcommands:
       solve-satisfy -- look for a satisfying solution
       find-image -- generate the full Parikh image in Presburger format
-          NOT IMPLEMENTED!
     
-    Available options:
+    Available options (🐌 = likely to negatively impact performance):
       --trace -- generate a trace of the computation into trace.tex,
-                  plus various .dot files. (default = ${trace})
+                  plus various .dot files. (default = ${trace}) 🐌
       --timeout milliseconds -- set the timeout in ms (default = ${timeout_ms})
+      --dump-smt <directory> -- dump SMT commands into this directory
+                                 (default = ${dumpSMTDir}) 🐌
+    Environment variables:
+      OSTRICH_TRACE -- if set to "true", enable very very verbose logging 🐌
   """
 
   private def enumerateDirectory(dir: Path): Seq[String] = {
@@ -89,9 +100,16 @@ object CommandLineOptions {
       case Nil                       =>
       case "--" :: tail              => parseFilesAndFlags(tail)
       case "--help" :: _ | "-h" :: _ => throw new Exception(usage)
-      case "--trace" :: _            => ???
+      case "--trace" :: tail => {
+        trace = true
+        parseFilesAndFlags(tail)
+      }
       case "--timeout" :: milliseconds :: tail => {
         timeout_ms = Some(milliseconds.toLong)
+        parseFilesAndFlags(tail)
+      }
+      case "--dump-smt" :: directory :: tail => {
+        dumpSMTDir = Some(new File(directory))
         parseFilesAndFlags(tail)
       }
       case other :: tail => {
@@ -106,7 +124,10 @@ object CommandLineOptions {
     case "--" :: tail              => parseMode(tail)
     case "--help" :: _ | "-h" :: _ => throw new Exception(usage)
     case "solve-satisfy" :: rest   => parseFilesAndFlags(rest)
-    case "find-image" :: rest      => ???
+    case "find-image" :: rest => {
+      runMode = FindImage
+      parseFilesAndFlags(rest)
+    }
     case other :: _ =>
       throw new Exception(s"Error: Invalid mode `${other}`!\n\n" + usage)
   }
@@ -118,7 +139,9 @@ object CommandLineOptions {
     CommandLineOptions(
       inputFiles = inputFiles,
       timeout_ms = timeout_ms,
-      trace = trace
+      trace = trace,
+      dumpSMTDir = dumpSMTDir,
+      runMode = runMode
     )
   }
 }

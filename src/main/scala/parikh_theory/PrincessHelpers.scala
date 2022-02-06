@@ -54,7 +54,12 @@ class Statistics() {
 // TODO convert this to a hierarchical logger writing to some file somewhere
 trait Tracing {
 
-  protected val dynTraceEnable = sys.env
+  def enableTracing(verbose: Boolean = true) = {
+    dynTraceEnable = verbose
+    this
+  }
+
+  protected var dynTraceEnable = sys.env
     .getOrElse("OSTRICH_TRACE", "FALSE")
     .toUpperCase() == "TRUE"
 

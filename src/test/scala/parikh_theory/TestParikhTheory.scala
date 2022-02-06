@@ -9,15 +9,7 @@ import SymbolicLabelConversions._
 class TestParikhTheory extends AnyFunSuite with Tracing {
 
   test("length constraint for trivial automaton works") {
-    val aut = AutomatonBuilder()
-      .addStates(List(0, 1))
-      .setInitial(0)
-      .setAccepting(1)
-      .addTransition(0, 'a', 1)
-      .getAutomaton()
-
-    val lt = LengthCounting(IndexedSeq(aut))
-
+    val lt = LengthCounting(IndexedSeq(AutomatonLibrary.trivial))
     assert(TestUtilities.onlyReturnsLength(lt, 1))
   }
 
@@ -28,16 +20,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   // --> | 0 | ---------> H 1 H --------> H 2 H
   //     +---+            #===#           #===#
   test("3-state, 1-register loop-free automaton has correct lengths") {
-    val aut = AutomatonBuilder()
-      .addStates(List(0, 1, 2))
-      .setInitial(0)
-      .setAccepting(1, 2)
-      .addTransition(0, 'c', 2)
-      .addTransition(0, 'a', 1)
-      .addTransition(1, 'b', 2)
-      .getAutomaton()
-
-    val lt = LengthCounting(IndexedSeq(aut))
+    val lt = LengthCounting(IndexedSeq(AutomatonLibrary.threeStateLoopFree))
 
     TestUtilities.ensuresAlways(lt) {
       case (lengths, order) =>
@@ -82,20 +65,9 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   test(
     "4-state, per-transition register automaton with loop without product has correct values"
   ) {
-    val aut = AutomatonBuilder()
-      .addStates(0 to 3)
-      .setAccepting(3)
-      .setInitial(0)
-      .addTransition(0, 'a', 1)
-      .addTransition(0, '-', 2)
-      .addTransition(1, '-', 3)
-      .addTransition(1, 'b', 0)
-      .addTransition(2, '-', 3)
-      .addTransition(2, 'c', 2)
-      .addTransition(3, '-', 2)
-      .getAutomaton()
-
-    TestUtilities.bothImplementationsHaveSameImage(aut)
+    TestUtilities.bothImplementationsHaveSameImage(
+      AutomatonLibrary.fourStatePerTransitionWithLoop
+    )
   }
 
   //       +---+  a  +---+  b  +---+

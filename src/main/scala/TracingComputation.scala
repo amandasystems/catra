@@ -33,7 +33,12 @@ object Tex {
   def monospace(s: String) = { s"\\texttt{$s}" }
 }
 
-object ImageOfAutomaton  {
+// TODO: theories should get a unique trace!
+// TODO: this needs to happen, somehow
+//theories(0).dumpTexSnippet("\\include{preamble}\n")
+//theories(0).dumpTexSnippet("\\begin{document}\n")
+trait TracingComputation extends ParikhTheory {
+  var nrInvocations = 0
 
   import java.io._
 
@@ -41,10 +46,10 @@ object ImageOfAutomaton  {
   val texWriter = new BufferedWriter(new FileWriter(texFile))
 
   def predicateToTex(p: Predicate): String = p match {
-    case theory.monoidMapPredicate      => Tex.smallCaps("MM")
-    case theory.connectedPredicate      => Tex.smallCaps("Conn")
-    case theory.transitionMaskPredicate => Tex.smallCaps("TM")
-    case _                              => Tex.smallCaps(p.name)
+    case `monoidMapPredicate`      => Tex.smallCaps("MM")
+    case `connectedPredicate`      => Tex.smallCaps("Conn")
+    case `transitionMaskPredicate` => Tex.smallCaps("TM")
+    case _                         => Tex.smallCaps(p.name)
   }
 
   def constantToTex(c: ConstantTerm) = {
@@ -190,32 +195,6 @@ object ImageOfAutomaton  {
     }
   }
 
-  def readAutomata(filename: String): IndexedSeq[Automaton] = {
-    import SymbolicLabelConversions._
-
-    // DODGE: just return a canned automaton
-    IndexedSeq(
-      AutomatonBuilder()
-        .addStates(0 to 2)
-        .setAccepting(2)
-        .setInitial(0)
-        .addTransition(0, 'a', 1)
-        .addTransition(0, 'd', 2)
-        .addTransition(1, 'b', 1)
-        .addTransition(1, 'c', 2)
-        .getAutomaton(),
-      AutomatonBuilder()
-        .addStates(0 to 2)
-        .setAccepting(2)
-        .setInitial(0)
-        .addTransition(0, 'a', 1)
-        .addTransition(0, 'c', 2)
-        .addTransition(1, 'd', 1)
-        .addTransition(1, 'c', 2)
-        .getAutomaton()
-    )
-  }
-
   def dumpTexSnippet(tex: String) = {
     texWriter.write(tex)
     texWriter.flush()
@@ -265,141 +244,33 @@ object ImageOfAutomaton  {
       }
     }
 
-  def getSymbolicParikhImage() = {
-    writeFiles = false
+  override def actionHook(
+      context: this.monoidMapPlugin.Context,
+      action: String,
+      actions: Seq[Plugin.Action]
+  ): Unit = {
+    dumpTexSnippet(
+      Tex.section(s"Step ${nrInvocations}: Executing ${action}")
+    )
+    this.monoidMapPlugin.dumpGraphs(context)
+    val dumpedFiles =
+      this.monoidMapPlugin.dumpGraphs(context, s"trace-${nrInvocations}")
+    dumpTexSnippet(
+      dumpedFiles
+        .map(dot => automataFigure(dot, caption = dot))
+        .mkString("\n") + "\n"
+    )
     SimpleAPI.withProver { p =>
-      p addTheory theory
-      val constants = alphabet.map(c => p.createConstantRaw(c.toString())).toSeq
-      implicit val o = p.order
-      val isInImage = theory allowsMonoidValues constants
-      val parikhImage = p.scope {
-        p.addAssertion(isInImage)
-        p.makeExistentialRaw(constants)
-
-        p.setMostGeneralConstraints(true)
-
-        println(s"Solver status: ${p.checkSat(true)}")
-        // TODO: why the negation!?
-        ~p.getMinimisedConstraint
-      }
-
-      println(s"Got Parikh image: ${parikhImage}")
-      p addAssertion isInImage
-
-      println(s"Status: ${p.checkSat(true)}. Partial model: ${p.partialModel}")
-
-      p.addAssertion(~parikhImage)
-      println(s"Find value outside produced image: ${p
-        .checkSat(true)}. Partial model: ${p.partialModel}")
-    }
-    texWriter.close()
-  }
-
-  def traceASolution() = {
-    writeFiles = true
-    dumpTexSnippet("\\include{preamble}\n")
-    dumpTexSnippet("\\begin{document}\n")
-
-    for ((aut, i) <- automata.zipWithIndex) {
-      aut.dumpDotFile(s"trace-$i.dot")
+      p addTheory this
+      val facts = p.asIFormula(context.goal.facts)
+      dumpEquation(facts)
       dumpTexSnippet(
-        automataFigure(
-          s"trace-$i.dot",
-          caption = s"Automata $i before processing."
-        )
+        Tex.smallCaps(action) + ": " +
+          actions
+            .map(actionToTex(p, context.order))
+            .mkString(", ") + "\n"
       )
     }
-
-    SimpleAPI.withProver { p =>
-      p addTheory theory
-      val constants = alphabet.map(c => p.createConstantRaw(c.toString())).toSeq
-      implicit val o = p.order
-
-      for ((constant, letter) <- constants zip alphabet) {
-        val monospaceLetter = Tex.monospace(letter.toString())
-        val symbol = Tex.inlineMath(termToTex(constant))
-        dumpTexSnippet(s"$monospaceLetter = $symbol\n")
-      }
-
-      val isInImage = theory allowsMonoidValues constants
-      p.addAssertion(isInImage)
-
-      dumpTexSnippet(Tex.section("Starting values"))
-      dumpEquation(p.asIFormula(isInImage))
-
-      println(p.checkSat(true))
-    // FIXME only dump if we HAVE a model!
-    // val partialSolution = p.partialModelAsFormula
-
-    // dumpTexSnippet(Tex.section("Final assignment"))
-    // dumpEquation(partialSolution)
-    }
-    dumpTexSnippet("\\end{document}\n")
-    texWriter.close()
-    "make trace.pdf" !
+    nrInvocations += 1
   }
-
-  val automata = readAutomata("myFile.txt")
-  val alphabet = automata(0).alphabet().toSeq
-  var writeFiles = true
-
-  // DODGE: we should have multiple automata
-  val theory = new ParikhTheory {
-    var nrInvocations = 0
-    override lazy val filePrefix: String = "log"
-    override val auts = automata
-
-    override def toMonoid(t: Transition) = {
-      import ap.terfor.linearcombination.LinearCombination
-      import ap.basetypes.IdealInt
-      val ONE = LinearCombination(IdealInt.ONE)
-      val ZERO = LinearCombination(IdealInt.ZERO)
-
-      // TODO implement this for real symbolic labels!
-      val (_, SingleChar(label), _) = t: @unchecked
-      alphabet.map(c => if (c == label) Some(ONE) else Some(ZERO)).toSeq
-
-    }
-
-    override val monoidDimension = alphabet.length
-
-    override def actionHook(
-        context: this.monoidMapPlugin.Context,
-        action: String,
-        actions: Seq[Plugin.Action]
-    ): Unit = {
-      if (!writeFiles) {
-        return
-      }
-
-      dumpTexSnippet(
-        Tex.section(s"Step ${nrInvocations}: Executing ${action}")
-      )
-      this.monoidMapPlugin.dumpGraphs(context)
-      val dumpedFiles =
-        this.monoidMapPlugin.dumpGraphs(context, s"trace-${nrInvocations}")
-      dumpTexSnippet(
-        dumpedFiles
-          .map(dot => automataFigure(dot, caption = dot))
-          .mkString("\n") + "\n"
-      )
-      SimpleAPI.withProver { p =>
-        p addTheory this
-        val facts = p.asIFormula(context.goal.facts)
-        dumpEquation(facts)
-        dumpTexSnippet(
-          Tex.smallCaps(action) + ": " +
-            actions
-              .map(actionToTex(p, context.order))
-              .mkString(", ") + "\n"
-        )
-      }
-      nrInvocations += 1
-    }
-
-    TheoryRegistry register this
-  }
-
-  // getSymbolicParikhImage()
-  traceASolution()
 }

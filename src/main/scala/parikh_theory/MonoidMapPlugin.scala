@@ -27,17 +27,17 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     with Tracing {
 
   private val transitionExtractor = new TransitionMaskExtractor(
-    theoryInstance.transitionMaskPredicate
+    theoryInstance.transitionMaskPredicate,
+    theoryInstance.connectedPredicate
   )
 
   import transitionExtractor.{
     transitionStatusFromTerm,
     termMeansDefinitelyAbsent,
     goalAssociatedPredicateInstances,
-    transitionMaskAutomataNr,
     transitionNr,
     transitionTerm,
-    connectedAutId
+    autId => autNr
   }
 
   // A cache for materialised automata. The first ones are the same as auts.
@@ -173,16 +173,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   ): Seq[Plugin.Action] =
     trace(s"handleConnectedInstance ${connectedInstance}") {
 
-      val autId = connectedAutId(connectedInstance)
+      val autId = autNr(connectedInstance)
       val myTransitionMasks = context.autTransitionMasks(autId)
-
-      if (myTransitionMasks.isEmpty) {
-        trace(
-          s"W: ${connectedInstance} had no transitionMasks, probably because it's already been cleaned out by materialisation"
-        )()
-        return Seq(Plugin.RemoveFacts(connectedInstance))
-      }
-
       val aut = materialisedAutomata(autId)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
 
@@ -274,7 +266,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       leftId: Int,
       rightId: Int,
       context: Context
-  ) = {
+  ) = trace(s"materialise ${leftId}x${rightId}") {
     stats.increment("materialiseProduct")
 
     // This cast is necessary to make the code compile because Scala cannot
@@ -300,11 +292,22 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val newAutomataNr = trace("newAutomataNr")(materialisedAutomata.size)
     materialisedAutomata += product
 
+    def concernsOneOfTheTerms(p: Atom): Boolean = {
+      autNr(p) match {
+        case `leftId` | `rightId` => true
+        case _                    => false
+      }
+    }
+
     val removeTransitionMasks =
-      context.transitionMasks.map(Plugin.RemoveFacts(_))
-    val removeConnectedPredicates = context.connectedInstances
-      .filter(m => connectedAutId(m) == leftId || connectedAutId(m) == rightId)
-      .map(Plugin.RemoveFacts(_))
+      context.transitionMasks
+        .filter(concernsOneOfTheTerms)
+        .map(Plugin.RemoveFacts(_))
+    val removeConnectedPredicates = trace("removeConnectedPredicates")(
+      context.connectedInstances
+        .filter(concernsOneOfTheTerms)
+        .map(Plugin.RemoveFacts(_))
+    )
 
     // TODO figure out how to generate a nice blocking clause
     val productClauses = if (product.isEmpty) {
@@ -423,7 +426,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         )
     }
 
-    dumpProductGraphs()
+    //dumpProductGraphs()
 
     val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
 
@@ -462,7 +465,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     )
 
     lazy val automataWithConnectedPredicate = SortedSet(
-      connectedInstances.map(connectedAutId): _*
+      connectedInstances.map(autNr): _*
     )
 
     lazy val transitionMasks = trace("transitionMasks")(
@@ -473,12 +476,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       )
     )
 
-    lazy val activeAutomata = trace("activeAutomata") {
-      SortedSet(
-        transitionMasks
-          .map(transitionMaskAutomataNr): _*
-      )
-    }
+    lazy val activeAutomata =
+      trace("activeAutomata")(SortedSet(transitionMasks.map(autNr): _*))
 
     // FIXME memoise
     def transitionStatus(autId: Int)(transition: Transition) =
@@ -504,13 +503,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       getOrUpdateTransitionTermMap(autId).values
 
     // FIXME memoise
-    def autTransitionMasks(autId: Int) =
-      trace(s"autTransitionMasks(aut=$autId)") {
-        transitionMasks
-          .filter(transitionMaskAutomataNr(_) == autId)
-          .sortBy(transitionNr)
-          .toIndexedSeq
-      }
+    def autTransitionMasks(autId: Int) = {
+      transitionMasks
+        .filter(autNr(_) == autId)
+        .sortBy(transitionNr)
+        .toIndexedSeq
+    }
 
     // FIXME excellent candidate for memoisation!
     def filteredAutomaton(autId: Int) =
@@ -538,7 +536,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       implicit val order = goal.order
 
       val unknownTransitions = trace("unknownTransitions") {
-        context.automataWithConnectedPredicate.unsorted.toSeq
+        context.automataWithConnectedPredicate.toSeq
           .flatMap { aNr =>
             materialisedAutomata(aNr)
               .transitionsBreadthFirst()
