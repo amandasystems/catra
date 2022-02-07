@@ -3,6 +3,7 @@ import ap.SimpleAPI
 import scala.util.{Success, Failure, Try}
 import ap.terfor.ConstantTerm
 import SimpleAPI.ProverStatus
+import ap.parser.IFormula
 
 class PrincessBackend(private val arguments: CommandLineOptions)
     extends Backend
@@ -79,7 +80,7 @@ class PrincessBackend(private val arguments: CommandLineOptions)
     p.setMostGeneralConstraints(true)
     // TODO handle responses here
     println(s"Solver status: ${p.checkSat(true)}")
-    val parikhImage = ~p.getMinimisedConstraint
+    val parikhImage: IFormula = (~p.getMinimisedConstraint).notSimplify
     // TODO: translate to our representation
     println(s"Got Parikh image: ${parikhImage}")
     Success(Unsat) // FIXME: this is a mock value!

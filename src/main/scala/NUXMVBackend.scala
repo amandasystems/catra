@@ -17,19 +17,20 @@ class NUXMVBackend(private val arguments: CommandLineOptions) extends Backend {
   override def findImage(instance: Instance) = ???
   override def solveSatisfy(instance: Instance) = {
     new NUXMVInstance(instance).result match {
-      case result => {
-        println(result)
-        Failure(new Exception("Not implemented!"))
-      }
+      // TODO parse the outputs and populate the map for SAT
+      case Some(true)  => Success(Sat(Map.empty))
+      case Some(false) => Success(Unsat)
+      case None        => Failure(new Exception("Nuxmv returned no result"))
     }
   }
 }
 object NUXMVInstance {
   val nuxmvCmd = Array("nuxmv", "-int")
   val Unreachable = """^-- invariant block .* is true$""".r
+  val Reachable = """^-- invariant block .* is false$""".r
 }
 
-class NUXMVInstance(instance: Instance) {
+class NUXMVInstance(instance: Instance) extends Tracing {
 
   import instance._
   import NUXMVInstance._
@@ -211,9 +212,7 @@ class NUXMVInstance(instance: Instance) {
 
   val result: Option[Boolean] =
     try {
-      Console.err.println("Writing NUXMV model to " + outFile)
-
-      val out = new java.io.FileOutputStream(outFile)
+      val out = new java.io.FileOutputStream(trace("nuxmv model")(outFile))
       Console.withOut(out) {
         printNUXMVModule()
       }
@@ -244,13 +243,13 @@ class NUXMVInstance(instance: Instance) {
       var result: Option[Boolean] = None
       var cont = true
 
-      while (cont && result.isEmpty) readLine match {
+      while (cont && result.isEmpty) trace("nuxmv >>")(readLine) match {
         case null =>
           cont = false
         case Unreachable() =>
           result = Some(false)
-        case str =>
-          println("std: " + str)
+        case Reachable() => result = Some(true)
+        case str         =>
       }
 
       stdinWriter.close
@@ -262,7 +261,4 @@ class NUXMVInstance(instance: Instance) {
       outFile.delete
       None
     }
-
-  println(result)
-
 }
