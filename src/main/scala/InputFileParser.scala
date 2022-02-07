@@ -12,9 +12,9 @@ sealed case class Counter(name: String) extends Term {
     counterConstants(this)
 }
 sealed case class Atom(
-    lhs: Sum,
+    lhs: Term,
     inequality: Inequality,
-    rhs: Sum,
+    rhs: Term,
     isPositive: Boolean = true
 ) extends Formula {
   def negated(): Atom =
@@ -50,7 +50,7 @@ sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
     ITimes(coefficient, counterConstants(counter))
 }
 
-sealed case class Sum(terms: Seq[Term]) {
+sealed case class Sum(terms: Seq[Term]) extends Term {
   def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): ITerm = terms.map(_.toPrincess(counterConstants)).reduce(_ +++ _)
@@ -124,10 +124,11 @@ sealed case class Instance(
     constraints: Seq[Formula]
 )
 
-// TODO parentheses
-object InputFileParser extends Tracing {
+class InputFileParser extends Tracing {
   import fastparse._
   import JavaWhitespace._
+
+  private val interner = new Interner()
 
   def automatonFromFragments(
       fragments: Seq[AutomatonFragment]
@@ -135,22 +136,22 @@ object InputFileParser extends Tracing {
     val builder = AutomatonBuilder()
     var counterOffsets: TransitionToCounterOffsets = Map()
 
-    Interner.freshNamespace()
+    interner.freshNamespace()
 
     for (fragment <- fragments) {
       fragment match {
         case AcceptingStates(names) => {
-          val nameIds = names.map(Interner.getOrUpdate(_)).toSeq
+          val nameIds = names.map(interner.getOrUpdate(_)).toSeq
           builder.addStates(nameIds)
           nameIds.foreach(builder.setAccepting(_))
         }
         case InitialState(name) => {
-          builder.addStates(Seq(Interner.getOrUpdate(name)))
-          builder.setInitial(Interner.getOrUpdate(name))
+          builder.addStates(Seq(interner.getOrUpdate(name)))
+          builder.setInitial(interner.getOrUpdate(name))
         }
         case Transition(from, to, label, counterIncrements) => {
-          val fromIdx = Interner.getOrUpdate(from)
-          val toIdx = Interner.getOrUpdate(to)
+          val fromIdx = interner.getOrUpdate(from)
+          val toIdx = interner.getOrUpdate(to)
           builder.addStates(Seq(fromIdx, toIdx))
           val transition = (fromIdx, label, toIdx)
           builder.addTransitionTuple(transition)
@@ -338,10 +339,16 @@ object InputFileParser extends Tracing {
   def document[_ : P]: P[Instance] =
     P((expression ~ ";").rep(1)).map(documentToInstance(_))
   def parser[_ : P]: P[Instance] = P(" ".rep ~ document ~ End)
-  def parse(s: String): Parsed[Instance] = fastparse.parse(s, parser(_))
 }
 
-object Interner {
+object InputFileParser {
+  def parse(s: String): fastparse.Parsed[Instance] = {
+    val p = new InputFileParser()
+    fastparse.parse(s, p.parser(_))
+  }
+}
+
+class Interner {
   var currentIndex = 0
   var nameToStateIdx: Map[String, Int] = Map()
   var namespaceOffset = 0

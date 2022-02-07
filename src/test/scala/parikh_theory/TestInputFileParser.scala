@@ -111,4 +111,8 @@ class TestInputFileParser extends AnyFunSuite {
     )
   }
 
+  test("parse complex sum") {
+    tryParse("constraint R0 = R9 && R1 - R37 = 1;")
+  }
+
 }
