@@ -9,6 +9,15 @@ import java.nio.file.FileVisitResult
 import java.nio.file.attribute.BasicFileAttributes
 import java.io.{IOException, File}
 
+sealed trait BackendSelection
+
+case object ChoosePrincess extends BackendSelection {
+  override def toString: String = "princess"
+}
+case object ChooseNuxmv extends BackendSelection {
+  override def toString: String = "princess"
+}
+
 sealed trait RunMode
 case object SolveSatisfy extends RunMode
 case object FindImage extends RunMode
@@ -18,8 +27,14 @@ sealed case class CommandLineOptions(
     timeout_ms: Option[Long],
     dumpSMTDir: Option[File],
     trace: Boolean,
-    runMode: RunMode
-) {}
+    runMode: RunMode,
+    backend: BackendSelection
+) {
+  def getBackend(): Backend = backend match {
+    case ChoosePrincess => new PrincessBackend(this)
+    case ChooseNuxmv    => new NUXMVBackend(this)
+  }
+}
 
 object CommandLineOptions {
   private val fileSystem = FileSystems.getDefault()
@@ -31,6 +46,7 @@ object CommandLineOptions {
   private var trace = false
   private var inputFiles: Seq[String] = Seq()
   private var dumpSMTDir: Option[File] = None
+  private var backend: BackendSelection = ChoosePrincess
 
   private val usage =
     s"""
@@ -46,6 +62,9 @@ object CommandLineOptions {
       --timeout milliseconds -- set the timeout in ms (default = ${timeout_ms})
       --dump-smt <directory> -- dump SMT commands into this directory
                                  (default = ${dumpSMTDir}) 🐌
+      --backend <backend> -- choose which back-end to use.
+                             Available options are: nuxmv, princess.
+                             Default: ${backend}.
     Environment variables:
       OSTRICH_TRACE -- if set to "true", enable very very verbose logging 🐌
   """
@@ -112,6 +131,16 @@ object CommandLineOptions {
         dumpSMTDir = Some(new File(directory))
         parseFilesAndFlags(tail)
       }
+      case "--backend" :: "princess" :: tail => {
+        parseFilesAndFlags(tail)
+      }
+      case "--backend" :: "nuxmv" :: tail => {
+        backend = ChooseNuxmv
+        parseFilesAndFlags(tail)
+      }
+      case "--backend" :: other :: _ => {
+        throw new IllegalArgumentException(s"Unknown backend: ${other}!")
+      }
       case other :: tail => {
         inputFiles ++= expandFileNameOrDirectoryOrGlob(other)
         parseFilesAndFlags(tail)
@@ -141,7 +170,8 @@ object CommandLineOptions {
       timeout_ms = timeout_ms,
       trace = trace,
       dumpSMTDir = dumpSMTDir,
-      runMode = runMode
+      runMode = runMode,
+      backend = backend
     )
   }
 }

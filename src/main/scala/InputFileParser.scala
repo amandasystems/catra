@@ -1,6 +1,6 @@
 package uuverifiers.parikh_theory
 import ap.terfor.ConstantTerm
-import ap.parser.{IFormula, ITerm, ITimes}
+import ap.parser.{IFormula, ITerm, ITimes, IBoolLit}
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -33,6 +33,12 @@ sealed case class Atom(
       case NotEquals          => left =/= right
     }
   }
+}
+
+sealed case class False() extends Formula {
+  override def toPrincess(
+      counterConstants: Map[Counter, ConstantTerm]
+  ): IFormula = IBoolLit(false)
 }
 
 sealed trait Term {
