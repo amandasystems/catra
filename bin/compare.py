@@ -9,22 +9,14 @@ LINE_RE = re.compile(
 )
 
 
-def parse_line(line):
-    match = LINE_RE.match(line)
-    if not match:
-        raise ValueError(f"invalid line: {line}")
-    file_name = match.group("file_name")
-    status = match.group("sat_status")
-    return file_name, status
-
-
 def parse_lines(lines):
     results = dict()
+
     for line in lines:
-        if not "====" in line:
+        match = LINE_RE.match(line)
+        if not match:
             continue
-        input, outcome = parse_line(line)
-        results[input] = outcome
+        results[match.group("file_name")] = match.group("sat_status")
     return results
 
 
@@ -33,7 +25,10 @@ with open(left) as left, open(right) as right:
     rights = parse_lines(right)
 
 if not lefts.keys() == rights.keys():
-    print(set(lefts.keys()).symmetric_difference(set(rights.keys())))
+    different_keys = ", ".join(
+        set(lefts.keys()).symmetric_difference(set(rights.keys()))
+    )
+    print(f"The following files are not in both sets: {different_keys}")
 
 nr_same = 0
 nr_different = 0
