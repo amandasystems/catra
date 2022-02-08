@@ -12,28 +12,31 @@ import java.io.{
   BufferedReader
 }
 import scala.util.Try
+import java.util.concurrent.TimeUnit
 
 class NUXMVBackend(private val arguments: CommandLineOptions) extends Backend {
   override def findImage(instance: Instance) = ???
-  override def solveSatisfy(instance: Instance) = {
-    new NUXMVInstance(instance).result match {
-      // TODO parse the outputs and populate the map for SAT
-      case Some(true)  => Success(Sat(Map.empty))
-      case Some(false) => Success(Unsat)
-      case None        => Failure(new Exception("Nuxmv returned no result"))
-    }
-  }
-}
-object NUXMVInstance {
-  val nuxmvCmd = Array("nuxmv", "-int")
-  val Unreachable = """^-- invariant block .* is true$""".r
-  val Reachable = """^-- invariant block .* is false$""".r
+  override def solveSatisfy(instance: Instance) =
+    new NUXMVInstance(arguments, instance).result
+
 }
 
-class NUXMVInstance(instance: Instance) extends Tracing {
+class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
+    extends Tracing {
 
   import instance._
-  import NUXMVInstance._
+  val baseCommand = Array("nuxmv", "-int")
+  val Unreachable = """^-- invariant block .* is true$""".r
+  val Reachable = """^-- invariant block .* is false$""".r
+
+  val nuxmvCmd = arguments.timeout_ms match {
+    case Some(timeout_ms) =>
+      Array("timeout", "--foreground", s"${timeout_ms.toFloat / 1000}s") ++ baseCommand
+    case None => baseCommand
+
+  }
+
+  trace("nuxmv command line")(nuxmvCmd.mkString(" "))
 
   val outFile =
     File.createTempFile("parikh-", ".smv")
@@ -210,7 +213,7 @@ class NUXMVInstance(instance: Instance) extends Tracing {
     println("  " + blockVar + " != " + blockNum + ";")
   }
 
-  val result: Option[Boolean] =
+  val result: Try[SatisfactionResult] =
     try {
       val out = new java.io.FileOutputStream(trace("nuxmv model")(outFile))
       Console.withOut(out) {
@@ -240,25 +243,54 @@ class NUXMVInstance(instance: Instance) extends Tracing {
       sendCommand("check_invar_ic3;")
       sendCommand("quit;")
 
-      var result: Option[Boolean] = None
-      var cont = true
-
-      while (cont && result.isEmpty) trace("nuxmv >>")(readLine) match {
-        case null =>
-          cont = false
-        case Unreachable() =>
-          result = Some(false)
-        case Reachable() => result = Some(true)
-        case str         =>
+      val result: Try[SatisfactionResult] = {
+        var cont = true
+        var result: Try[SatisfactionResult] = Failure(
+          new Exception("No output from nuxmv")
+        )
+        while (cont) {
+          cont = trace("nuxmv >>")(readLine) match {
+            case null => {
+              // The process has closed the stream which means it was probably
+              // killed by timeout and is dying. Wait!
+              val didExit = process.waitFor(1, TimeUnit.SECONDS)
+              if (!trace("dying process did exit")(didExit)) {
+                // Wait for the process to really, really exit.
+                process.destroyForcibly().waitFor()
+              }
+              false
+            }
+            case Unreachable() => {
+              result = Success(Unsat)
+              false
+            }
+            // TODO: parse the model
+            case Reachable() => {
+              result = Success(Sat(Map.empty))
+              false
+            }
+            case _ => true
+          }
+        }
+        result
       }
 
       stdinWriter.close
       stdoutReader.close
       stderr.close
 
-      result
+      if (!trace("nuxmv still running?")(process.isAlive())) {
+        // 124 is the exit with timeout code for timeout
+        if (trace("exitValue")(process.exitValue()) == 124) {
+          Success(Timeout(arguments.timeout_ms.get))
+        } else {
+          result
+        }
+      } else {
+        process.destroyForcibly()
+        result
+      }
     } finally {
       outFile.delete
-      None
     }
 }
