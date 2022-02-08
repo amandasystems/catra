@@ -235,15 +235,15 @@ class InputFileParser extends Tracing {
 
   def sum[_ : P]: P[Sum] =
     P(
-      (constantOrIdentifier ~ "+" ~ sum).map {
-        case (l, Sum(rs)) => Sum(rs :+ l)
-      }
-        | (constantOrIdentifier ~ "-" ~ sum).map {
-          case (l, r) => Sum(r.negate().terms :+ l)
+      (constantOrIdentifier ~ (CharIn("+\\-").! ~ constantOrIdentifier).rep())
+        .map {
+          case (first, signAndTerms) =>
+            Sum(first +: signAndTerms.map {
+              case ("+", positiveTerm) => positiveTerm
+              case ("-", negativeTerm) => negativeTerm.negate()
+            })
         }
-        | constantOrIdentifier.map { t: Term =>
-          Sum(Seq(t))
-        }
+        | constantOrIdentifier.map(t => Sum(Seq(t)))
     )
 
   def unaryExpression[_ : P]: P[Atom] =

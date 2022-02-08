@@ -115,4 +115,19 @@ class TestInputFileParser extends AnyFunSuite {
     tryParse("constraint R0 = R9 && R1 - R37 = 1;")
   }
 
+  test("minus works as intended") {
+    import fastparse.Parsed.Success
+
+    val Success(instance, _) =
+      InputFileParser.parse("constraint a - b + c = 0;")
+    val Sum(terms) = instance.constraints(0).leftSide.asInstanceOf[Atom].lhs
+    assert(
+      terms.toSet == Set(
+        Counter("a"),
+        Counter("c"),
+        CounterWithCoefficient(-1, Counter("b"))
+      )
+    )
+  }
+
 }
