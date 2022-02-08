@@ -553,4 +553,50 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     }
   }
 
+  test("unsat bug reproduction") {
+    import SymbolicLabel.CharRange
+
+    val singleState = AutomatonBuilder()
+      .addState(0)
+      .setAccepting(0)
+      .setInitial(0)
+      .getAutomaton()
+
+    val onlyTransition: AutomataTypes.Transition = (1, CharRange(1, 65535), 2)
+
+    val twoState = AutomatonBuilder()
+      .addStates(Seq(1, 2))
+      .addTransitionTuple(onlyTransition)
+      .setInitial(1)
+      .setAccepting(2)
+      .getAutomaton()
+
+    val c = "c"
+    val increments: Map[AutomataTypes.Transition, Map[String, Int]] =
+      Map(onlyTransition -> Map(c -> 1))
+
+    val theorySingle =
+      new RegisterCounting(Seq(c), Seq(singleState), increments)
+    val theoryTwo =
+      new RegisterCounting(Seq(c), Seq(twoState), increments)
+
+    SimpleAPI.withProver { p =>
+      // Needs to happen first because it may affect order?
+      p addTheory theorySingle
+      p addTheory theoryTwo
+
+      val cSolverVar = p.createConstantRaw(c)
+      implicit val o = p.order
+
+      p addAssertion (theorySingle allowsMonoidValues Seq(cSolverVar))
+      p addAssertion (theoryTwo allowsMonoidValues Seq(cSolverVar))
+
+      val satStatus = p.checkSat(true)
+      println(satStatus.toString.toLowerCase())
+      assert(satStatus == SimpleAPI.ProverStatus.Sat)
+
+    }
+
+  }
+
 }

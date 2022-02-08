@@ -5,11 +5,13 @@ import ap.parser.{IFormula, ITerm, ITimes, IBoolLit}
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     value
+  override def negate() = Constant(value * -1)
 }
 
 sealed case class Counter(name: String) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     counterConstants(this)
+  override def negate() = CounterWithCoefficient(-1, this)
 }
 sealed case class Atom(
     lhs: Term,
@@ -43,17 +45,24 @@ sealed case class False() extends Formula {
 
 sealed trait Term {
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm
+  def negate(): Term
 }
 sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
     extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     ITimes(coefficient, counterConstants(counter))
+  override def negate() =
+    if (coefficient == -1) counter
+    else CounterWithCoefficient(coefficient * -1, counter)
 }
 
 sealed case class Sum(terms: Seq[Term]) extends Term {
   def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): ITerm = terms.map(_.toPrincess(counterConstants)).reduce(_ +++ _)
+
+  def negate(): Sum = Sum(terms.map(_.negate()))
+
 }
 
 sealed trait Inequality
@@ -226,9 +235,15 @@ class InputFileParser extends Tracing {
 
   def sum[_ : P]: P[Sum] =
     P(
-      constantOrIdentifier
-        .rep(min = 1, sep = "+")
-        .map(Sum(_))
+      (constantOrIdentifier ~ "+" ~ sum).map {
+        case (l, Sum(rs)) => Sum(rs :+ l)
+      }
+        | (constantOrIdentifier ~ "-" ~ sum).map {
+          case (l, r) => Sum(r.negate().terms :+ l)
+        }
+        | constantOrIdentifier.map { t: Term =>
+          Sum(Seq(t))
+        }
     )
 
   def unaryExpression[_ : P]: P[Atom] =

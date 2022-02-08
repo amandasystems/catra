@@ -73,12 +73,6 @@ class AutomataFlow(private val aut: Automaton)(
       toMonoid: (Transition) => Seq[Option[LinearCombination]]
   ): Formula = {
     trace("Monoid equations") {
-
-      if (transitionAndVar.isEmpty) {
-        // Edge case: we have no transitions and so the monoid can only have zero values.
-        return conj(monoidVars.map(_ === 0))
-      }
-
       // This is just a starting vector of the same dimension as the monoid
       // values. We start with no constraints, represented by None.
       val startMonoidIncrements: Seq[Option[LinearCombination]] =

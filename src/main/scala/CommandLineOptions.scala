@@ -66,7 +66,7 @@ object CommandLineOptions {
                              Available options are: nuxmv, princess.
                              Default: ${backend}.
     Environment variables:
-      OSTRICH_TRACE -- if set to "true", enable very very verbose logging 🐌
+      CATRA_TRACE -- if set to "true", enable very very verbose logging 🐌
   """
 
   private def enumerateDirectory(dir: Path): Seq[String] = {

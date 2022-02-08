@@ -60,7 +60,7 @@ trait Tracing {
   }
 
   protected var dynTraceEnable = sys.env
-    .getOrElse("OSTRICH_TRACE", "FALSE")
+    .getOrElse("CATRA_TRACE", "FALSE")
     .toUpperCase() == "TRUE"
 
   lazy private val context = this.getClass.getName
