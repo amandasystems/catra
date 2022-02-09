@@ -12,8 +12,6 @@ import ap.terfor.conjunctions.Conjunction
 import collection.mutable.HashMap
 import AutomataTypes._
 import EdgeWrapper._
-import scala.annotation.elidable
-import scala.annotation.elidable.FINE
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -26,10 +24,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     with NoAxiomGeneration
     with Tracing {
 
-  private val transitionExtractor = new TransitionMaskExtractor(
-    theoryInstance.transitionMaskPredicate,
-    theoryInstance.connectedPredicate
-  )
+  private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
 
   import transitionExtractor.{
     transitionStatusFromTerm,
@@ -91,7 +86,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       import context.{
         activeAutomata,
         connectedInstances,
-        monoidMapPredicateAtom
+        monoidMapPredicateAtom,
+        unusedInstances
       }
 
       val productIsDone =
@@ -101,10 +97,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         trace("isSubsumed")(productIsDone && allAutomataGuaranteedConnected)
 
       if (isSubsumed) {
-        // shouldn't all transition masks be gone by the subsumption of all conected?
-        // val removeAssociatedPredicates =
-        //   transitionMasks.map(Plugin.RemoveFacts(_))
-        val removeAssociatedPredicates = Seq()
+        // There will be a final Unused predicate on the final automaton.
+        val removeAssociatedPredicates =
+          unusedInstances.map(Plugin.RemoveFacts(_))
         val removeThisPredicateInstance =
           Plugin.RemoveFacts(monoidMapPredicateAtom)
 
@@ -226,17 +221,14 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
       val unreachableActions = trace("unreachableActions") {
+        val unreachableTransitions = trace("unreachableTransitions")(
+          knownUnreachableStates.flatMap(aut.transitionsFrom(_))
+        )
         val unreachableConstraints =
-          conj(
-            knownUnreachableStates
-              .flatMap(
-                aut.transitionsFrom(_).map(transitionToTerm(_) === 0)
-              )
-          )
+          conj(unreachableTransitions.map(transitionToTerm(_) === 0))
 
         if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
         else {
-
           val actions = Seq(
             Plugin.AddAxiom(
               myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
@@ -282,8 +274,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val left = context.filteredAutomaton(leftId)
     val right = context.filteredAutomaton(rightId)
+
     trace(
-      s"materialising product of ${left.transitions.toSeq} and ${right.transitions.toSeq}"
+      s"materialising product of ${left} and ${right}"
     )("")
 
     val annotatedProduct = left.productWithSources(right)
@@ -299,23 +292,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
     }
 
-    val removeTransitionMasks =
-      context.transitionMasks
-        .filter(concernsOneOfTheTerms)
-        .map(Plugin.RemoveFacts(_))
-    val removeConnectedPredicates = trace("removeConnectedPredicates")(
-      context.connectedInstances
-        .filter(concernsOneOfTheTerms)
-        .map(Plugin.RemoveFacts(_))
+    val unusedInstances = context.unusedInstances.filter(concernsOneOfTheTerms)
+    val removeUnusedPredicates = trace("removeUnusedPredicates")(
+      unusedInstances.map(Plugin.RemoveFacts(_))
     )
 
-    // TODO figure out how to generate a nice blocking clause
-    val productClauses = if (product.isEmpty) {
+    // TODO figure out how to generate a nice blocking clause to replace FALSE
+    val productClauses = if (trace("product is empty")(product.isEmpty)) {
       Seq(
         Plugin.AddAxiom(
-          context.autTransitionMasks(leftId) ++ context.autTransitionMasks(
-            rightId
-          ) :+ context.monoidMapPredicateAtom,
+          unusedInstances ++ context.autTransitionMasks(leftId) ++ context
+            .autTransitionMasks(
+              rightId
+            ) :+ context.monoidMapPredicateAtom,
           Conjunction.FALSE,
           theoryInstance
         )
@@ -331,7 +320,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-    removeTransitionMasks ++ removeConnectedPredicates ++ productClauses
+    removeUnusedPredicates ++ productClauses
   }
 
   private def formulaForNewAutomaton(
@@ -389,48 +378,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-    @elidable(FINE)
-    def dumpProductGraphs(): Unit = {
-      if (!dynTraceEnable) {
-        return
-      }
-
-      new GraphvizDumper {
-        private def markTransitionTerms(t: Transition) = {
-          s"${t.label()} ${annotatedProduct.originOfTransition(t)}: ${transitionToTerm(t)}"
-        }
-
-        private def markProductStates(productState: State) = {
-          val (leftState, rightState) = annotatedProduct.originOf(productState)
-          s"${productState} = ${leftState}/${rightState}"
-        }
-
-        def toDot() = annotatedProduct.product.toDot(
-          transitionAnnotator = markTransitionTerms(_),
-          stateAnnotator = markProductStates(_)
-        )
-
-      }.dumpDotFile(
-        s"${this.theoryInstance.filePrefix}-aut-${leftNr}x${rightNr}-is-${productNr}.dot"
-      )
-
-      context
-        .filteredAutomaton(leftNr)
-        .dumpDotFile(
-          s"${this.theoryInstance.filePrefix}-goal-${context.goal.age}-aut-${leftNr}.dot"
-        )
-      context
-        .filteredAutomaton(rightNr)
-        .dumpDotFile(
-          s"${this.theoryInstance.filePrefix}-goal-${context.goal.age}-aut-${rightNr}.dot"
-        )
-    }
-
-    //dumpProductGraphs()
-
     val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
 
-    // TODO why does it crash when I use thse?
     val simplifiedEquations =
       ReduceWithConjunction(Conjunction.TRUE, context.order)(equations)
 
@@ -451,33 +400,34 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
    * proof goal.
    */
   sealed case class Context(val goal: Goal, val monoidMapPredicateAtom: Atom) {
+    import theoryInstance.{
+      transitionMaskPredicate => TransitionMask,
+      unusedPredicate => Unused,
+      connectedPredicate => Connected
+    }
     val instanceTerm = monoidMapPredicateAtom(0)
     implicit val order = goal.order
 
     private val transitionTermCache = HashMap[Int, Map[Transition, Term]]()
 
-    lazy val connectedInstances = trace("connectedInstances")(
-      goalAssociatedPredicateInstances(
-        goal,
-        instanceTerm,
-        theoryInstance.connectedPredicate
-      )
-    )
+    private val predicateInstances =
+      goalAssociatedPredicateInstances(goal, instanceTerm)(_)
+
+    lazy val connectedInstances =
+      trace("connectedInstances")(predicateInstances(Connected))
 
     lazy val automataWithConnectedPredicate = SortedSet(
       connectedInstances.map(autNr): _*
     )
 
-    lazy val transitionMasks = trace("transitionMasks")(
-      goalAssociatedPredicateInstances(
-        goal,
-        instanceTerm,
-        theoryInstance.transitionMaskPredicate
-      )
-    )
+    lazy val transitionMasks =
+      trace("transitionMasks")(predicateInstances(TransitionMask))
+
+    lazy val unusedInstances =
+      trace("unusedInstances")(predicateInstances(Unused))
 
     lazy val activeAutomata =
-      trace("activeAutomata")(SortedSet(transitionMasks.map(autNr): _*))
+      trace("activeAutomata")(SortedSet(unusedInstances.map(autNr): _*))
 
     // FIXME memoise
     def transitionStatus(autId: Int)(transition: Transition) =

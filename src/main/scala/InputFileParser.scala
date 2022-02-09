@@ -1,6 +1,7 @@
 package uuverifiers.parikh_theory
 import ap.terfor.ConstantTerm
 import ap.parser.{IFormula, ITerm, ITimes, IBoolLit}
+import java.math.BigInteger
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -75,6 +76,8 @@ case object NotEquals extends Inequality
 
 sealed trait Formula extends DocumentFragment {
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
+  // TODO
+  def accepts(counterValues: Map[Counter, BigInteger]): Boolean = ???
 }
 
 sealed case class And(left: Formula, right: Formula) extends Formula {
@@ -123,14 +126,6 @@ sealed case class NamedCounterAutomaton(
     name: String,
     automaton: Automaton,
     offsets: TransitionToCounterOffsets
-)
-
-sealed case class Instance(
-    counters: Seq[Counter],
-    automata: Seq[Seq[Automaton]],
-    // These are global because we ensure all automata have mutually independent state IDs!
-    transitionToOffsets: TransitionToCounterOffsets,
-    constraints: Seq[Formula]
 )
 
 class InputFileParser extends Tracing {

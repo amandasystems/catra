@@ -5,11 +5,10 @@ import ap.terfor.linearcombination.LinearCombination
 import ap.parser.IExpression.Predicate
 import ap.terfor.preds.Atom
 
-class TransitionMaskExtractor(
-    private val transitionMaskPredicate: Predicate,
-    private val connectedPredicate: Predicate
-) extends Tracing {
+class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
+    extends Tracing {
   import TransitionSelected.{Present, Absent, Unknown}
+  import theoryInstance._
 
   // FIXME make this a nice wrapper class instead
   def instanceTerm(transitionMask: Atom) =
@@ -18,12 +17,12 @@ class TransitionMaskExtractor(
     transitionMaskToTuple(transitionMask)._3
   def transitionTerm(transitionMask: Atom) =
     transitionMaskToTuple(transitionMask)._4
-    
+
   def autId(connectedOrTransitionMask: Atom): Int =
     connectedOrTransitionMask.pred match {
       case `transitionMaskPredicate` =>
         transitionMaskToTuple(connectedOrTransitionMask)._2
-      case `connectedPredicate` =>
+      case `connectedPredicate` | `unusedPredicate` =>
         connectedOrTransitionMask(1).constant.intValue
       case unknown =>
         throw new IllegalArgumentException(s"Unknown predicate ${unknown}")
@@ -46,9 +45,7 @@ class TransitionMaskExtractor(
 
   // NOTE this is based on the fact that the first term is always the instance
   // in all predicates. There's no typesafe way to express this.
-  def goalAssociatedPredicateInstances(
-      goal: Goal,
-      instance: LinearCombination,
+  def goalAssociatedPredicateInstances(goal: Goal, instance: LinearCombination)(
       predicate: Predicate
   ) =
     goal.facts.predConj
@@ -68,9 +65,7 @@ class TransitionMaskExtractor(
   ) =
     trace(s"TransitionMasks for ${instance} in goal age ${goal.age}") {
       val (productOffsets, transitionTerms) =
-        goalAssociatedPredicateInstances(
-          goal,
-          instance,
+        goalAssociatedPredicateInstances(goal, instance)(
           transitionMaskPredicate
         ).map(transitionMaskToTuple)
           .sortBy(_._3)

@@ -71,8 +71,18 @@ trait ParikhTheory
   val connectedPredicate =
     new Predicate(s"Connected_${this.hashCode}", 2)
 
+  // Unused(s, n): Automaton n of instance s is not yet used in a
+  // product.
+  val unusedPredicate =
+    new Predicate(s"Unused_${this.hashCode}", 2)
+
   override lazy val predicates =
-    Seq(monoidMapPredicate, transitionMaskPredicate, connectedPredicate)
+    Seq(
+      monoidMapPredicate,
+      transitionMaskPredicate,
+      connectedPredicate,
+      unusedPredicate
+    )
 
   lazy val monoidMapPlugin = new MonoidMapPlugin(this)
 
@@ -108,11 +118,12 @@ trait ParikhTheory
             )
         }
 
+    val isUnusedInProduct = unusedPredicate(Seq(instanceTerm, l(automataNr)))
     val isConnected = connectedPredicate(Seq(instanceTerm, l(automataNr)))
     val preservesFlow =
       AutomataFlow(automaton).flowEquations(transitionAndTerms)
 
-    isConnected +: preservesFlow +: transitionMaskInstances
+    isUnusedInProduct +: isConnected +: preservesFlow +: transitionMaskInstances
 
   }
 

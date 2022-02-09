@@ -120,6 +120,11 @@ trait Automaton
   }
 
   // TODO maybe apply sorting to transitionsFrom here for Full Determinism
+  /**
+   * Iterate over all *reachable* transitions in breadh-first order.
+   *
+   * @return
+   */
   def transitionsBreadthFirst() =
     this.startBFSFrom(initialState).flatMap(transitionsFrom)
 
@@ -235,30 +240,23 @@ trait Automaton
    */
   def filterTransitions(
       keepEdge: Transition => Boolean
-  ): Automaton = {
-    val filteredBuilder = AutomatonBuilder()
+  ): Automaton = trace("filterTransitions") {
+    val builder = AutomatonBuilder()
+      .addStates(trace("adding States")(states))
+      .setInitial(initialState)
+      .setAccepting(states.filter(isAccept).toSeq: _*)
 
-    this.transitions.filter(keepEdge).foreach {
-      case t @ (from, _, to) =>
-        val involvedStates = Seq(from, to)
-        filteredBuilder
-          .addStates(involvedStates)
-          .addTransitionTuple(t)
+    transitions.filter(keepEdge).foreach(builder.addTransitionTuple)
 
-        val acceptingStates = involvedStates.filter(isAccept).toSeq
-        filteredBuilder.addStates(acceptingStates)
-        acceptingStates.foreach(filteredBuilder setAccepting _)
-    }
-
-    if (filteredBuilder containsState initialState)
-      filteredBuilder.setInitial(initialState).getAutomaton()
-    else REJECT_ALL
+    builder.getAutomaton()
   }
 
   /**
-   * Iterate over all transitions
+   * Iterate over all transitions.
    */
-  lazy val transitions = transitionsBreadthFirst().toSeq
+  lazy val transitions =
+    (for (s1 <- states.iterator; (s2, lbl) <- outgoingTransitions(s1))
+      yield (s1, lbl, s2)).toIndexedSeq
 
   def allNodes() = states.toSeq
   def edges() = transitions.toSeq
@@ -525,6 +523,7 @@ object REJECT_ALL extends Automaton {
   override def outgoingTransitions(_from: AutomataTypes.State) = Iterator.empty
   override def states = Seq.empty
   override lazy val isEmpty = true
+  override def toString = "∅ REJECT ALL"
 }
 
 sealed abstract class SymbolicLabel
