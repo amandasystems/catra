@@ -12,6 +12,7 @@ import ap.terfor.conjunctions.Conjunction
 import collection.mutable.HashMap
 import AutomataTypes._
 import EdgeWrapper._
+import VariousHelpers.simplifyUnlessTimeout
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -129,7 +130,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     goalState(context.goal) match {
       case Plugin.GoalState.Final => splitter.handleGoal(context.goal)
-      case _                      => List(Plugin.ScheduleTask(splitter, 0))
+      case _                      => Seq() // Only split when we have to!
     }
   }
 
@@ -379,9 +380,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
 
     val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
-
-    val simplifiedEquations =
-      ReduceWithConjunction(Conjunction.TRUE, context.order)(equations)
+    val simplifiedEquations = simplifyUnlessTimeout(order, equations)
 
     Seq(
       Plugin.AddAxiom(
@@ -504,7 +503,13 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           theoryInstance
         )
 
-      val split = unknownTransitions.map(transitionToSplit(_)).take(1).toSeq
+      val rand = ap.parameters.Param.RANDOM_DATA_SOURCE(goal.settings)
+      val allSplits = unknownTransitions.map(transitionToSplit(_)).toSeq
+      val split =
+        if (allSplits.isEmpty)
+          List()
+        else
+          List(allSplits(rand nextInt allSplits.size))
 
       // This cast is necessary to make the code compile because Scala cannot
       // figure out that these two instances of associated types are the same at

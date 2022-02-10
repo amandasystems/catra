@@ -9,11 +9,6 @@ import Plugin.AddAxiom
 import ap.parser._
 import ap.basetypes.IdealInt
 import scala.util.chaining._
-import scala.sys.process._
-import scala.language.postfixOps
-import ap.theories._
-import AutomataTypes._
-import SymbolicLabel.SingleChar
 import IIntRelation._
 
 object Tex {

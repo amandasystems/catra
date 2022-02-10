@@ -1,7 +1,7 @@
 package uuverifiers.parikh_theory
 
 import ap.proof.theoryPlugins.Plugin
-import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
+import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.{TermOrder, Formula, Term}
 import ap.terfor.substitutions.{VariableShiftSubst}
@@ -9,6 +9,7 @@ import ap.theories._
 import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._
 import AutomataTypes._
+import VariousHelpers.simplifyUnlessTimeout
 
 // TODO write a LengthCounting mixin which interns one term for length and
 // yields that for each transition
@@ -186,8 +187,7 @@ trait ParikhTheory
         varFactory.exists(conj(thisMonoidMapInstance +: clauses))
       }
 
-      val simplifiedEquations =
-        ReduceWithConjunction(Conjunction.TRUE, order)(allEquations)
+      val simplifiedEquations = simplifyUnlessTimeout(order, allEquations)
 
       // TODO check if the flow equations have just one solution, in that case just return that.
       // Use  simplifiedEquations.quans: check if empty, and WHAT MORE???

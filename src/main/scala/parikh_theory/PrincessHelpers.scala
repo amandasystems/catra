@@ -10,6 +10,7 @@ import ap.theories._
 import scala.annotation.elidable
 import scala.annotation.elidable.FINE
 import collection.mutable.HashMap
+import ap.terfor.conjunctions.ReduceWithConjunction
 
 trait NoFunctions {
   val functionPredicateMapping
@@ -138,4 +139,16 @@ class FreshVariables(private var nextVarIndex: Integer)(
     conjunction
   )
 
+}
+
+object VariousHelpers extends Tracing {
+  def simplifyUnlessTimeout(
+      order: TermOrder,
+      formula: Conjunction
+  ): Conjunction =
+    try {
+      ReduceWithConjunction(Conjunction.TRUE, order)(formula)
+    } catch {
+      case ap.util.Timeout(_) => trace("Timeout while simplifying")(formula)
+    }
 }
