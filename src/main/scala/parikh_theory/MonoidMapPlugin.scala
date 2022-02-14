@@ -141,6 +141,47 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           .toSeq
       )
 
+    val rand =
+      ap.parameters.Param.RANDOM_DATA_SOURCE(context.goal.settings)
+
+    knownConnectedAutomataNrs match {
+      case Seq()  => Seq()
+      case Seq(fst) => {
+        val otherAutomata = context.activeAutomata.toSeq filterNot (_ == fst)
+        if (otherAutomata.isEmpty) {
+          Seq()
+        } else {
+          // TOOD: what is better, pick the second automaton randomly,
+          // or take the smallest one?
+
+          val snd = otherAutomata(rand nextInt otherAutomata.size)
+//          val otherSorted =
+//            otherAutomata.sortBy(context.filteredAutomaton(_).states.size)
+//          val snd =
+//            otherSorted.head
+          materialiseProduct(fst, snd, context)
+        }
+      }
+      case Seq(left, right) =>
+        materialiseProduct(left, right, context)
+      case nrs => {
+        val buf = nrs.toBuffer
+        rand.shuffle(buf)
+        val sort = buf.toSeq.take(2).sorted
+        materialiseProduct(sort(0), sort(1), context)
+      }
+    }
+
+  }
+
+  private def handleMaterialiseOld(context: Context) = trace("handleMaterialise") {
+    val knownConnectedAutomataNrs: Seq[Int] =
+      trace("knownConnectedAutomataNrs")(
+        context.activeAutomata
+          .diff(context.automataWithConnectedPredicate)
+          .toSeq
+      )
+
     // TODO better heuristic for >2!
     // TODO should we start materialise single automata?
     knownConnectedAutomataNrs match {
