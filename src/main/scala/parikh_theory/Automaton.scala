@@ -1,6 +1,6 @@
 package uuverifiers.parikh_theory
 
-import collection.mutable.{HashMap, ArrayBuffer, Queue}
+import collection.mutable.{HashMap, ArrayBuffer, Queue, HashSet => MHashSet}
 import scala.language.implicitConversions
 import EdgeWrapper._
 
@@ -132,6 +132,60 @@ trait Automaton
     val initialDecoration = if (s == initialState) "➡" else ""
     val acceptingAnnotation = if (isAccept(s)) s"🏆(${s})" else s"(${s})"
     s"${initialDecoration}${acceptingAnnotation}"
+  }
+
+  /**
+   * Forward-reachable states, ignoring the specified disabled edges.
+   */
+  def fwdReachable(disabledEdges: Set[Transition]) : Set[State] = {
+    var todo = List(initialState)
+    val res  = new MHashSet[State]
+
+    res += initialState
+
+    while (!todo.isEmpty) {
+      val next = todo.head
+      todo = todo.tail
+
+      for ((target, l) <- outgoingTransitions(next))
+        if (!disabledEdges.contains((next, l, target)) &&
+              (res add target))
+          todo = target :: todo
+    }
+
+    res.toSet
+  }
+
+  /**
+   * Backward-reachable states, ignoring the specified disabled edges.
+   */
+  def bwdReachable(disabledEdges: Set[Transition]) : Set[State] = {
+    val reachedFrom = new HashMap[State, ArrayBuffer[State]]
+
+    for (t@(s1, _, s2) <- transitions)
+      if (!disabledEdges.contains(t))
+        reachedFrom.getOrElseUpdate(s2, new ArrayBuffer) += s1
+
+    val res  = new MHashSet[State]
+    var todo = List[State]()
+
+    for (s <- states)
+      if (isAccept(s)) {
+        res += s
+        todo = s :: todo
+      }
+
+    while (!todo.isEmpty) {
+      val next = todo.head
+      todo = todo.tail
+
+      for (sources <- reachedFrom get next)
+        for (source <- sources)
+          if (res add source)
+            todo = source :: todo
+    }
+
+    res.toSet
   }
 
   override def toString(): String = {

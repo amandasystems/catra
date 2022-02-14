@@ -4,7 +4,6 @@ import ap.terfor.preds.Atom
 import ap.terfor.Term
 import ap.proof.goal.Goal
 import ap.terfor.linearcombination.LinearCombination
-import ap.terfor.conjunctions.ReduceWithConjunction
 import ap.terfor.TerForConvenience._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.SortedSet
@@ -186,11 +185,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           .toSet
       }
 
+      val reachableStates =
+        aut.fwdReachable(deadTransitions) & aut.bwdReachable(deadTransitions)
+      val knownUnreachableStates = trace("knownUnreachableStates") {
+        aut.states filterNot reachableStates
+      }
+
+/*
       val filteredGraph = aut.dropEdges(deadTransitions)
 
       val knownUnreachableStates = trace("knownUnreachableStates") {
         filteredGraph.unreachableFrom(aut.initialState)
       }
+ */
 
       val unknownEdges = trace("unknownEdges")(
         context.autTransitionTermsUnordered(autId) filter (
