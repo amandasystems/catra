@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import re
+from collections import Counter, defaultdict
 
 left = sys.argv[1]
 right = sys.argv[2]
@@ -16,16 +17,39 @@ def parse_lines(lines):
         match = LINE_RE.match(line)
         if not match:
             continue
+        sat_status = match.group("sat_status")
         results[match.group("file_name")] = (
-            match.group("sat_status"),
-            float(match.group("runtime")),
+            sat_status,
+            float(match.group("runtime"))
+            if not "timeout" in sat_status
+            else float("inf"),
         )
     return results
+
+
+def classify_outcome(left_runtime, right_runtime):
+    runtime_diff = left_runtime - right_runtime
+    runtime_difference_is_large = (
+        abs(runtime_diff) / abs(max(left_runtime, right_runtime))
+    ) >= 0.10 and abs(runtime_diff) > 1.0
+
+    if runtime_difference_is_large:
+        # print(
+        #    f"I: {instance} runtime: {left_runtime} vs {right_runtime}: diff {runtime_diff}"
+        # )
+        if runtime_diff < 0:
+            return "left wins"
+        else:
+            return "right wins"
+    else:
+        return "draws"
 
 
 with open(left) as left, open(right) as right:
     lefts = parse_lines(left)
     rights = parse_lines(right)
+
+common_keys = set(lefts.keys()).intersection(rights.keys())
 
 if not lefts.keys() == rights.keys():
     different_keys = set(lefts.keys()).symmetric_difference(set(rights.keys()))
@@ -34,48 +58,47 @@ if not lefts.keys() == rights.keys():
         if len(different_keys) > 5
         else ", ".join(different_keys)
     )
-    print(
-        f"The following {len(different_keys)} files are not in both sets: {different_keys_str}"
-    )
+    print(f"W: The following files are not in both sets:\n{different_keys_str}")
+    print(f"I: Proceeding with the {len(common_keys)} common instance(s)...")
 
-nr_same = 0
+
 nr_different = 0
-nr_timeout = 0
-nr_left_wins = 0
-nr_right_wins = 0
-nr_draws = 0
+outcomes = defaultdict(Counter)
 
-common_keys = set(lefts.keys()).intersection(rights.keys())
+
 for instance in common_keys:
     left_status, left_runtime = lefts[instance]
     right_status, right_runtime = rights[instance]
-    if "timeout" in left_status or "timeout" in right_status:
-        nr_timeout += 1
-        if "timeout" in left_status and not "timeout" in right_status:
-            print(f"right could solve {instance}, left timed out!")
-            nr_right_wins += 1
-        if "timeout" in right_status and not "timeout" in left_status:
-            print(f"left could solve {instance}, right timed out!")
-            nr_left_wins += 1
+
+    instance_type = "unknown"
+
+    if "timeout" in left_status and "timeout" in right_status:
+        outcomes[instance_type]["both timeout"] += 1
+        print(f"W: No ground truth for {instance}: both timed out!")
         continue
-    if not left_status == right_status:
-        print(f"{instance} differs: {left_status} != {right_status}")
-        nr_different += 1
+
+    results = {s for s in [left_status, right_status] if not "timeout" in s}
+
+    if len(results) == 1:
+        # At least one solver did not time out and reported a status: we assume
+        # it is correct and use that to classify the instance.
+        instance_type = list(results)[0]
     else:
-        nr_same += 1
-        runtime_diff = left_runtime - right_runtime
-        runtime_difference_is_large = (
-            abs(runtime_diff) / abs(max(left_runtime, right_runtime))
-        ) >= 0.5 and runtime_diff
-        if runtime_difference_is_large:
-            print(
-                f"{instance} runtime: {left_runtime} vs {right_runtime}: diff {runtime_diff}"
-            )
-            if runtime_diff < 0:
-                nr_left_wins += 1
-            else:
-                nr_right_wins += 1
-        else:
-            nr_draws += 1
-print(f"nr different: {nr_different}, nr same: {nr_same}, nr timeout: {nr_timeout}")
-print(f"left wins: {nr_left_wins}, nr draws: {nr_draws}, right wins: {nr_right_wins}")
+        # The solvers both came to a conclusion, but don't agree: we can't trust
+        # the numbers.
+        print(f"W: different outcomes {left_status}/{right_status} for {instance}!")
+        nr_different += 1
+        continue
+
+    # Now we know: at least one solver has a solution.
+    outcomes[instance_type][classify_outcome(left_runtime, right_runtime)] += 1
+
+print()
+print("======= Summary =======")
+print(f"\nDifferent outcomes: {nr_different}\n")
+for outer_label, counts in outcomes.items():
+    print(f"## {outer_label}")
+    inner_label_maxlen = max(len(l) for l in counts.keys()) + 4
+    for inner_label, count in counts.most_common():
+        print(f"{inner_label:{inner_label_maxlen}} {count}")
+    print()
