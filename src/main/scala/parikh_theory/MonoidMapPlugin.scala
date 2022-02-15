@@ -133,7 +133,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
   }
 
-  private def handleMaterialise(context: Context) = trace("handleMaterialise") {
+  private def handleMaterialiseNew(context: Context) = trace("handleMaterialise") {
     val knownConnectedAutomataNrs: Seq[Int] =
       trace("knownConnectedAutomataNrs")(
         context.activeAutomata
@@ -174,7 +174,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
   }
 
-  private def handleMaterialiseOld(context: Context) = trace("handleMaterialise") {
+  private def handleMaterialise(context: Context) = trace("handleMaterialise") {
     val knownConnectedAutomataNrs: Seq[Int] =
       trace("knownConnectedAutomataNrs")(
         context.activeAutomata
