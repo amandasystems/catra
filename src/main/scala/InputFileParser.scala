@@ -204,7 +204,10 @@ class InputFileParser extends Tracing {
   // FIXME I don't like how NotEquals isn't negated equals, but there is no
   // clean way I can think of to fix it.
   def atom[_ : P]: P[Atom] = (sum ~ inequalitySymbol ~ sum).map {
-    case (lhs, inequality, rhs) => Atom(lhs, inequality, rhs)
+    case (lhs, inequality, rhs) => {
+      ap.util.Timeout.check
+      Atom(lhs, inequality, rhs)
+    }
   }
 
   def inequalitySymbol[_ : P]: P[Inequality] =
@@ -354,7 +357,9 @@ class InputFileParser extends Tracing {
 object InputFileParser {
   def parse(s: String): fastparse.Parsed[Instance] = {
     val p = new InputFileParser()
-    fastparse.parse(s, p.parser(_))
+    ap.util.Timeout.withTimeoutMillis(10000) {
+      fastparse.parse(s, p.parser(_))
+    } { throw new Exception("parser timeout") }
   }
 }
 
