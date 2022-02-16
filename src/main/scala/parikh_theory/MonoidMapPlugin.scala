@@ -58,25 +58,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val context = Context(goal, predicateAtom)
       stats.increment("handlePredicateInstance")
 
-      implicit class RichSeq[T](left: Seq[T]) {
-        def ifNoActions(right: => Seq[T]): Seq[T] =
-          if (left.nonEmpty) {
-            left
-          } else {
-            right
-          }
-      }
-
-      // FIXME!!!
-      val materialiseActions: Seq[Plugin.Action] =
-        if (context.activeAutomata.size > 1)
-          handleMaterialise(context)
-        else Seq()
-
-      materialiseActions
-        .ifNoActions(handleMonoidMapSubsumption(context))
-        .ifNoActions(handleConnectedInstances(context))
-        .ifNoActions(handleSplitting(context))
+      handleMonoidMapSubsumption(context) elseDo
+      handleConnectedInstances(context)   elseDo
+      handleMaterialise(context)          elseDo
+      handleSplitting(context)
     }
 
   private def handleMonoidMapSubsumption(
@@ -125,15 +110,15 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   private def handleSplitting(context: Context) = trace("handleSplitting") {
     stats.increment("handleSplitting")
 
-    val splitter = new TransitionSplitter()
+//    val splitter = new TransitionSplitter()
 
     goalState(context.goal) match {
-      case Plugin.GoalState.Final => splitter.handleGoal(context.goal)
+      case Plugin.GoalState.Final => new TransitionSplitter().handleGoal(context.goal)
       case _                      => Seq() // Only split when we have to!
     }
   }
 
-  private def handleMaterialiseNew(context: Context) = trace("handleMaterialise") {
+  private def handleMaterialise(context: Context) : Seq[Plugin.Action] = trace("handleMaterialise") {
     val knownConnectedAutomataNrs: Seq[Int] =
       trace("knownConnectedAutomataNrs")(
         context.activeAutomata
@@ -174,7 +159,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
   }
 
-  private def handleMaterialise(context: Context) = trace("handleMaterialise") {
+  private def handleMaterialiseOld(context: Context) = trace("handleMaterialise") {
     val knownConnectedAutomataNrs: Seq[Int] =
       trace("knownConnectedAutomataNrs")(
         context.activeAutomata
@@ -383,17 +368,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     implicit val order = context.goal.order
     val varFactory = new FreshVariables(0)
-    val transitionToTerm = trace("product transitionToTerm")(
+    val transitionToTermSeq = trace("product transitionToTerm")(
       materialisedAutomata(productNr).transitions
         .map(t => (t, varFactory.nextVariable()))
-        .toMap
+        .toIndexedSeq
     )
+
+    val transitionToTerm = transitionToTermSeq.toMap
 
     val newClauses = theoryInstance.automataClauses(
       materialisedAutomata(productNr),
       context.instanceTerm,
       productNr,
-      transitionToTerm.toIndexedSeq
+      transitionToTermSeq
     )
 
     // - x(t) = sum(e : termProductEdges(t, default=0))
@@ -431,6 +418,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val simplifiedEquations = simplifyUnlessTimeout(order, equations)
 
     Seq(
+      Plugin.RemoveFacts(conj((context.connectedInstances filter {
+                                 a => Set(leftNr,
+                                          rightNr) contains a(1).constant.intValueSafe
+                               }) ++
+                                context.autTransitionMasks(leftNr) ++
+                                context.autTransitionMasks(rightNr))),
       Plugin.AddAxiom(
         context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
           rightNr
