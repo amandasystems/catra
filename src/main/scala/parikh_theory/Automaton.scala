@@ -289,6 +289,36 @@ trait Automaton
   }
 
   /**
+   * Some accepting path of the automaton, or None if no such path
+   * exists.
+   */
+  def acceptingPath(disabledEdges: Set[Transition]) : Option[Seq[Transition]] = {
+    var todo    = List(initialState)
+    val reached = new HashMap[State, List[Transition]]
+
+    reached.put(initialState, List())
+
+    while (!todo.isEmpty) {
+      val next      = todo.head
+      todo          = todo.tail
+      val pathSoFar = reached(next)
+
+      if (isAccept(next))
+        return Some(pathSoFar.reverse)
+
+      for ((target, l) <- outgoingTransitions(next)) {
+        val tr = (next, l, target)
+        if (!disabledEdges.contains(tr) && !reached.contains(target)) {
+          reached.put(target, tr :: pathSoFar)
+          todo = target :: todo
+        }
+      }
+    }
+
+    None
+  }
+
+  /**
    * Filter an automaton, producing a new automaton with a subset of its
    * previous edges, as defined by a predicate.
    */
