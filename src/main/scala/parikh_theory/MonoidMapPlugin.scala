@@ -29,6 +29,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   import transitionExtractor.{
     transitionStatusFromTerm,
     termMeansDefinitelyAbsent,
+    termMeansDefinitelyPresent,
     goalAssociatedPredicateInstances,
     transitionNr,
     transitionTerm,
@@ -211,6 +212,14 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           .toSet
       }
 
+      val presentTransitions = trace("presentTransitions") {
+        aut.transitions
+          .filter(
+            t => termMeansDefinitelyPresent(context.goal, transitionToTerm(t))
+          )
+          .toSet
+      }
+
       val reachableStates =
         aut.fwdReachable(deadTransitions) & aut.bwdReachable(deadTransitions)
       val knownUnreachableStates = trace("knownUnreachableStates") {
@@ -223,17 +232,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val knownUnreachableStates = trace("knownUnreachableStates") {
         filteredGraph.unreachableFrom(aut.initialState)
       }
- */
 
       val unknownEdges = trace("unknownEdges")(
         context.autTransitionTermsUnordered(autId) filter (
             t => transitionStatusFromTerm(context.goal, t).isUnknown
         )
       )
+ */
 
-      val allTransitionsAssigned = unknownEdges.isEmpty || context
-        .autTransitionTermsUnordered(autId)
-        .isEmpty
+      val definitelyReached =
+        aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
+
+      val allTransitionsAssigned =
+        aut.transitions forall { t => deadTransitions(t) || definitelyReached(t._1) }
 
       val subsumeActions =
         if (allTransitionsAssigned) {

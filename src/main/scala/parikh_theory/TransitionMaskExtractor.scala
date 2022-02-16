@@ -102,6 +102,17 @@ class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
 
   }
 
+  def termMeansDefinitelyPresent(
+      goal: Goal,
+      term: LinearCombination
+  ): Boolean = {
+    term match {
+      case LinearCombination.Constant(x) => x > 0
+      case _                             => goal.reduceWithFacts.lowerBound(term).exists(_ > 0)
+    }
+
+  }
+
   def termMeansPossiblyAbsent(
       goal: Goal,
       term: LinearCombination
