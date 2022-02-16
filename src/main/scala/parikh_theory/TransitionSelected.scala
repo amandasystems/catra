@@ -4,10 +4,13 @@ package uuverifiers.parikh_theory
 protected sealed trait TransitionSelected {
   def definitelyAbsent = false
   def isUnknown = false
+  def isPresent = false
 }
 
 object TransitionSelected {
-  case object Present extends TransitionSelected
+  case object Present extends TransitionSelected {
+    override def isPresent = true
+  }
   case object Absent extends TransitionSelected {
     override def definitelyAbsent = true
   }
