@@ -359,7 +359,7 @@ object InputFileParser {
     val p = new InputFileParser()
     ap.util.Timeout.withTimeoutMillis(10000) {
       fastparse.parse(s, p.parser(_))
-    } { throw new Exception("parser timeout") }
+    } { fastparse.parse("parsing timeout", p.parser(_)) }
   }
 }
 
