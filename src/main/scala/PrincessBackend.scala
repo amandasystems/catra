@@ -108,7 +108,7 @@ class PrincessBackend(private val arguments: CommandLineOptions)
           )
         }
         case ProverStatus.Unsat       => Success(Unsat)
-        case ProverStatus.Running     => Success(Timeout(timeout_ms.get))
+        case ProverStatus.Running     => p.stop(true); Success(Timeout(timeout_ms.get))
         case ProverStatus.OutOfMemory => Success(OutOfMemory)
         case otherStatus =>
           Failure(
