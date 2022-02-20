@@ -1,5 +1,10 @@
 package uuverifiers.parikh_theory
 
+import ap.PresburgerTools
+import ap.basetypes.IdealInt
+import ap.terfor.{ConstantTerm, Formula, Term, TerForConvenience, TermOrder, OneTerm}
+import ap.terfor.conjunctions.Conjunction
+import ap.terfor.linearcombination.LinearCombination
 import collection.mutable.{HashMap, ArrayBuffer, Queue, HashSet => MHashSet}
 import scala.language.implicitConversions
 import EdgeWrapper._
@@ -186,6 +191,95 @@ trait Automaton
     }
 
     res.toSet
+  }
+
+  /**
+   * Compute an (existentially quantified) closed-form description of
+   * the Parikh image. The bridging formula defines a mapping from the
+   * Parikh image vectors to some feature of interest; e.g., length.
+   */
+  def parikhImage(bridgingFormula : Map[Transition, Term] => Formula,
+                  bridgingConstants : Seq[ConstantTerm],
+                  quantElim : Boolean = true) : Conjunction = {
+    import TerForConvenience._
+    implicit val order  = TermOrder.EMPTY.extend(bridgingConstants)
+    
+    val stateSeq        = states.toIndexedSeq
+    val state2Index     = stateSeq.iterator.zipWithIndex.toMap
+    
+    val initialStateInd = state2Index(initialState)
+
+    val N               = transitions.size
+    val prodVars        = for ((_, num) <- transitions.zipWithIndex) yield v(num)
+    val zVars           = for ((_, num) <- stateSeq.zipWithIndex)    yield v(num + N)
+    val M               = N + zVars.size
+    val finalVars       = (for ((state, num) <-
+                                  (stateSeq filter (isAccept _)).zipWithIndex)
+                           yield (state2Index(state) -> v(num + M))).toMap
+
+    val bFormula        =
+      bridgingFormula((transitions zip prodVars.asInstanceOf[Seq[Term]]).toMap)
+
+    val finalStateFor   =
+      (finalVars.values.toSeq >= 0) &
+      (sum(for ((_, t) <- finalVars.iterator) yield (IdealInt.ONE, l(t))) === 1)
+
+    // equations relating the production counters
+    val prodEqs =
+      (for (state <- 0 until stateSeq.size) yield {
+         LinearCombination(
+           (for (t <- finalVars get state) yield (IdealInt.ONE, t)) ++
+           (if (state == initialStateInd)
+              Iterator((IdealInt.MINUS_ONE, OneTerm))
+            else
+              Iterator.empty) ++
+           (for (((from, _, to), prodVar) <-
+                   transitions.iterator zip prodVars.iterator;
+                 mult = (if (state2Index(from) == state) 1 else 0) -
+                        (if (state2Index(to) == state) 1 else 0))
+            yield (IdealInt(mult), prodVar)),
+           order)
+       }).toList
+
+    val allEqs = eqZ(prodEqs)
+
+    val prodNonNeg =
+      prodVars >= 0
+
+    val finalImps =
+      (for ((finalState, finalVar) <- finalVars) yield {
+         (finalVar === 0) | (zVars(finalState) === 1)
+       }).toList
+
+    val prodImps =
+      (for (((_, _, to), prodVar) <-
+              transitions.iterator zip prodVars.iterator)
+       yield ((prodVar === 0) | (zVars(to) > 0))).toList
+
+    // connective
+    val zImps =
+      (for (state <- 0 until stateSeq.size) yield {
+         disjFor(Iterator(zVars(state) === 0) ++
+                   (for (t <- finalVars get state) yield (t === 1)) ++
+                   (for (((from, _, to), prodVar) <-
+                           transitions.iterator zip prodVars.iterator;
+                         if state2Index(from) == state;
+                         toInd = state2Index(to))
+                    yield conj(zVars(state) === zVars(toInd) + 1,
+                               geqZ(List(prodVar - 1, zVars(toInd) - 1)))))
+         }).toList
+
+    val matrix =
+      conj(finalStateFor :: allEqs :: prodNonNeg :: bFormula ::
+             zImps ::: prodImps ::: finalImps)
+
+    val rawConstraint =
+      exists(prodVars.size + zVars.size + finalVars.size, matrix)
+
+    if (quantElim)
+      PresburgerTools.elimQuantifiersWithPreds(rawConstraint)
+    else
+      rawConstraint
   }
 
   override def toString(): String = {
