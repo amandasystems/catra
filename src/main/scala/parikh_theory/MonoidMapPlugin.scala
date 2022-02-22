@@ -327,6 +327,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val annotatedProduct = left.productWithSources(right)
     val product = annotatedProduct.product
 
+    // TODO  keep track of automata we have already seen (mapping from
+    // transitions set to zero, incoming IDs -> id)
     val newAutomataNr = trace("newAutomataNr")(materialisedAutomata.size)
     materialisedAutomata += product
 
@@ -337,6 +339,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
     }
 
+    // TODO filter by the zero-transitions
     val unusedInstances = context.unusedInstances.filter(concernsOneOfTheTerms)
     val removeUnusedPredicates = trace("removeUnusedPredicates")(
       unusedInstances.map(Plugin.RemoveFacts(_))

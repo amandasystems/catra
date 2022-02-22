@@ -227,7 +227,7 @@ class InputFileParser extends Tracing {
           CounterWithCoefficient(k, Counter(x))
       }
         | constant.map(Constant(_))
-        | "-" ~ identifier.!.map(x => CounterWithCoefficient(-1, Counter(x)))
+        | "-" ~~ identifier.!.map(x => CounterWithCoefficient(-1, Counter(x)))
         | identifier.!.map(Counter(_))
     )
 
@@ -246,30 +246,25 @@ class InputFileParser extends Tracing {
 
   def unaryExpression[_ : P]: P[Atom] =
     P(
-      "(" ~ unaryExpression ~ ")"
-        | ("¬" ~ unaryExpression).map(_.negated())
+      ("¬" ~ unaryExpression).map(_.negated())
         | atom
     )
 
-  def andExpression[_ : P]: P[Formula] =
-    P((unaryExpression | "(" ~ formula ~ ")") ~ "&&" ~ formula).map {
-      case (l, r) => And(l, r)
-    }
-  def orExpression[_ : P]: P[Formula] =
-    P((unaryExpression | "(" ~ formula ~ ")") ~ "||" ~ formula).map {
-      case (l, r) => Or(l, r)
+  // TODO use an enumeration for connective symbols to convince the compiler we
+  // know what we're doing.
+  def connective[_ : P]: P[String] = P("&&" | "||").!
+
+  def paren[_ : P]: P[Formula] = P("(" ~ formula ~ ")")
+
+  def term[_ : P]: P[Formula] = P(unaryExpression | paren)
+
+  def binaryExpression[_ : P]: P[Formula] =
+    P(term ~ connective ~ formula).map { // Match is known to be exhaustive.
+      case (l, "&&", r) => And(l, r)
+      case (l, "||", r) => Or(l, r)
     }
 
-  def binaryExpression[_ : P]: P[Formula] = P(andExpression | orExpression)
-
-  // TODO the parenthesis handling here is not elegant
-  def formula[_ : P]: P[Formula] =
-    P(
-      andExpression
-        | orExpression
-        | unaryExpression
-        | "(" ~ formula ~ ")"
-    )
+  def formula[_ : P]: P[Formula] = P(binaryExpression | term)
 
   def sequenceOfIdentifiers[_ : P]: P[Seq[String]] =
     P(identifier.rep(sep = ",", min = 1))

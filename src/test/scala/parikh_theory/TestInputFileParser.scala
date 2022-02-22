@@ -130,4 +130,16 @@ class TestInputFileParser extends AnyFunSuite {
     )
   }
 
+  test("reproduction of infinite loop bug") {
+    tryParse(
+      "constraint ((R27 != 0 || ((R29 != 0 || ((R31 != 0 || ((R33 != 0 || ((R35 != 0 || ((R37 != 0 || ((R39 != 0 || ((R26 != R40))))))))))))))));"
+    )
+  }
+
+  test("reduced failing example") {
+    tryParse(
+      "constraint R27 != 0 || (R29 != 0 || (R31 != 0));"
+    )
+  }
+
 }
