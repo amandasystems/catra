@@ -169,7 +169,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def onlyReturnsLength(
-      theory: LengthCounting,
+      theory: ParikhTheory,
       length: Int
   ) = onlyReturnsCounts(theory, Seq(length))
 }
