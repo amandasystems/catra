@@ -547,9 +547,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
         p.addAssertion(isInImage)
       }
 
-      val satStatus = p.checkSat(true)
-      println(satStatus.toString.toLowerCase())
-
+      assert(p.checkSat(true) == SimpleAPI.ProverStatus.Unsat)
     }
   }
 
@@ -592,7 +590,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       p addAssertion (theoryTwo allowsMonoidValues Seq(cSolverVar))
 
       val satStatus = p.checkSat(true)
-      println(satStatus.toString.toLowerCase())
       assert(satStatus == SimpleAPI.ProverStatus.Sat)
 
     }
@@ -639,6 +636,49 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       p addAssertion (cSolverVar =/= 0)
       val res = p.???
       withClue(s"${p.partialModel}")(assert(res == ProverStatus.Unsat))
+    }
+
+  }
+
+  test("soundness issue #2 reproduction") {
+    import SymbolicLabel.{CharRange, SingleChar}
+
+    val auts = Seq(
+      AutomatonBuilder()
+        .addStates(Seq(0, 1))
+        .setInitial(0)
+        .setAccepting(1)
+        .addTransition(0, SingleChar(32), 1)
+        .addTransition(0, CharRange(33, 65535), 0)
+        .addTransition(1, CharRange(0, 65535), 1)
+        .getAutomaton(),
+      AutomatonBuilder()
+        .addStates(Seq(2, 3, 4))
+        .setInitial(2)
+        .setAccepting(4)
+        .addTransition(2, CharRange(85, 65535), 3)
+        .addTransition(3, CharRange(84, 84), 4)
+        .addTransition(4, CharRange(0, 64), 4)
+        .addTransition(4, CharRange(0, 65535), 4)
+        .getAutomaton(),
+      AutomatonBuilder()
+        .addStates(Seq(5, 6))
+        .setInitial(5)
+        .setAccepting(5)
+        .setAccepting(6)
+        .addTransition(5, CharRange(0, 65535), 6)
+        .addTransition(6, CharRange(0, 65535), 6)
+        .getAutomaton()
+    )
+    val theory =
+      new RegisterCounting(Seq(), auts, Map.empty)
+
+    SimpleAPI.withProver { p =>
+      p addTheory theory
+      implicit val o = p.order
+      p addAssertion (theory allowsMonoidValues Seq())
+      assert(p.checkSat(block = true) == SimpleAPI.ProverStatus.Sat)
+
     }
 
   }

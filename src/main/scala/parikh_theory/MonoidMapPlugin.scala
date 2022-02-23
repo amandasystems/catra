@@ -60,9 +60,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       stats.increment("handlePredicateInstance")
 
       handleMonoidMapSubsumption(context) elseDo
-      handleConnectedInstances(context)   elseDo
-      handleMaterialise(context)          elseDo
-      handleSplitting(context)
+        handleConnectedInstances(context) elseDo
+        handleMaterialise(context) elseDo
+        handleSplitting(context)
     }
 
   private def handleMonoidMapSubsumption(
@@ -114,75 +114,78 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 //    val splitter = new TransitionSplitter()
 
     goalState(context.goal) match {
-      case Plugin.GoalState.Final => new TransitionSplitter().handleGoal(context.goal)
-      case _                      => Seq() // Only split when we have to!
+      case Plugin.GoalState.Final =>
+        new TransitionSplitter().handleGoal(context.goal)
+      case _ => Seq() // Only split when we have to!
     }
   }
 
-  private def handleMaterialise(context: Context) : Seq[Plugin.Action] = trace("handleMaterialise") {
-    val knownConnectedAutomataNrs: Seq[Int] =
-      trace("knownConnectedAutomataNrs")(
-        context.activeAutomata
-          .diff(context.automataWithConnectedPredicate)
-          .toSeq
-      )
+  private def handleMaterialise(context: Context): Seq[Plugin.Action] =
+    trace("handleMaterialise") {
+      val knownConnectedAutomataNrs: Seq[Int] =
+        trace("knownConnectedAutomataNrs")(
+          context.activeAutomata
+            .diff(context.automataWithConnectedPredicate)
+            .toSeq
+        )
 
-    val rand =
-      ap.parameters.Param.RANDOM_DATA_SOURCE(context.goal.settings)
+      val rand =
+        ap.parameters.Param.RANDOM_DATA_SOURCE(context.goal.settings)
 
-    knownConnectedAutomataNrs match {
-      case Seq()  => Seq()
-      case Seq(fst) => {
-        val otherAutomata = context.activeAutomata.toSeq filterNot (_ == fst)
-        if (otherAutomata.isEmpty) {
-          Seq()
-        } else {
-          // TOOD: what is better, pick the second automaton randomly,
-          // or take the smallest one?
+      knownConnectedAutomataNrs match {
+        case Seq() => Seq()
+        case Seq(fst) => {
+          val otherAutomata = context.activeAutomata.toSeq filterNot (_ == fst)
+          if (otherAutomata.isEmpty) {
+            Seq()
+          } else {
+            // TOOD: what is better, pick the second automaton randomly,
+            // or take the smallest one?
 
-          val snd = otherAutomata(rand nextInt otherAutomata.size)
+            val snd = otherAutomata(rand nextInt otherAutomata.size)
 //          val otherSorted =
 //            otherAutomata.sortBy(context.filteredAutomaton(_).states.size)
 //          val snd =
 //            otherSorted.head
-          materialiseProduct(fst, snd, context)
+            materialiseProduct(fst, snd, context)
+          }
+        }
+        case Seq(left, right) =>
+          materialiseProduct(left, right, context)
+        case nrs => {
+          val buf = nrs.toBuffer
+          rand.shuffle(buf)
+          val sort = buf.toSeq.take(2).sorted
+          materialiseProduct(sort(0), sort(1), context)
         }
       }
-      case Seq(left, right) =>
-        materialiseProduct(left, right, context)
-      case nrs => {
-        val buf = nrs.toBuffer
-        rand.shuffle(buf)
-        val sort = buf.toSeq.take(2).sorted
-        materialiseProduct(sort(0), sort(1), context)
+
+    }
+
+  private def handleMaterialiseOld(context: Context) =
+    trace("handleMaterialise") {
+      val knownConnectedAutomataNrs: Seq[Int] =
+        trace("knownConnectedAutomataNrs")(
+          context.activeAutomata
+            .diff(context.automataWithConnectedPredicate)
+            .toSeq
+        )
+
+      // TODO better heuristic for >2!
+      // TODO should we start materialise single automata?
+      knownConnectedAutomataNrs match {
+        case Seq()  => Seq()
+        case Seq(_) => Seq()
+        case Seq(left, right) =>
+          materialiseProduct(left, right, context)
+        case fst +: snd +: _ =>
+          materialiseProduct(fst, snd, context)
+        case _ =>
+          throw new IllegalArgumentException(
+            knownConnectedAutomataNrs mkString ","
+          )
       }
     }
-
-  }
-
-  private def handleMaterialiseOld(context: Context) = trace("handleMaterialise") {
-    val knownConnectedAutomataNrs: Seq[Int] =
-      trace("knownConnectedAutomataNrs")(
-        context.activeAutomata
-          .diff(context.automataWithConnectedPredicate)
-          .toSeq
-      )
-
-    // TODO better heuristic for >2!
-    // TODO should we start materialise single automata?
-    knownConnectedAutomataNrs match {
-      case Seq()  => Seq()
-      case Seq(_) => Seq()
-      case Seq(left, right) =>
-        materialiseProduct(left, right, context)
-      case fst +: snd +: _ =>
-        materialiseProduct(fst, snd, context)
-      case _ =>
-        throw new IllegalArgumentException(
-          knownConnectedAutomataNrs mkString ","
-        )
-    }
-  }
 
   private def handleConnectedInstances(context: Context) =
     context.connectedInstances
@@ -226,7 +229,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         aut.states filterNot reachableStates
       }
 
-/*
+      /*
       val filteredGraph = aut.dropEdges(deadTransitions)
 
       val knownUnreachableStates = trace("knownUnreachableStates") {
@@ -238,13 +241,15 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             t => transitionStatusFromTerm(context.goal, t).isUnknown
         )
       )
- */
+       */
 
       val definitelyReached =
         aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
 
       val allTransitionsAssigned =
-        aut.transitions forall { t => deadTransitions(t) || definitelyReached(t._1) }
+        aut.transitions forall { t =>
+          deadTransitions(t) || definitelyReached(t._1)
+        }
 
       val subsumeActions =
         if (allTransitionsAssigned) {
@@ -410,18 +415,23 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           def productTermsSum(t: Transition) = trace(s"${autNr}::${t}Σ") {
             annotatedProduct.resultsOf(originTerm)(t) match {
               case Some(productTransitions) =>
-                lcSum(productTransitions.map(productTransitionToLc))
+                lcSum(
+                  trace(s"productTransitions of ${t}")(productTransitions)
+                    .map(productTransitionToLc)
+                )
               case None => l(ZERO)
             }
           }
 
           materialisedAutomata(autNr).transitions.map(
             termTransition =>
-              trace(s"a${autNr} bridge: ${termTransition}")(
-                trace("LHS")(transitionToTerm(termTransition)) === trace("RHS")(
-                  productTermsSum(termTransition)
+              trace(s"a#${autNr} bridge: ${termTransition}") {
+                val termTransitionTerm = transitionToTerm(termTransition)
+                val sumOfResultingEdges = productTermsSum(termTransition)
+                trace(s"${termTransitionTerm} = ${sumOfResultingEdges}")(
+                  termTransitionTerm === sumOfResultingEdges
                 )
-              )
+              }
           )
         }
       )
@@ -432,12 +442,15 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val simplifiedEquations = simplifyUnlessTimeout(order, equations)
 
     Seq(
-      Plugin.RemoveFacts(conj((context.connectedInstances filter {
-                                 a => Set(leftNr,
-                                          rightNr) contains a(1).constant.intValueSafe
-                               }) ++
-                                context.autTransitionMasks(leftNr) ++
-                                context.autTransitionMasks(rightNr))),
+      Plugin.RemoveFacts(
+        conj(
+          (context.connectedInstances filter { a =>
+            Set(leftNr, rightNr) contains a(1).constant.intValueSafe
+          }) ++
+            context.autTransitionMasks(leftNr) ++
+            context.autTransitionMasks(rightNr)
+        )
+      ),
       Plugin.AddAxiom(
         context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
           rightNr

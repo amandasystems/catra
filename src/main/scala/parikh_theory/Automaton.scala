@@ -2,7 +2,14 @@ package uuverifiers.parikh_theory
 
 import ap.PresburgerTools
 import ap.basetypes.IdealInt
-import ap.terfor.{ConstantTerm, Formula, Term, TerForConvenience, TermOrder, OneTerm}
+import ap.terfor.{
+  ConstantTerm,
+  Formula,
+  Term,
+  TerForConvenience,
+  TermOrder,
+  OneTerm
+}
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 import collection.mutable.{HashMap, ArrayBuffer, Queue, HashSet => MHashSet}
@@ -142,9 +149,9 @@ trait Automaton
   /**
    * Forward-reachable states, ignoring the specified disabled edges.
    */
-  def fwdReachable(disabledEdges: Set[Transition]) : Set[State] = {
+  def fwdReachable(disabledEdges: Set[Transition]): Set[State] = {
     var todo = List(initialState)
-    val res  = new MHashSet[State]
+    val res = new MHashSet[State]
 
     res += initialState
 
@@ -154,7 +161,7 @@ trait Automaton
 
       for ((target, l) <- outgoingTransitions(next))
         if (!disabledEdges.contains((next, l, target)) &&
-              (res add target))
+            (res add target))
           todo = target :: todo
     }
 
@@ -164,14 +171,14 @@ trait Automaton
   /**
    * Backward-reachable states, ignoring the specified disabled edges.
    */
-  def bwdReachable(disabledEdges: Set[Transition]) : Set[State] = {
+  def bwdReachable(disabledEdges: Set[Transition]): Set[State] = {
     val reachedFrom = new HashMap[State, ArrayBuffer[State]]
 
-    for (t@(s1, _, s2) <- transitions)
+    for (t @ (s1, _, s2) <- transitions)
       if (!disabledEdges.contains(t))
         reachedFrom.getOrElseUpdate(s2, new ArrayBuffer) += s1
 
-    val res  = new MHashSet[State]
+    val res = new MHashSet[State]
     var todo = List[State]()
 
     for (s <- states)
@@ -198,48 +205,50 @@ trait Automaton
    * the Parikh image. The bridging formula defines a mapping from the
    * Parikh image vectors to some feature of interest; e.g., length.
    */
-  def parikhImage(bridgingFormula : Map[Transition, Term] => Formula,
-                  bridgingConstants : Seq[ConstantTerm],
-                  quantElim : Boolean = true) : Conjunction = {
+  def parikhImage(
+      bridgingFormula: Map[Transition, Term] => Formula,
+      bridgingConstants: Seq[ConstantTerm],
+      quantElim: Boolean = true
+  ): Conjunction = {
     import TerForConvenience._
-    implicit val order  = TermOrder.EMPTY.extend(bridgingConstants)
-    
-    val stateSeq        = states.toIndexedSeq
-    val state2Index     = stateSeq.iterator.zipWithIndex.toMap
-    
+    implicit val order = TermOrder.EMPTY.extend(bridgingConstants)
+
+    val stateSeq = states.toIndexedSeq
+    val state2Index = stateSeq.iterator.zipWithIndex.toMap
+
     val initialStateInd = state2Index(initialState)
 
-    val N               = transitions.size
-    val prodVars        = for ((_, num) <- transitions.zipWithIndex) yield v(num)
-    val zVars           = for ((_, num) <- stateSeq.zipWithIndex)    yield v(num + N)
-    val M               = N + zVars.size
-    val finalVars       = (for ((state, num) <-
-                                  (stateSeq filter (isAccept _)).zipWithIndex)
-                           yield (state2Index(state) -> v(num + M))).toMap
+    val N = transitions.size
+    val prodVars = for ((_, num) <- transitions.zipWithIndex) yield v(num)
+    val zVars = for ((_, num) <- stateSeq.zipWithIndex) yield v(num + N)
+    val M = N + zVars.size
+    val finalVars =
+      (for ((state, num) <- (stateSeq filter (isAccept _)).zipWithIndex)
+        yield (state2Index(state) -> v(num + M))).toMap
 
-    val bFormula        =
+    val bFormula =
       bridgingFormula((transitions zip prodVars.asInstanceOf[Seq[Term]]).toMap)
 
-    val finalStateFor   =
+    val finalStateFor =
       (finalVars.values.toSeq >= 0) &
-      (sum(for ((_, t) <- finalVars.iterator) yield (IdealInt.ONE, l(t))) === 1)
+        (sum(for ((_, t) <- finalVars.iterator) yield (IdealInt.ONE, l(t))) === 1)
 
     // equations relating the production counters
     val prodEqs =
       (for (state <- 0 until stateSeq.size) yield {
-         LinearCombination(
-           (for (t <- finalVars get state) yield (IdealInt.ONE, t)) ++
-           (if (state == initialStateInd)
-              Iterator((IdealInt.MINUS_ONE, OneTerm))
-            else
-              Iterator.empty) ++
-           (for (((from, _, to), prodVar) <-
-                   transitions.iterator zip prodVars.iterator;
-                 mult = (if (state2Index(from) == state) 1 else 0) -
-                        (if (state2Index(to) == state) 1 else 0))
-            yield (IdealInt(mult), prodVar)),
-           order)
-       }).toList
+        LinearCombination(
+          (for (t <- finalVars get state) yield (IdealInt.ONE, t)) ++
+            (if (state == initialStateInd)
+               Iterator((IdealInt.MINUS_ONE, OneTerm))
+             else
+               Iterator.empty) ++
+            (for (((from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
+                  mult = (if (state2Index(from) == state) 1 else 0) -
+                    (if (state2Index(to) == state) 1 else 0))
+              yield (IdealInt(mult), prodVar)),
+          order
+        )
+      }).toList
 
     val allEqs = eqZ(prodEqs)
 
@@ -248,30 +257,34 @@ trait Automaton
 
     val finalImps =
       (for ((finalState, finalVar) <- finalVars) yield {
-         (finalVar === 0) | (zVars(finalState) === 1)
-       }).toList
+        (finalVar === 0) | (zVars(finalState) === 1)
+      }).toList
 
     val prodImps =
-      (for (((_, _, to), prodVar) <-
-              transitions.iterator zip prodVars.iterator)
-       yield ((prodVar === 0) | (zVars(to) > 0))).toList
+      (for (((_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
+        yield ((prodVar === 0) | (zVars(to) > 0))).toList
 
     // connective
     val zImps =
       (for (state <- 0 until stateSeq.size) yield {
-         disjFor(Iterator(zVars(state) === 0) ++
-                   (for (t <- finalVars get state) yield (t === 1)) ++
-                   (for (((from, _, to), prodVar) <-
-                           transitions.iterator zip prodVars.iterator;
-                         if state2Index(from) == state;
-                         toInd = state2Index(to))
-                    yield conj(zVars(state) === zVars(toInd) + 1,
-                               geqZ(List(prodVar - 1, zVars(toInd) - 1)))))
-         }).toList
+        disjFor(
+          Iterator(zVars(state) === 0) ++
+            (for (t <- finalVars get state) yield (t === 1)) ++
+            (for (((from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
+                  if state2Index(from) == state;
+                  toInd = state2Index(to))
+              yield conj(
+                zVars(state) === zVars(toInd) + 1,
+                geqZ(List(prodVar - 1, zVars(toInd) - 1))
+              ))
+        )
+      }).toList
 
     val matrix =
-      conj(finalStateFor :: allEqs :: prodNonNeg :: bFormula ::
-             zImps ::: prodImps ::: finalImps)
+      conj(
+        finalStateFor :: allEqs :: prodNonNeg :: bFormula ::
+          zImps ::: prodImps ::: finalImps
+      )
 
     val rawConstraint =
       exists(prodVars.size + zVars.size + finalVars.size, matrix)
@@ -386,15 +399,15 @@ trait Automaton
    * Some accepting path of the automaton, or None if no such path
    * exists.
    */
-  def acceptingPath(disabledEdges: Set[Transition]) : Option[Seq[Transition]] = {
-    var todo    = List(initialState)
+  def acceptingPath(disabledEdges: Set[Transition]): Option[Seq[Transition]] = {
+    var todo = List(initialState)
     val reached = new HashMap[State, List[Transition]]
 
     reached.put(initialState, List())
 
     while (!todo.isEmpty) {
-      val next      = todo.head
-      todo          = todo.tail
+      val next = todo.head
+      todo = todo.tail
       val pathSoFar = reached(next)
 
       if (isAccept(next))
@@ -565,27 +578,29 @@ trait Automaton
               newStateDiscovered(leftTo, rightTo)
             else knownProductStates((leftTo, rightTo))
 
-          productBuilder.addTransition(
-            fromProductState,
-            newLabel,
-            toProductState
-          )
-
           val productTransition = trace("productTransition")(
             (fromProductState, newLabel, toProductState)
           )
 
-          termToProductEdges.getOrElseUpdate(
-            (TermOrigin.Left, (thisSourceState, leftOldLabel, leftTo)),
-            ArrayBuffer()
-          ) += productTransition
+          if (!(productBuilder containsTransition productTransition)) {
+            productBuilder.addTransitionTuple(
+              productTransition
+            )
 
-          termToProductEdges.getOrElseUpdate(
-            (TermOrigin.Right, (thatSourceState, rightOldLabel, rightTo)),
-            ArrayBuffer()
-          ) += productTransition
+            termToProductEdges.getOrElseUpdate(
+              (TermOrigin.Left, (thisSourceState, leftOldLabel, leftTo)),
+              ArrayBuffer()
+            ) += productTransition
 
-          trace("termtoProductEdges")(termToProductEdges)
+            termToProductEdges.getOrElseUpdate(
+              (TermOrigin.Right, (thatSourceState, rightOldLabel, rightTo)),
+              ArrayBuffer()
+            ) += productTransition
+
+            trace("termtoProductEdges")(termToProductEdges)
+          } else {
+            trace("saw transition twice!")(productTransition)
+          }
       }
     }
 
