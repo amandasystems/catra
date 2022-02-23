@@ -14,14 +14,18 @@ sealed case class Counter(name: String) extends Term {
     counterConstants(this)
   override def negate() = CounterWithCoefficient(-1, this)
 }
-sealed case class Atom(
+
+sealed abstract class Atom extends Formula {
+  def negated(): Atom
+}
+sealed case class Inequality(
     lhs: Term,
-    inequality: Inequality,
+    inequality: InequalitySymbol,
     rhs: Term,
     isPositive: Boolean = true
-) extends Formula {
-  def negated(): Atom =
-    Atom(this.lhs, this.inequality, this.rhs, !this.isPositive)
+) extends Atom {
+  def negated(): Inequality =
+    Inequality(this.lhs, this.inequality, this.rhs, !this.isPositive)
 
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]) = {
     val left = lhs.toPrincess(counterConstants)
@@ -38,10 +42,11 @@ sealed case class Atom(
   }
 }
 
-sealed case class False() extends Formula {
+sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
+  override def negated(): TrueOrFalse = TrueOrFalse(!isTrue)
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
-  ): IFormula = IBoolLit(false)
+  ): IFormula = IBoolLit(isTrue)
 }
 
 sealed trait Term {
@@ -66,13 +71,13 @@ sealed case class Sum(terms: Seq[Term]) extends Term {
 
 }
 
-sealed trait Inequality
-case object LessThan extends Inequality
-case object GreaterThan extends Inequality
-case object Equals extends Inequality
-case object GreaterThanOrEqual extends Inequality
-case object LessThanOrEqual extends Inequality
-case object NotEquals extends Inequality
+sealed trait InequalitySymbol
+case object LessThan extends InequalitySymbol
+case object GreaterThan extends InequalitySymbol
+case object Equals extends InequalitySymbol
+case object GreaterThanOrEqual extends InequalitySymbol
+case object LessThanOrEqual extends InequalitySymbol
+case object NotEquals extends InequalitySymbol
 
 sealed trait Formula extends DocumentFragment {
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
@@ -203,14 +208,19 @@ class InputFileParser extends Tracing {
 
   // FIXME I don't like how NotEquals isn't negated equals, but there is no
   // clean way I can think of to fix it.
-  def atom[_ : P]: P[Atom] = (sum ~ inequalitySymbol ~ sum).map {
-    case (lhs, inequality, rhs) => {
-      ap.util.Timeout.check
-      Atom(lhs, inequality, rhs)
-    }
-  }
+  def atom[_ : P]: P[Atom] =
+    P(
+      (sum ~ inequalitySymbol ~ sum).map {
+        case (lhs, inequality, rhs) => {
+          ap.util.Timeout.check
+          Inequality(lhs, inequality, rhs)
+        }
+      }
+        | "true".!.map(_ => TrueOrFalse(true))
+        | "false".!.map(_ => TrueOrFalse(false))
+    )
 
-  def inequalitySymbol[_ : P]: P[Inequality] =
+  def inequalitySymbol[_ : P]: P[InequalitySymbol] =
     P(
       "=".!.map(_ => Equals)
         | ">=".!.map(_ => GreaterThanOrEqual)

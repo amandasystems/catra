@@ -120,7 +120,7 @@ class TestInputFileParser extends AnyFunSuite {
 
     val Success(instance, _) =
       InputFileParser.parse("constraint a - b + c = 0;")
-    val Sum(terms) = instance.constraints(0).leftSide.asInstanceOf[Atom].lhs
+    val Sum(terms) = instance.constraints(0).leftSide.asInstanceOf[Inequality].lhs
     assert(
       terms.toSet == Set(
         Counter("a"),
@@ -140,6 +140,18 @@ class TestInputFileParser extends AnyFunSuite {
     tryParse(
       "constraint R27 != 0 || (R29 != 0 || (R31 != 0));"
     )
+  }
+
+  test("constraint with just atom") {
+    tryParse("constraint R0 = 0;")
+  }
+
+  test("constraint with only true") {
+    tryParse("constraint true;")
+  }
+
+  test("constraint with only false") {
+    tryParse("constraint false;")
   }
 
 }

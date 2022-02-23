@@ -18,7 +18,7 @@ sealed trait SatisfactionResult extends Result {
 }
 
 sealed trait ImageResult extends Result {
-  val presburgerImage: Formula = False()
+  val presburgerImage: Formula = TrueOrFalse(false)
 }
 case class Sat(assignments: Map[Counter, BigInteger])
     extends SatisfactionResult {
