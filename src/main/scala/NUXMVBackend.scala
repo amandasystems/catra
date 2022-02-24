@@ -2,7 +2,7 @@ package uuverifiers.parikh_theory
 
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
-import scala.util.{Success, Failure, Try}
+import scala.util.{Success, Failure}
 
 import java.io.{
   File,
@@ -13,6 +13,7 @@ import java.io.{
 }
 import scala.util.Try
 import java.util.concurrent.TimeUnit
+import java.math.BigInteger
 
 class NUXMVBackend(private val arguments: CommandLineOptions) extends Backend {
   override def findImage(instance: Instance) = ???
@@ -28,6 +29,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
   val baseCommand = Array("nuxmv", "-int")
   val Unreachable = """^-- invariant block .* is true$""".r
   val Reachable = """^-- invariant block .* is false$""".r
+  val CounterValue = """^    counter_(\d+) = (\d+)$""".r
 
   val nuxmvCmd = arguments.timeout_ms match {
     case Some(timeout_ms) =>
@@ -68,6 +70,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
   val counterVars =
     (for ((cnt, n) <- counters.zipWithIndex)
       yield (cnt -> ("counter_" + n))).toMap
+  val counterAssignments: Array[BigInteger] = Array.ofDim(counters.size)
 
   val falseF = "0 = 1"
   val trueF = "0 = 0"
@@ -230,7 +233,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
       val stdoutReader = new BufferedReader(new InputStreamReader(stdout))
 
       def sendCommand(cmd: String): Unit = {
-        stdinWriter.println(cmd)
+        stdinWriter.println(trace("nuxmv <<")(cmd))
         stdinWriter.flush
       }
 
@@ -243,6 +246,9 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
       sendCommand("check_invar_ic3;")
       sendCommand("quit;")
 
+      // FIXME this is essentially a terrible implementation of a two-step state
+      // machine that first looks for SAT/UNSAT, then assignments. Doing it like
+      // this is ugly, but works (tm), sort of by accident.
       val result: Try[SatisfactionResult] = {
         var cont = true
         var result: Try[SatisfactionResult] = Failure(
@@ -251,28 +257,37 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
         while (cont) {
           cont = trace("nuxmv >>")(readLine) match {
             case null => {
-              // The process has closed the stream which means it was probably
-              // killed by timeout and is dying. Wait!
+              // The process has closed the stream. Wait for it to finish, but
+              // don't wait for too long and kill it if it's too slow.
               val didExit = process.waitFor(1, TimeUnit.SECONDS)
               if (!trace("dying process did exit")(didExit)) {
                 // Wait for the process to really, really exit.
                 process.destroyForcibly().waitFor()
               }
-              false
+              false // We're done!
             }
             case Unreachable() => {
               result = Success(Unsat)
-              false
+              false // There's nothing more to parse.
             }
             // TODO: parse the model
             case Reachable() => {
               result = Success(Sat(Map.empty))
-              false
+              true // Capture the model assignment
+            }
+            case CounterValue(counter, value) => {
+              counterAssignments(counter.toInt) = new BigInteger(value)
+              true
             }
             case _ => true
           }
         }
-        result
+        result match {
+          case Success(Sat(_)) => {
+            Success(Sat(counters.zip(counterAssignments).toMap))
+          }
+          case other => other
+        }
       }
 
       stdinWriter.close
