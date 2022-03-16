@@ -61,7 +61,6 @@ if not lefts.keys() == rights.keys():
     print(f"W: The following files are not in both sets:\n{different_keys_str}")
     print(f"I: Proceeding with the {len(common_keys)} common instance(s)...")
 
-
 nr_different = 0
 outcomes = defaultdict(Counter)
 
