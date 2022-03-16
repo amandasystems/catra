@@ -7,6 +7,7 @@ import org.scalacheck.Gen
 import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus
 import ap.terfor.conjunctions.Conjunction
+import uuverifiers.common.AutomataTypes
 
 class TestAutomaton extends AnyFunSuite {
 

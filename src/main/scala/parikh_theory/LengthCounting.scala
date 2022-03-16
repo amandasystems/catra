@@ -1,6 +1,7 @@
 package uuverifiers.parikh_theory
-import AutomataTypes.Transition
-import SymbolicLabel.NoChar
+import uuverifiers.common.AutomataTypes.Transition
+import uuverifiers.common.SymbolicLabel.NoChar
+import uuverifiers.common.{Automaton, AutomatonBuilder}
 
 object LengthCounting {
   private val lengthSymbol = 'l'

@@ -1,6 +1,7 @@
 package uuverifiers.parikh_theory
 import ap.theories.TheoryRegistry
-import AutomataTypes.Transition
+import uuverifiers.common.Automaton
+import uuverifiers.common.AutomataTypes.Transition
 import ap.terfor.TerForConvenience.{l => toLinearCombination}
 
 class RegisterCounting[C](

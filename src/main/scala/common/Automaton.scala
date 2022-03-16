@@ -1,4 +1,4 @@
-package uuverifiers.parikh_theory
+package uuverifiers.common
 
 import ap.PresburgerTools
 import ap.basetypes.IdealInt
@@ -15,6 +15,7 @@ import ap.terfor.linearcombination.LinearCombination
 import collection.mutable.{HashMap, ArrayBuffer, Queue, HashSet => MHashSet}
 import scala.language.implicitConversions
 import EdgeWrapper._
+import uuverifiers.common.Tracing
 
 object AutomataTypes {
   type State = Int

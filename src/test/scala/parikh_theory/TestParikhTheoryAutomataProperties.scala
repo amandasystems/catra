@@ -2,6 +2,7 @@ package uuverifiers.parikh_theory
 
 import org.scalacheck.Properties
 import org.scalacheck.Prop.{forAll, propBoolean}
+import uuverifiers.common.Regex
 
 object WordSpecification extends Properties("WordAutmata") {
 

@@ -1,8 +1,9 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import scala.util.{Success, Failure}
+import uuverifiers.common.{Tracing, SymbolicLabel}
 
 import java.io.{
   File,

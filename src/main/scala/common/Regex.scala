@@ -1,4 +1,4 @@
-package uuverifiers.parikh_theory
+package uuverifiers.common
 import SymbolicLabelConversions._
 import scala.language.implicitConversions
 

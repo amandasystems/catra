@@ -24,7 +24,7 @@ object Tex {
   def inlineMath(equation: String) = "$" + equation + "$"
   // TODO this is a stub, use the builder pattern for generating a LaTeX
   // document.
-  def documentBuilder() = { object DocumentBuilder {} }
+  def documentBuilder() = { null }
   def monospace(s: String) = { s"\\texttt{$s}" }
 }
 

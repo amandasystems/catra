@@ -8,7 +8,8 @@ import ap.terfor.substitutions.{VariableShiftSubst}
 import ap.theories._
 import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._
-import AutomataTypes._
+import uuverifiers.common.AutomataTypes._
+import uuverifiers.common.{Automaton, Tracing}
 import VariousHelpers.simplifyUnlessTimeout
 
 // TODO write a LengthCounting mixin which interns one term for length and

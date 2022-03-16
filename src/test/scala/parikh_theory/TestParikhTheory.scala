@@ -4,7 +4,13 @@ import org.scalatest.funsuite.AnyFunSuite
 import ap.SimpleAPI
 import SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience._
-import SymbolicLabelConversions._
+import uuverifiers.common.SymbolicLabelConversions._
+import uuverifiers.common.AutomatonBuilder
+import uuverifiers.common.Tracing
+import uuverifiers.common.SymbolicLabel.{CharRange, SingleChar}
+import uuverifiers.catra.PresburgerParikhImage
+import uuverifiers.common.Regex
+import uuverifiers.common.AutomataTypes
 
 class TestParikhTheory extends AnyFunSuite with Tracing {
 
@@ -362,8 +368,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("ostrich bug reconstruction #1") {
-    import SymbolicLabel.{CharRange, SingleChar}
-
     val leftAut =
       AutomatonBuilder()
         .addStates(0 to 1)
@@ -404,7 +408,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("ostrich bug#2 reconstruction") {
-    import SymbolicLabel.CharRange
 
     val leftAut = AutomatonBuilder()
       .addStates(0 to 2)
@@ -436,7 +439,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("Register automaton with two orthogonal registers works") {
-    import SymbolicLabel.SingleChar
 
     val leftAut = AutomatonBuilder()
       .addStates(Seq(0, 1))
@@ -488,7 +490,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   test(
     "peterc-pyex-doc-cav17-zz/experiments/8-600-1-7200/packages/httplib2/httplib2-cache-control/7b3cd462dc3df6b4ebfe7d49caccce971b746e012985547d646f8062.smt2/parikh-constraints-4.par crash, minimised"
   ) {
-    import SymbolicLabel.CharRange
 
     val counters = List(
       "all_2_0",
@@ -552,7 +553,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("unsat bug reproduction") {
-    import SymbolicLabel.CharRange
 
     val singleState = AutomatonBuilder()
       .addState(0)
@@ -596,7 +596,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("intersection is the empty string") {
-    import SymbolicLabel.CharRange
 
     val emptyString = AutomatonBuilder()
       .addState(0)
@@ -641,8 +640,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   }
 
   test("soundness issue #2 reproduction") {
-    import SymbolicLabel.{CharRange, SingleChar}
-
     val auts = Seq(
       AutomatonBuilder()
         .addStates(Seq(0, 1))

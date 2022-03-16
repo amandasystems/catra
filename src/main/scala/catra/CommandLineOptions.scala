@@ -1,4 +1,4 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 import scala.util.Try
 import java.nio.file.FileSystems
 import java.nio.file.SimpleFileVisitor
@@ -18,6 +18,10 @@ case object ChooseNuxmv extends BackendSelection {
   override def toString: String = "princess"
 }
 
+case object ChooseVerma extends BackendSelection {
+  override def toString: String = "verma"
+}
+
 sealed trait RunMode
 case object SolveSatisfy extends RunMode
 case object FindImage extends RunMode
@@ -33,6 +37,7 @@ sealed case class CommandLineOptions(
   def getBackend(): Backend = backend match {
     case ChoosePrincess => new PrincessBackend(this)
     case ChooseNuxmv    => new NUXMVBackend(this)
+    case ChooseVerma    => new VermaBackend(this)
   }
 }
 
@@ -63,7 +68,7 @@ object CommandLineOptions {
       --dump-smt <directory> -- dump SMT commands into this directory
                                  (default = ${dumpSMTDir}) 🐌
       --backend <backend> -- choose which back-end to use.
-                             Available options are: nuxmv, princess.
+                             Available options are: nuxmv, princess, verma.
                              Default: ${backend}.
     Environment variables:
       CATRA_TRACE -- if set to "true", enable very very verbose logging 🐌
@@ -136,6 +141,10 @@ object CommandLineOptions {
       }
       case "--backend" :: "nuxmv" :: tail => {
         backend = ChooseNuxmv
+        parseFilesAndFlags(tail)
+      }
+      case "--backend" :: "verma" :: tail => {
+        backend = ChooseVerma
         parseFilesAndFlags(tail)
       }
       case "--backend" :: other :: _ => {

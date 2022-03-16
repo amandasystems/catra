@@ -1,9 +1,11 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 import ap.SimpleAPI
 import scala.util.{Success, Failure, Try}
 import ap.terfor.ConstantTerm
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
+import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
+import uuverifiers.common.{Tracing}
 
 class PrincessBackend(private val arguments: CommandLineOptions)
     extends Backend
@@ -107,8 +109,9 @@ class PrincessBackend(private val arguments: CommandLineOptions)
             )
           )
         }
-        case ProverStatus.Unsat       => Success(Unsat)
-        case ProverStatus.Running     => p.stop(true); Success(Timeout(timeout_ms.get))
+        case ProverStatus.Unsat => Success(Unsat)
+        case ProverStatus.Running =>
+          p.stop(true); Success(Timeout(timeout_ms.get))
         case ProverStatus.OutOfMemory => Success(OutOfMemory)
         case otherStatus =>
           Failure(

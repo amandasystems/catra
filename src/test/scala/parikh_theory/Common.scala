@@ -6,8 +6,10 @@ import ap.terfor.conjunctions.Conjunction
 import SimpleAPI.ProverStatus
 import org.scalatest.funsuite.AnyFunSuite
 import ap.terfor.TerForConvenience._
-import AutomataTypes._
-import SymbolicLabel.SingleChar
+import uuverifiers.common.AutomataTypes._
+import uuverifiers.common.SymbolicLabel.SingleChar
+import uuverifiers.common.{Tracing, Automaton}
+import uuverifiers.catra.PresburgerParikhImage
 
 object TestUtilities extends AnyFunSuite with Tracing {
 

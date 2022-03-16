@@ -1,9 +1,10 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 import ap.terfor.{TermOrder, Formula, Term, OneTerm, VariableTerm}
 import ap.terfor.TerForConvenience._
 import scala.collection.mutable.{ArrayBuffer, BitSet => MBitSet}
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
+import uuverifiers.common.{Automaton, AutomataTypes, Tracing}
 import AutomataTypes._
 
 class PresburgerParikhImage(private val aut: Automaton) extends Tracing {

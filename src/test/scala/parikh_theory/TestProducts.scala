@@ -1,9 +1,19 @@
 package uuverifiers.parikh_theory
 
 import org.scalatest.funsuite.AnyFunSuite
-import SymbolicLabelConversions._
-import AutomataTypes._
-import RegexImplicits._
+import uuverifiers.common.SymbolicLabelConversions._
+import uuverifiers.common.AutomataTypes._
+import uuverifiers.common.RegexImplicits._
+import uuverifiers.common.{
+  AnnotatedProduct,
+  TermOrigin,
+  Automaton,
+  Tracing,
+  AutomatonBuilder,
+  REJECT_ALL,
+  SymbolicLabel,
+  Regex
+}
 
 // TODO properties to test:
 // product with self is identity

@@ -5,9 +5,10 @@ import ap.terfor.arithconj.ArithConj
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
 import ap.basetypes.IdealInt.{ONE, ZERO, MINUS_ONE}
-import EdgeWrapper._
+import uuverifiers.common.EdgeWrapper._
 import ap.terfor.TerForConvenience._
-import AutomataTypes._
+import uuverifiers.common.AutomataTypes._
+import uuverifiers.common.{Tracing, Automaton}
 
 /**
  *  A class to generate flow-balancing constraints for an automaton, modulo an

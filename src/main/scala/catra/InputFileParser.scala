@@ -1,7 +1,8 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 import ap.terfor.ConstantTerm
 import ap.parser.{IFormula, ITerm, ITimes, IBoolLit}
 import java.math.BigInteger
+import uuverifiers.common.{SymbolicLabel, Automaton, AutomatonBuilder, Tracing}
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =

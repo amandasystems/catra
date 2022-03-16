@@ -1,7 +1,8 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 import java.math.BigInteger
 import scala.util.{Success, Failure, Try}
 import scala.io.Source
+import uuverifiers.common.Tracing
 
 sealed trait Result {
   val name: String

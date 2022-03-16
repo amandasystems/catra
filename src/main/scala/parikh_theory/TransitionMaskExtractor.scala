@@ -4,6 +4,7 @@ import ap.proof.goal.Goal
 import ap.terfor.linearcombination.LinearCombination
 import ap.parser.IExpression.Predicate
 import ap.terfor.preds.Atom
+import uuverifiers.common.Tracing
 
 class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
     extends Tracing {

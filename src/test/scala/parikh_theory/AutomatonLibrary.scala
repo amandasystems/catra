@@ -1,5 +1,6 @@
 package uuverifiers.parikh_theory
-import SymbolicLabelConversions._
+import uuverifiers.common.AutomatonBuilder
+import uuverifiers.common.SymbolicLabelConversions._
 
 object AutomatonLibrary {
   val automata = Map(

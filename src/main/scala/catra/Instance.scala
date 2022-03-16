@@ -1,6 +1,7 @@
-package uuverifiers.parikh_theory
+package uuverifiers.catra
 import WhyCantIDefineGlobalTypeAliasesGoddammit.TransitionToCounterOffsets
 import java.math.BigInteger
+import uuverifiers.common.Automaton
 
 sealed case class Instance(
     counters: Seq[Counter],

@@ -9,8 +9,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.SortedSet
 import ap.terfor.conjunctions.Conjunction
 import collection.mutable.HashMap
-import AutomataTypes._
-import EdgeWrapper._
+import uuverifiers.common.AutomataTypes._
+import uuverifiers.common.EdgeWrapper._
+import uuverifiers.common._
 import VariousHelpers.simplifyUnlessTimeout
 
 /**

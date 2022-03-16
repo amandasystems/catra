@@ -1,7 +1,7 @@
 package uuverifiers.parikh_theory
 
 import org.scalatest.funsuite.AnyFunSuite
-import MapGraph._
+import uuverifiers.common.MapGraph._
 
 class TestGraphOperations extends AnyFunSuite {
 
