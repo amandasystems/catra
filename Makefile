@@ -2,7 +2,7 @@ DEPS=$(latexmk -deps main.tex)
 dotfiles = $(wildcard *.dot)
 all_automata = $(patsubst %.dot,%.pdf,${dotfiles})
 current_version = $(shell git rev-parse --short HEAD)
-TIMEOUT_MS = 120000
+TIMEOUT_MS = 30000
 EXPERIMENT_DIR = ../parikh-plus
 #NR_EXPERIMENTS = 60
 
@@ -39,15 +39,28 @@ trace.pdf: trace.tex ${DEPS} ${all_automata}
 
 .PHONY: experiments
 experiments:
-	#find ${EXPERIMENT_DIR} -type f \
-	#| shuf \
-	#| head -n ${NR_EXPERIMENTS} \
-	#> experiments.input
-	xargs < experiments.input ./bin/catra solve-satisfy \
-		--backend nuxmv \
-		--timeout ${TIMEOUT_MS} \
-			> ${current_version}-nuxmv.log
-	xargs < experiments.input ./bin/catra solve-satisfy \
-		--timeout ${TIMEOUT_MS} \
-			${EXPERIMENTS} > ${current_version}-catra.log
-	rm -f experiments.input
+	./bin/catra solve-satisfy --backend nuxmv \
+				--timeout ${TIMEOUT_MS} \
+				> ${current_version}-nuxmv.log \
+				basket
+	./bin/catra solve-satisfy --timeout ${TIMEOUT_MS} \
+				> ${current_version}-catra.log \
+				basket
+
+
+.PHONY: smoke-test
+smoke-test:
+	sbt assembly
+	find experiments -type f \
+		| shuf \
+		| head -n 10 \
+		| xargs --\
+			 ./bin/catra solve-satisfy \
+			 --timeout 500 > /dev/null
+	find experiments -type f \
+		| shuf \
+		| head -n 10 \
+		| xargs --\
+			 ./bin/catra solve-satisfy \
+			 --backend nuxmv \
+			 --timeout 500 > /dev/null
