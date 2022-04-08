@@ -8,7 +8,6 @@ import uuverifiers.common.SymbolicLabelConversions._
 import uuverifiers.common.AutomatonBuilder
 import uuverifiers.common.Tracing
 import uuverifiers.common.SymbolicLabel.{CharRange, SingleChar}
-import uuverifiers.catra.PresburgerParikhImage
 import uuverifiers.common.Regex
 import uuverifiers.common.AutomataTypes
 
@@ -100,8 +99,6 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val alphabet = "ab".toCharArray
 
-    val presburgerFormulation = new PresburgerParikhImage(aut)
-
     SimpleAPI.withProver { p =>
       val a = p.createConstantRaw("a")
       val b = p.createConstantRaw("b")
@@ -110,10 +107,13 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       import p._
       implicit val order = p.order
 
-      val oldImage = presburgerFormulation.parikhImage(
-        constants,
-        TestUtilities
-          .alphabetCounter(alphabet) _
+      val oldImage = aut.parikhImage(
+        bridgingFormula = TestUtilities.bridgingFormulaOccurrenceCounter(
+          alphabet,
+          alphabet.zip(constants).toMap,
+          order
+        )(_),
+        constants
       )
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(

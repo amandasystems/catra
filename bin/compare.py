@@ -3,12 +3,12 @@ import sys
 import re
 from collections import Counter, defaultdict
 
-left = sys.argv[1]
-right = sys.argv[2]
 LINE_RE = re.compile(
     r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[0-9\.]+)s parse: .*====$"
 )
 
+left_name = sys.argv[1]
+right_name = sys.argv[2]
 
 def parse_lines(lines):
     results = dict()
@@ -38,14 +38,14 @@ def classify_outcome(left_runtime, right_runtime):
         #    f"I: {instance} runtime: {left_runtime} vs {right_runtime}: diff {runtime_diff}"
         # )
         if runtime_diff < 0:
-            return "left wins"
+            return f"{left_name} wins"
         else:
-            return "right wins"
+            return f"{right_name} wins"
     else:
         return "draws"
 
 
-with open(left) as left, open(right) as right:
+with open(left_name) as left, open(right_name) as right:
     lefts = parse_lines(left)
     rights = parse_lines(right)
 

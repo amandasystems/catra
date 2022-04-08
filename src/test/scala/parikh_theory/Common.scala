@@ -7,20 +7,43 @@ import SimpleAPI.ProverStatus
 import org.scalatest.funsuite.AnyFunSuite
 import ap.terfor.TerForConvenience._
 import uuverifiers.common.AutomataTypes._
-import uuverifiers.common.SymbolicLabel.SingleChar
 import uuverifiers.common.{Tracing, Automaton}
-import uuverifiers.catra.PresburgerParikhImage
+import ap.terfor.ConstantTerm
+import ap.basetypes.IdealInt
+import IdealInt.ONE
+import uuverifiers.common.EdgeWrapper._
 
 object TestUtilities extends AnyFunSuite with Tracing {
 
-  def alphabetCounter[T](alphabet: Iterable[T])(t: Transition) = {
+  def bridgingFormulaOccurrenceCounter(
+      alphabet: Iterable[Char],
+      letterVars: Map[Char, ConstantTerm],
+      order: TermOrder
+  )(m: Map[Transition, Term]): Formula = {
+    implicit val o = order
+    conj(
+      alphabet.map { ch =>
+        letterVars(ch) ===
+          sum(
+            m.view
+              .filterKeys { t =>
+                t.label() contains ch
+              }
+              .values
+              .map(term => (ONE, l(term)))
+              .toSeq
+          )
+      }
+    )
+  }
+
+  def alphabetCounter(alphabet: Iterable[Char])(t: Transition) = {
     import ap.terfor.linearcombination.LinearCombination
     import ap.basetypes.IdealInt
     val ONE = LinearCombination(IdealInt.ONE)
     val ZERO = LinearCombination(IdealInt.ZERO)
 
-    val (_, SingleChar(label), _) = t: @unchecked
-    alphabet.map(c => if (c == label) Some(ONE) else Some(ZERO)).toSeq
+    alphabet.map(c => if (t.label() contains c) Some(ONE) else Some(ZERO)).toSeq
   }
 
   private def assertConstraints(
@@ -61,8 +84,6 @@ object TestUtilities extends AnyFunSuite with Tracing {
       alphabet.length
     )
 
-    val presburgerFormulation = new PresburgerParikhImage(aut)
-
     SimpleAPI.withProver { p =>
       val constants = p.createConstantsRaw("a", 0 until pt.monoidDimension)
 
@@ -71,10 +92,13 @@ object TestUtilities extends AnyFunSuite with Tracing {
       import p._
 
       val newImage = pt allowsMonoidValues constants
-      val oldImage = presburgerFormulation.parikhImage(
-        constants,
-        TestUtilities
-          .alphabetCounter(alphabet) _
+      val oldImage = aut.parikhImage(
+        bridgingFormula = bridgingFormulaOccurrenceCounter(
+          alphabet,
+          alphabet.zip(constants).toMap,
+          order
+        )(_),
+        constants
       )
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
@@ -104,10 +128,9 @@ object TestUtilities extends AnyFunSuite with Tracing {
     val leftLabels = left.transitions.map(_._2).toSet
     val rightLabels = right.transitions.map(_._2).toSet
     val alphabet = trace("alphabet")(
-      (leftLabels ++ rightLabels).toIndexedSeq.sorted
+      (leftLabels.flatMap(_.iterate()) ++ rightLabels
+        .flatMap(_.iterate())).toIndexedSeq.sorted
     )
-
-    val presburgerFormulation = new PresburgerParikhImage(left &&& right)
 
     val pt = ParikhTheory(IndexedSeq[Automaton](left, right))(
       TestUtilities.alphabetCounter(alphabet) _,
@@ -122,10 +145,13 @@ object TestUtilities extends AnyFunSuite with Tracing {
       implicit val order = p.order
       import p._
 
-      val oldImage = presburgerFormulation.parikhImage(
-        constants,
-        TestUtilities
-          .alphabetCounter(alphabet) _
+      val oldImage = (left &&& right).parikhImage(
+        bridgingFormula = bridgingFormulaOccurrenceCounter(
+          alphabet,
+          alphabet.zip(constants).toMap,
+          order
+        )(_),
+        constants
       )
 
       val newImage = pt allowsMonoidValues constants

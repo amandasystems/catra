@@ -3,7 +3,6 @@ import scala.annotation.elidable
 import scala.annotation.elidable.FINE
 import collection.mutable.HashMap
 
-
 object Statistics {
   private val dynTraceEnable = sys.env
     .getOrElse("OSTRICH_STATS", "FALSE")

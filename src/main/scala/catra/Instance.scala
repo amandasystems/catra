@@ -22,4 +22,17 @@ sealed case class Instance(
       )
   }
 
+  private def allAutomata() = automata.flatten.toSeq
+  private def allTransitions() = allAutomata().flatMap(_.transitions)
+  private def isLive(c: Counter) =
+    allTransitions().exists(t => transitionToOffsets(t) contains c)
+
+  /**
+   The live counters are counters constrained by one or more transition of one
+   or more automaton. Note that non-live counters can appear in constraints,
+   where they can take any value. It is therefore not necessarily an error to
+   include them, but it is a near-certain sign of a mistake in the input model
+   and should trigger a warning.
+  **/
+  lazy val liveCounters = counters.filter(isLive(_))
 }

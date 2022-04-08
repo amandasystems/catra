@@ -30,7 +30,7 @@ class TestAutomaton extends AnyFunSuite {
       val c = createConstantRaw("c")
       implicit val o = order
 
-      def bridgingFormula(m : Map[AutomataTypes.Transition, Term]) : Formula =
+      def bridgingFormula(m: Map[AutomataTypes.Transition, Term]): Formula =
         m(aut.transitions.head) === c
 
       val pa = aut.parikhImage(bridgingFormula _, List(c))
@@ -55,13 +55,13 @@ class TestAutomaton extends AnyFunSuite {
       val c = createConstantRaw("c")
       implicit val o = order
 
-      def bridgingFormula(m : Map[AutomataTypes.Transition, Term]) : Formula =
+      def bridgingFormula(m: Map[AutomataTypes.Transition, Term]): Formula =
         conj(for (t <- aut.transitions) yield t match {
-               case (0, _, 1) => m(t) === a
-               case (1, _, 0) => m(t) === b
-               case (2, _, 2) => m(t) === c
-               case _         => Conjunction.TRUE
-             })
+          case (0, _, 1) => m(t) === a
+          case (1, _, 0) => m(t) === b
+          case (2, _, 2) => m(t) === c
+          case _         => Conjunction.TRUE
+        })
 
       val pa = aut.parikhImage(bridgingFormula _, List(a, b, c))
       val img = (c >= 0) & (a >= 0) & (b >= 0) & (a === b | a === b + 1)
