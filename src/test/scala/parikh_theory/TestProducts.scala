@@ -14,6 +14,7 @@ import uuverifiers.common.{
   SymbolicLabel,
   Regex
 }
+import uuverifiers.common.IntState
 
 // TODO properties to test:
 // product with self is identity
@@ -21,6 +22,9 @@ import uuverifiers.common.{
 // A &&& B == B &&& A
 
 class TestProducts extends AnyFunSuite with Tracing {
+  import scala.language.implicitConversions
+  implicit def int2State(idx: Int): IntState = IntState(idx)
+  implicit def range2States(idxs: Range): Seq[IntState] = IntState(idxs)
 
   private def prodOriginStates(prod: AnnotatedProduct) =
     prod.product.states.map(prod.originOf).unzip
@@ -157,7 +161,11 @@ class TestProducts extends AnyFunSuite with Tracing {
 
     val prod = left.productWithSources(right)
 
-    assert(prod.product.transitions.toSeq == Seq((0, SymbolicLabel('c'), 1)))
+    assert(
+      prod.product.transitions.toSeq == Seq(
+        (IntState(0), SymbolicLabel('c'), IntState(1))
+      )
+    )
     assert(prod.product.accepts("c"))
   }
 

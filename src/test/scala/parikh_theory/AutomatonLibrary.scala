@@ -1,19 +1,23 @@
 package uuverifiers.parikh_theory
 import uuverifiers.common.AutomatonBuilder
 import uuverifiers.common.SymbolicLabelConversions._
+import uuverifiers.common.IntState
 
 object AutomatonLibrary {
+  import scala.language.implicitConversions
+  implicit def int2State(idx: Int): IntState = IntState(idx)
+
   val automata = Map(
     "trivial" -> AutomatonBuilder()
-      .addStates(List(0, 1))
-      .setInitial(0)
-      .setAccepting(1)
-      .addTransition(0, 'a', 1)
+      .addStates(IntState(0, 1))
+      .setInitial(IntState(0))
+      .setAccepting(IntState(1))
+      .addTransition(IntState(0), 'a', IntState(1))
       .getAutomaton(),
     "fourStatePerTransitionWithLoop" -> AutomatonBuilder()
-      .addStates(0 to 3)
-      .setAccepting(3)
-      .setInitial(0)
+      .addStates(IntState(0 to 3))
+      .setAccepting(IntState(3))
+      .setInitial(IntState(0))
       .addTransition(0, 'a', 1)
       .addTransition(0, '-', 2)
       .addTransition(1, '-', 3)

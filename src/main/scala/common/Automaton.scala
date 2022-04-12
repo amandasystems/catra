@@ -18,7 +18,7 @@ import EdgeWrapper._
 import uuverifiers.common.Tracing
 
 object AutomataTypes {
-  type State = Int
+  type State = IntState
   type Label = SymbolicLabel
 
   /**
@@ -37,6 +37,17 @@ object AutomataTypes {
    * A type to trace a product state to its origin term states
    */
   type ProductStateMap = Map[State, (State, State)]
+}
+
+sealed case class IntState(id: Int) extends Ordered[IntState] {
+  def compare(that: IntState) = this.id compare that.id
+  def successor(): IntState = IntState(id + 1)
+}
+
+object IntState {
+  def apply(range: Range): IndexedSeq[IntState] = range.map(IntState(_))
+  def apply(ids: Int*): Seq[IntState] = ids.map(IntState(_))
+  //def unapply(thisState: IntState): Some[Int] = Some(thisState.id)
 }
 
 /**
@@ -211,6 +222,7 @@ trait Automaton
       bridgingConstants: Seq[ConstantTerm],
       quantElim: Boolean = true
   ): Conjunction = {
+
     import TerForConvenience._
     implicit val order = TermOrder.EMPTY.extend(bridgingConstants)
 
@@ -220,15 +232,20 @@ trait Automaton
     val initialStateInd = state2Index(initialState)
 
     val N = transitions.size
-    val prodVars = for ((_, num) <- transitions.zipWithIndex) yield v(num)
-    val zVars = for ((_, num) <- stateSeq.zipWithIndex) yield v(num + N)
+    val prodVars: Seq[Term] =
+      for ((_, num) <- transitions.zipWithIndex) yield v(num)
+    val zVars = trace("state variables")(
+      for ((_, num) <- stateSeq.zipWithIndex) yield v(num + N)
+    )
     val M = N + zVars.size
     val finalVars =
       (for ((state, num) <- (stateSeq filter (isAccept _)).zipWithIndex)
         yield (state2Index(state) -> v(num + M))).toMap
 
     val bFormula =
-      bridgingFormula((transitions zip prodVars.asInstanceOf[Seq[Term]]).toMap)
+      trace("bridging formula")(
+        bridgingFormula((transitions zip prodVars).toMap)
+      )
 
     val finalStateFor =
       (finalVars.values.toSeq >= 0) &
@@ -251,7 +268,7 @@ trait Automaton
         )
       }).toList
 
-    val allEqs = eqZ(prodEqs)
+    val allEqs = trace("allEqs")(eqZ(prodEqs))
 
     val prodNonNeg =
       prodVars >= 0
@@ -263,7 +280,7 @@ trait Automaton
 
     val prodImps =
       (for (((_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
-        yield ((prodVar === 0) | (zVars(to) > 0))).toList
+        yield ((prodVar === 0) | (zVars(state2Index(to)) > 0))).toList
 
     // connective
     val zImps =
@@ -288,10 +305,14 @@ trait Automaton
       )
 
     val rawConstraint =
-      exists(prodVars.size + zVars.size + finalVars.size, matrix)
+      trace("rawConstraint")(
+        exists(prodVars.size + zVars.size + finalVars.size, matrix)
+      )
 
     if (quantElim)
-      PresburgerTools.elimQuantifiersWithPreds(rawConstraint)
+      trace("QE version")(
+        PresburgerTools.elimQuantifiersWithPreds(rawConstraint)
+      )
     else
       rawConstraint
   }
@@ -644,7 +665,8 @@ class AutomatonBuilder extends Tracing {
     )
 
   def getNewState(): State = {
-    val newState = if (!_autStates.isEmpty) _autStates.max + 1 else 0
+    val newState =
+      if (!_autStates.isEmpty) _autStates.max.successor() else IntState(0)
     addStates(Seq(newState))
     newState
   }
@@ -712,12 +734,18 @@ object AutomatonBuilder {
 }
 
 object REJECT_ALL extends Automaton {
-  override val initialState = 0
+  override val initialState = IntState(0)
   override def isAccept(_s: AutomataTypes.State) = false
   override def outgoingTransitions(_from: AutomataTypes.State) = Iterator.empty
   override def states = Seq.empty
   override lazy val isEmpty = true
   override def toString = "∅ REJECT ALL"
+
+  override def parikhImage(
+      bridgingFormula: Map[AutomataTypes.Transition, Term] => Formula,
+      bridgingConstants: Seq[ConstantTerm],
+      quantElim: Boolean = true
+  ): Conjunction = Conjunction.FALSE
 }
 
 sealed abstract class SymbolicLabel

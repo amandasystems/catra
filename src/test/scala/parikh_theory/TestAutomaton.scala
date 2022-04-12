@@ -8,6 +8,8 @@ import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus
 import ap.terfor.conjunctions.Conjunction
 import uuverifiers.common.AutomataTypes
+import uuverifiers.common.REJECT_ALL
+import uuverifiers.common.IntState
 
 class TestAutomaton extends AnyFunSuite {
 
@@ -16,6 +18,26 @@ class TestAutomaton extends AnyFunSuite {
       withClue(a) {
         assert(a.transitions.toSet == a.transitionsBreadthFirst().toSet)
       }
+    }
+  }
+
+  test("Verma Parikh image computation (empty automaton)") {
+    import ap.terfor.{TerForConvenience, Term, Formula}
+    import TerForConvenience._
+
+    val aut = REJECT_ALL
+
+    SimpleAPI.withProver { p =>
+      import p._
+      val c = createConstantRaw("c")
+      implicit val o = order
+
+      def bridgingFormula(m: Map[AutomataTypes.Transition, Term]): Formula =
+        m(aut.transitions.head) === c
+
+      p.addAssertion(aut.parikhImage(bridgingFormula _, List(c)))
+
+      assert(??? == ProverStatus.Unsat)
     }
   }
 
@@ -57,10 +79,10 @@ class TestAutomaton extends AnyFunSuite {
 
       def bridgingFormula(m: Map[AutomataTypes.Transition, Term]): Formula =
         conj(for (t <- aut.transitions) yield t match {
-          case (0, _, 1) => m(t) === a
-          case (1, _, 0) => m(t) === b
-          case (2, _, 2) => m(t) === c
-          case _         => Conjunction.TRUE
+          case (IntState(0), _, IntState(1)) => m(t) === a
+          case (IntState(1), _, IntState(0)) => m(t) === b
+          case (IntState(2), _, IntState(2)) => m(t) === c
+          case _                             => Conjunction.TRUE
         })
 
       val pa = aut.parikhImage(bridgingFormula _, List(a, b, c))

@@ -71,11 +71,10 @@ class VermaBackend(override val arguments: CommandLineOptions)
 
     implicit val o = order // This needs to happen after the constant creation.
 
-    // NOTE: we are guaranteed to get UNSAT for empty products since they will
-    // give rise to a trivially unsatisfiable flow equation. We need to iterate
-    // over only the live counters, because the counters that were initially not
-    // mentioned by any automaton need to be left without constraints and would
-    // otherwise be set to zero, despite being unconstrained by the automata.
+    // NOTE:  We need to iterate over only the live counters, because the
+    // counters that were initially not mentioned by any automaton need to be
+    // left without constraints and would otherwise be set to zero, despite
+    // being unconstrained by the automata.
     val parikhConstraints: Seq[Conjunction] = products.map { product =>
       // This enforces the bridging clause: c  = SUM t : t * increment(c, t)
       def transitionsIncrementRegisters(
@@ -124,7 +123,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
 
     assert(
       !terms.isEmpty,
-      "Tried to compute an empty product: this is an edge case that should have been handled earlier in the process!"
+      "Tried to compute a product of no automata: this is an edge case that should have been handled earlier in the process!"
     )
 
     var productSoFar: Automaton = terms.head

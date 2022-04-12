@@ -2,7 +2,14 @@ package uuverifiers.catra
 import ap.terfor.ConstantTerm
 import ap.parser.{IFormula, ITerm, ITimes, IBoolLit}
 import java.math.BigInteger
-import uuverifiers.common.{SymbolicLabel, Automaton, AutomatonBuilder, Tracing}
+import uuverifiers.common.{
+  SymbolicLabel,
+  IntState,
+  Automaton,
+  AutomatonBuilder,
+  Tracing
+}
+import uuverifiers.common.AutomataTypes.State
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -115,7 +122,7 @@ sealed case class AcceptingStates(names: Seq[String]) extends AutomatonFragment
 
 object WhyCantIDefineGlobalTypeAliasesGoddammit {
   type TransitionToCounterOffsets =
-    Map[(Int, SymbolicLabel, Int), Map[Counter, Int]]
+    Map[(State, SymbolicLabel, State), Map[Counter, Int]]
 }
 
 import WhyCantIDefineGlobalTypeAliasesGoddammit.TransitionToCounterOffsets
@@ -151,17 +158,18 @@ class InputFileParser extends Tracing {
     for (fragment <- fragments) {
       fragment match {
         case AcceptingStates(names) => {
-          val nameIds = names.map(interner.getOrUpdate(_)).toSeq
+          val nameIds =
+            names.map(interner.getOrUpdate(_)).map(IntState(_)).toSeq
           builder.addStates(nameIds)
           nameIds.foreach(builder.setAccepting(_))
         }
         case InitialState(name) => {
-          builder.addStates(Seq(interner.getOrUpdate(name)))
-          builder.setInitial(interner.getOrUpdate(name))
+          builder.addStates(Seq(IntState(interner.getOrUpdate(name))))
+          builder.setInitial(IntState(interner.getOrUpdate(name)))
         }
         case Transition(from, to, label, counterIncrements) => {
-          val fromIdx = interner.getOrUpdate(from)
-          val toIdx = interner.getOrUpdate(to)
+          val fromIdx = IntState(interner.getOrUpdate(from))
+          val toIdx = IntState(interner.getOrUpdate(to))
           builder.addStates(Seq(fromIdx, toIdx))
           val transition = (fromIdx, label, toIdx)
           builder.addTransitionTuple(transition)

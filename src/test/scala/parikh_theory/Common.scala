@@ -23,16 +23,18 @@ object TestUtilities extends AnyFunSuite with Tracing {
     implicit val o = order
     conj(
       alphabet.map { ch =>
-        letterVars(ch) ===
-          sum(
-            m.view
-              .filterKeys { t =>
-                t.label() contains ch
-              }
-              .values
-              .map(term => (ONE, l(term)))
-              .toSeq
-          )
+        trace(s"letter balance equation: ${ch}")(
+          letterVars(ch) ===
+            sum(
+              m.view
+                .filterKeys { t =>
+                  t.label() contains ch
+                }
+                .values
+                .map(term => (ONE, l(term)))
+                .toSeq
+            )
+        )
       }
     )
   }

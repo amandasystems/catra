@@ -10,8 +10,12 @@ import uuverifiers.common.Tracing
 import uuverifiers.common.SymbolicLabel.{CharRange, SingleChar}
 import uuverifiers.common.Regex
 import uuverifiers.common.AutomataTypes
+import uuverifiers.common.IntState
 
 class TestParikhTheory extends AnyFunSuite with Tracing {
+  import scala.language.implicitConversions
+  implicit def int2State(idx: Int): IntState = IntState(idx)
+  implicit def range2States(idxs: Range): Seq[IntState] = IntState(idxs)
 
   test("length constraint for trivial automaton works") {
     val lt = LengthCounting(IndexedSeq(AutomatonLibrary.trivial))
@@ -89,7 +93,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     import ap.PresburgerTools
 
     val aut = AutomatonBuilder()
-      .addStates(0 to 3)
+      .addStates(IntState(0 to 3))
       .setAccepting(3)
       .setInitial(0)
       .addTransition(0, 'a', 1)
@@ -457,8 +461,8 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     val counters = Seq("x", "y")
     val counterToIncrement =
       Map[AutomataTypes.Transition, Map[String, Int]](
-        (0, SingleChar('a'), 1) -> Map("x" -> 1),
-        (2, SingleChar('a'), 3) -> Map("y" -> 1)
+        (IntState(0), SingleChar('a'), IntState(1)) -> Map("x" -> 1),
+        (IntState(2), SingleChar('a'), IntState(3)) -> Map("y" -> 1)
       )
 
     val theory = new RegisterCounting(
@@ -499,9 +503,13 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val increments: Map[AutomataTypes.Transition, Map[String, Int]] =
       Map(
-        (8, CharRange(0, 60), 8) -> Map("all_2_0" -> 1),
-        (9, CharRange(0, 43), 9) -> Map("aut_len_cnt_7" -> 1),
-        (11, CharRange(0, 65535), 11) -> Map("aut_len_cnt_8" -> 1)
+        (IntState(8), CharRange(0, 60), IntState(8)) -> Map("all_2_0" -> 1),
+        (IntState(9), CharRange(0, 43), IntState(9)) -> Map(
+          "aut_len_cnt_7" -> 1
+        ),
+        (IntState(11), CharRange(0, 65535), IntState(11)) -> Map(
+          "aut_len_cnt_8" -> 1
+        )
       )
 
     val theories = List(

@@ -18,11 +18,12 @@ object Regex {
 
   final case object AnyChar extends Regex {
     override def toAutomaton() = {
+      val states = (0 to 1).map(IntState(_)).toIndexedSeq
       AutomatonBuilder()
-        .addStates(0 to 1)
-        .setInitial(0)
-        .setAccepting(1)
-        .addTransition(0, SymbolicLabel.AnyChar, 1)
+        .addStates(states)
+        .setInitial(states(0))
+        .setAccepting(states(1))
+        .addTransition(states(0), SymbolicLabel.AnyChar, states(1))
         .getAutomaton()
     }
   }
@@ -30,15 +31,16 @@ object Regex {
   final case class Word(w: String) extends Regex {
     override def toAutomaton() = {
       val builder = AutomatonBuilder()
+      val states = (0 to w.length).map(IntState(_)).toIndexedSeq
       builder
-        .addStates(0 to w.length)
-        .setInitial(0)
-        .setAccepting(w.length)
+        .addStates(states)
+        .setInitial(states(0))
+        .setAccepting(states.last)
 
       if (w.nonEmpty) {
         w.zipWithIndex.foreach {
           case (ch, thisState) =>
-            builder.addTransition(thisState, ch, thisState + 1)
+            builder.addTransition(states(thisState), ch, states(thisState + 1))
         }
       }
       builder.getAutomaton()

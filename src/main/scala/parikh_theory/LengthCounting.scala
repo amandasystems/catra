@@ -15,7 +15,7 @@ object LengthCounting {
 
   // Get a fresh state ID that was not used in either of these automata
   private def freshState(auts: Seq[Automaton]) =
-    auts.map(_.states.max).max + 1
+    auts.map(_.states.max).max.successor()
 
   def apply(_auts: IndexedSeq[Automaton]) = {
     val auts = for (a <- _auts) yield {
