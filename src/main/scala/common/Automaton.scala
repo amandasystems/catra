@@ -459,7 +459,7 @@ trait Automaton
       .setInitial(initialState)
       .setAccepting(states.filter(isAccept).toSeq: _*)
 
-    transitions.filter(keepEdge).foreach(builder.addTransitionTuple)
+    transitions.filter(keepEdge).foreach(builder.addTransition)
 
     builder.getAutomaton()
   }
@@ -492,7 +492,7 @@ trait Automaton
 
   def addEdges(edgesToAdd: Iterable[Transition]) = {
     val builder = AutomatonBuilder(this)
-    edgesToAdd.foreach(builder.addTransitionTuple)
+    edgesToAdd.foreach(builder.addTransition)
     builder.getAutomaton()
   }
 
@@ -605,7 +605,7 @@ trait Automaton
           )
 
           if (!(productBuilder containsTransition productTransition)) {
-            productBuilder.addTransitionTuple(
+            productBuilder.addTransition(
               productTransition
             )
 
@@ -689,14 +689,14 @@ class AutomatonBuilder extends Tracing {
     this
   }
 
-  def addTransition(from: State, label: Label, to: State) = {
+  def addTransition(from: State, label: Label, to: State): AutomatonBuilder = {
     assert((_autStates contains from) && (_autStates contains to))
     _transitions += ((from, label, to))
     this
   }
 
-  def addTransitionTuple(t: (State, Label, State)) =
-    (this.addTransition _).tupled(t)
+  def addTransition(t: (State, Label, State)): AutomatonBuilder =
+    (this.addTransition(_: State, _: Label, _: State)).tupled(t)
 
   def getAutomaton(): Automaton = {
     assert(_initial != None, "Must have initial state!")
@@ -728,7 +728,7 @@ object AutomatonBuilder {
     builder.addStates(aut.states)
     builder.setInitial(aut.initialState)
     builder.setAccepting(aut.states.filter(aut.isAccept).toSeq: _*)
-    aut.transitions.foreach(builder.addTransitionTuple)
+    aut.transitions.foreach(builder.addTransition)
     builder
   }
 }

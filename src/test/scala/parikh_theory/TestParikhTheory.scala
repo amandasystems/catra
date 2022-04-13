@@ -572,7 +572,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val twoState = AutomatonBuilder()
       .addStates(Seq(1, 2))
-      .addTransitionTuple(onlyTransition)
+      .addTransition(onlyTransition)
       .setInitial(1)
       .setAccepting(2)
       .getAutomaton()
@@ -615,7 +615,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val someOrNoChar = AutomatonBuilder()
       .addStates(Seq(1, 2))
-      .addTransitionTuple(onlyTransition)
+      .addTransition(onlyTransition)
       .setInitial(1)
       .setAccepting(1)
       .setAccepting(2)

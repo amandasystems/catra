@@ -172,7 +172,7 @@ class InputFileParser extends Tracing {
           val toIdx = IntState(interner.getOrUpdate(to))
           builder.addStates(Seq(fromIdx, toIdx))
           val transition = (fromIdx, label, toIdx)
-          builder.addTransitionTuple(transition)
+          builder.addTransition(transition)
           counterOffsets += ((transition, counterIncrements))
         }
       }

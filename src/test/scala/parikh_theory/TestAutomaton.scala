@@ -1,8 +1,6 @@
 package uuverifiers.parikh_theory
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalacheck.Properties
-import org.scalacheck.Prop.{forAll, propBoolean}
-import org.scalacheck.Gen
 
 import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus

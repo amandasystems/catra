@@ -63,7 +63,7 @@ object Regex {
         // out-edges of accepting states inherit all out-edges of the initial state
         aut
           .transitionsFrom(aut.initialState)
-          .foreach(t => builder.addTransitionTuple(t.copy(_1 = s)))
+          .foreach(t => builder.addTransition(t.copy(_1 = s)))
       }
 
       builder.getAutomaton()
