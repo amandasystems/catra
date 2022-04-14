@@ -579,6 +579,8 @@ trait Automaton
     productBuilder.setInitial(initial)
 
     while (!statesToVisit.isEmpty) {
+      ap.util.Timeout.check
+
       val nextTarget = statesToVisit.dequeue()
 
       val (thisSourceState, thatSourceState) = nextTarget

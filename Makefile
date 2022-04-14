@@ -46,6 +46,11 @@ experiments:
 	./bin/catra solve-satisfy --timeout ${TIMEOUT_MS} \
 				> ${current_version}-catra.log \
 				basket
+	./bin/catra solve-satisfy --backend verma \
+				--timeout ${TIMEOUT_MS} \
+				> ${current_version}-verma.log \
+				basket
+
 
 
 .PHONY: smoke-test

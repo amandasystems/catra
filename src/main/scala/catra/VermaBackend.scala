@@ -76,7 +76,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
     // left without constraints and would otherwise be set to zero, despite
     // being unconstrained by the automata.
     val parikhConstraints: Seq[Conjunction] = products.map { product =>
-      // This enforces the bridging clause: c  = SUM t : t * increment(c, t)
+      // This enforces the bridging clause: c  = SUM t : sigma(t) * increment(c, t)
       def transitionsIncrementRegisters(
           sigma: Map[Transition, ap.terfor.Term]
       ) =
@@ -133,6 +133,8 @@ class VermaBackend(override val arguments: CommandLineOptions)
     for (term <- terms.tail) {
       val newProduct = productSoFar productWithSources term
       productSoFar = newProduct.product
+                ap.util.Timeout.check
+
 
       // Right origin is the originating transition in term, but Left origin
       // comes from partial product and needs to be resolved into its original

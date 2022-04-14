@@ -51,7 +51,16 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   override def solveSatisfy(instance: Instance): Try[SatisfactionResult] = {
     withProver { p =>
-      val counterToSolverConstant = prepareSolver(p, instance)
+      val counterToSolverConstant = timeout_ms match {
+        case Some(timeout_ms) =>
+          ap.util.Timeout.withTimeoutMillis(timeout_ms) {
+            prepareSolver(p, instance)
+          } {
+            return Success(Timeout(timeout_ms))
+          }
+        case None => prepareSolver(p, instance)
+      }
+
       p.checkSat(block = false)
       val satStatus = timeout_ms match {
         case Some(timeout_ms) => p.getStatus(timeout = timeout_ms)
