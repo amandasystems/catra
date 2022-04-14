@@ -39,6 +39,17 @@ sealed case class CommandLineOptions(
     case ChooseNuxmv    => new NUXMVBackend(this)
     case ChooseVerma    => new VermaBackend(this)
   }
+
+  def runWithTimeout[T](block: => T): Either[Timeout, T] = timeout_ms match {
+    case Some(timeout_ms) =>
+      ap.util.Timeout.withTimeoutMillis(timeout_ms) {
+        Right(block): Either[Timeout, T]
+      } {
+        Left(Timeout(timeout_ms)): Either[Timeout, T]
+      }
+    case None => Right(block)
+  }
+
 }
 
 object CommandLineOptions {

@@ -28,7 +28,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
   def prepareSolver(
       p: SimpleAPI,
       instance: Instance
-  ): Map[Counter, ConstantTerm]
+  ): Try[Map[Counter, ConstantTerm]]
 
   def withProver[T](f: SimpleAPI => T): T =
     dumpSMTDir match {
@@ -38,7 +38,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
 
   override def findImage(instance: Instance) = withProver { p =>
-    val counterToSolverConstant = prepareSolver(p, instance)
+    val counterToSolverConstant = prepareSolver(p, instance).get
     p.makeExistentialRaw(counterToSolverConstant.values)
     p.setMostGeneralConstraints(true)
     // TODO handle responses here
@@ -49,46 +49,55 @@ trait PrincessBasedBackend extends Backend with Tracing {
     Success(Unsat) // FIXME: this is a mock value!
   }
 
-  override def solveSatisfy(instance: Instance): Try[SatisfactionResult] = {
-    withProver { p =>
-      val counterToSolverConstant = timeout_ms match {
-        case Some(timeout_ms) =>
-          ap.util.Timeout.withTimeoutMillis(timeout_ms) {
-            prepareSolver(p, instance)
-          } {
-            return Success(Timeout(timeout_ms))
-          }
-        case None => prepareSolver(p, instance)
-      }
+  private def checkSolutions(p: SimpleAPI, instance: Instance)(
+      counterToSolverConstant: Map[Counter, ConstantTerm]
+  ): Try[SatisfactionResult] = {
+    p.checkSat(block = false)
 
-      p.checkSat(block = false)
-      val satStatus = timeout_ms match {
-        case Some(timeout_ms) => p.getStatus(timeout = timeout_ms)
-        case None             => p.getStatus(block = true)
-      }
-
-      satStatus match {
-        case ProverStatus.Sat | ProverStatus.Valid => {
-          Success(
-            Sat(
-              instance.counters
-                .map(
-                  c => c -> p.eval(counterToSolverConstant(c)).bigIntValue
-                )
-                .toMap
-            )
-          )
-        }
-        case ProverStatus.Unsat => Success(Unsat)
-        case ProverStatus.Running =>
-          p.stop(true); Success(Timeout(timeout_ms.get))
-        case ProverStatus.OutOfMemory => Success(OutOfMemory)
-        case otherStatus =>
-          Failure(
-            new Exception(s"unexpected solver status: ${otherStatus}")
-          )
-      }
+    // FIXME this should be handled once, in the general timeout block.
+    val satStatus = timeout_ms match {
+      case Some(timeout_ms) =>
+        p.getStatus(timeout = timeout_ms)
+      case None => p.getStatus(block = true)
     }
 
+    satStatus match {
+      case ProverStatus.Sat | ProverStatus.Valid => {
+        Success(
+          Sat(
+            instance.counters
+              .map(
+                c => c -> p.eval(counterToSolverConstant(c)).bigIntValue
+              )
+              .toMap
+          )
+        )
+      }
+      case ProverStatus.Running => {
+        p.stop
+        Success(Timeout(timeout_ms.get))
+      }
+      case ProverStatus.Unsat       => Success(Unsat)
+      case ProverStatus.OutOfMemory => Success(OutOfMemory)
+      case otherStatus =>
+        Failure(
+          new Exception(s"unexpected solver status: ${otherStatus}")
+        )
+    }
+  }
+
+  override def solveSatisfy(instance: Instance): Try[SatisfactionResult] = {
+    withProver { p =>
+      arguments.runWithTimeout {
+        prepareSolver(p, instance).flatMap(checkSolutions(p, instance)(_))
+
+      } match {
+        case Left(someTimeout) => {
+          p.stop
+          Success(someTimeout)
+        }
+        case Right(someResult) => someResult
+      }
+    }
   }
 }

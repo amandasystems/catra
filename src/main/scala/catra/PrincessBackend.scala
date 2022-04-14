@@ -1,6 +1,7 @@
 package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
+import scala.util.{Success, Try}
 import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
 
 class PrincessBackend(override val arguments: CommandLineOptions)
@@ -9,7 +10,7 @@ class PrincessBackend(override val arguments: CommandLineOptions)
   override def prepareSolver(
       p: SimpleAPI,
       instance: Instance
-  ): Map[Counter, ConstantTerm] = {
+  ): Try[Map[Counter, ConstantTerm]] = {
     import instance._
     val theories = automata.map(
       automataGroup =>
@@ -51,7 +52,7 @@ class PrincessBackend(override val arguments: CommandLineOptions)
       )
       p.addAssertion(isInImage)
     }
-    counterToSolverConstant
+    Success(counterToSolverConstant)
   }
 
 }

@@ -274,17 +274,21 @@ trait Automaton
       prodVars >= 0
 
     val finalImps =
-      (for ((finalState, finalVar) <- finalVars) yield {
-        (finalVar === 0) | (zVars(finalState) === 1)
-      }).toList
+      trace("final implications")(
+        (for ((finalState, finalVar) <- finalVars) yield {
+          (finalVar === 0) | (zVars(finalState) === 1)
+        }).toList
+      )
 
     val prodImps =
-      (for (((_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
-        yield ((prodVar === 0) | (zVars(state2Index(to)) > 0))).toList
+      trace("production implications")(
+        (for (((_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
+          yield ((prodVar === 0) | (zVars(state2Index(to)) > 0))).toList
+      )
 
     // connective
     val zImps =
-      (for (state <- 0 until stateSeq.size) yield {
+      trace("z-implications")((for (state <- 0 until stateSeq.size) yield {
         disjFor(
           Iterator(zVars(state) === 0) ++
             (for (t <- finalVars get state) yield (t === 1)) ++
@@ -296,7 +300,7 @@ trait Automaton
                 geqZ(List(prodVar - 1, zVars(toInd) - 1))
               ))
         )
-      }).toList
+      }).toList)
 
     val matrix =
       conj(
