@@ -54,12 +54,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
   ): Try[SatisfactionResult] = {
     p.checkSat(block = false)
 
-    // FIXME this should be handled once, in the general timeout block.
-    val satStatus = timeout_ms match {
-      case Some(timeout_ms) =>
-        p.getStatus(timeout = timeout_ms)
-      case None => p.getStatus(block = true)
-    }
+    val satStatus = p.getStatus(block = true)
 
     satStatus match {
       case ProverStatus.Sat | ProverStatus.Valid => {
@@ -72,10 +67,6 @@ trait PrincessBasedBackend extends Backend with Tracing {
               .toMap
           )
         )
-      }
-      case ProverStatus.Running => {
-        p.stop
-        Success(Timeout(timeout_ms.get))
       }
       case ProverStatus.Unsat       => Success(Unsat)
       case ProverStatus.OutOfMemory => Success(OutOfMemory)
