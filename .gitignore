@@ -7,3 +7,4 @@
 /project/target
 .DS_Store
 /project/.bloop/
+*.log
