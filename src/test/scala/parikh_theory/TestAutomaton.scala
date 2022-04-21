@@ -33,7 +33,7 @@ class TestAutomaton extends AnyFunSuite {
       def bridgingFormula(m: Map[AutomataTypes.Transition, Term]): Formula =
         m(aut.transitions.head) === c
 
-      p.addAssertion(aut.parikhImage(bridgingFormula _, List(c)))
+      p.addAssertion(aut.parikhImage(bridgingFormula _))
 
       assert(??? == ProverStatus.Unsat)
     }
@@ -53,7 +53,7 @@ class TestAutomaton extends AnyFunSuite {
       def bridgingFormula(m: Map[AutomataTypes.Transition, Term]): Formula =
         m(aut.transitions.head) === c
 
-      val pa = aut.parikhImage(bridgingFormula _, List(c))
+      val pa = aut.parikhImage(bridgingFormula _)
       val img = c === 1
 
       addConclusion((pa & img) | (!pa & !img))
@@ -83,7 +83,7 @@ class TestAutomaton extends AnyFunSuite {
           case _                             => Conjunction.TRUE
         })
 
-      val pa = aut.parikhImage(bridgingFormula _, List(a, b, c))
+      val pa = aut.parikhImage(bridgingFormula _)
       val img = (c >= 0) & (a >= 0) & (b >= 0) & (a === b | a === b + 1)
 
       addConclusion((pa & img) | (!pa & !img))

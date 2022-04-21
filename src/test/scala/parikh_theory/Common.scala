@@ -99,8 +99,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
           alphabet,
           alphabet.zip(constants).toMap,
           order
-        )(_),
-        constants
+        )(_)
       )
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
@@ -152,8 +151,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
           alphabet,
           alphabet.zip(constants).toMap,
           order
-        )(_),
-        constants
+        )(_)
       )
 
       val newImage = pt allowsMonoidValues constants

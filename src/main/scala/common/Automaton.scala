@@ -2,14 +2,7 @@ package uuverifiers.common
 
 import ap.PresburgerTools
 import ap.basetypes.IdealInt
-import ap.terfor.{
-  ConstantTerm,
-  Formula,
-  Term,
-  TerForConvenience,
-  TermOrder,
-  OneTerm
-}
+import ap.terfor.{Formula, Term, TerForConvenience, TermOrder, OneTerm}
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 import collection.mutable.{HashMap, ArrayBuffer, Queue, HashSet => MHashSet}
@@ -219,12 +212,10 @@ trait Automaton
    */
   def parikhImage(
       bridgingFormula: Map[Transition, Term] => Formula,
-      bridgingConstants: Seq[ConstantTerm],
       quantElim: Boolean = true
-  ): Conjunction = {
+  )(implicit order: TermOrder): Conjunction = {
 
     import TerForConvenience._
-    implicit val order = TermOrder.EMPTY.extend(bridgingConstants)
 
     val stateSeq = states.toIndexedSeq
     val state2Index = stateSeq.iterator.zipWithIndex.toMap
@@ -232,8 +223,9 @@ trait Automaton
     val initialStateInd = state2Index(initialState)
 
     val N = transitions.size
-    val prodVars: Seq[Term] =
+    val prodVars: Seq[Term] = trace("transition variables")(
       for ((_, num) <- transitions.zipWithIndex) yield v(num)
+    )
     val zVars = trace("state variables")(
       for ((_, num) <- stateSeq.zipWithIndex) yield v(num + N)
     )
@@ -749,9 +741,8 @@ object REJECT_ALL extends Automaton {
 
   override def parikhImage(
       bridgingFormula: Map[AutomataTypes.Transition, Term] => Formula,
-      bridgingConstants: Seq[ConstantTerm],
       quantElim: Boolean = true
-  ): Conjunction = Conjunction.FALSE
+  )(implicit p: TermOrder): Conjunction = Conjunction.FALSE
 }
 
 sealed abstract class SymbolicLabel

@@ -88,13 +88,14 @@ case object LessThanOrEqual extends InequalitySymbol
 case object NotEquals extends InequalitySymbol
 
 sealed trait Formula extends DocumentFragment {
+  def negated(): Formula
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
   // TODO
   def accepts(counterValues: Map[Counter, BigInteger]): Boolean = ???
 }
 
 sealed case class And(left: Formula, right: Formula) extends Formula {
-
+  override def negated() = Or(left.negated(), right.negated())
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula =
@@ -102,12 +103,11 @@ sealed case class And(left: Formula, right: Formula) extends Formula {
 
 }
 sealed case class Or(left: Formula, right: Formula) extends Formula {
-
+  override def negated() = And(left.negated(), right.negated())
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula =
     left.toPrincess(counterConstants) ||| right.toPrincess(counterConstants)
-
 }
 
 sealed trait AutomatonFragment
@@ -263,9 +263,9 @@ class InputFileParser extends Tracing {
         | constantOrIdentifier.map(t => Sum(Seq(t)))
     )
 
-  def unaryExpression[_ : P]: P[Atom] =
+  def unaryExpression[_ : P]: P[Formula] =
     P(
-      ("¬" ~ unaryExpression).map(_.negated())
+      ("!" ~ term).map(_.negated())
         | atom
     )
 

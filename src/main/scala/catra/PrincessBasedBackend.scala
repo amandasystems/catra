@@ -88,7 +88,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   override def solveSatisfy(instance: Instance): Try[SatisfactionResult] = {
     withProver { p =>
-      arguments.runWithTimeout {
+      arguments.runWithTimeout(p) {
         prepareSolver(p, instance).flatMap(checkSolutions(p, instance)(_))
 
       } match {

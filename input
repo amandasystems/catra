@@ -39,4 +39,4 @@ automaton C {
 // Specify a constraint on the final values of counters; check whether
 // there is a word accepted by all automata for which the final counter
 // values satisfy this constraints.
-constraint z = 2x + 2y;
+constraint z = 2x + 2y && !(x = 0);

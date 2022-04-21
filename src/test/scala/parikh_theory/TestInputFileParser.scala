@@ -30,7 +30,7 @@ class TestInputFileParser extends AnyFunSuite {
   }
 
   test("parse a constraint with negated atom") {
-    tryParse("constraint ¬-2x = 2;")
+    tryParse("constraint !-2x = 2;")
   }
 
   test("parse a comment") {

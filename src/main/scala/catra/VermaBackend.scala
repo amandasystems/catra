@@ -86,15 +86,13 @@ class VermaBackend(override val arguments: CommandLineOptions)
           trace("partial product Parikh image")(
             productSoFar.parikhImage(
               transitionsIncrementRegisters(_),
-              counterToSolverConstant.values.toSeq,
-              quantElim = false
-            )
+              quantElim = true
+            )(order)
           )
         )
-        p.checkSat(block = false)
-        val satStatus =
-          trace("SAT status for partial product")(p.getStatus(timeout = 500))
-        if (satStatus == ProverStatus.Unsat) {
+
+        if (trace("product unsatisfiable?")(p.checkSat(block = true))
+              == ProverStatus.Unsat) {
           return Success(counterToSolverConstant)
         }
 

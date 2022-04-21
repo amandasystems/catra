@@ -116,8 +116,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
           alphabet,
           alphabet.zip(constants).toMap,
           order
-        )(_),
-        constants
+        )(_)
       )
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
