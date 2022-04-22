@@ -7,7 +7,8 @@ import SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience.{l => toLinearCombination}
 import ap.basetypes.IdealInt
 import ap.terfor.ConstantTerm
-import scala.util.{Try, Success}
+import scala.util.Try
+import uuverifiers.parikh_theory.TryButThrowTimeouts
 
 class VermaBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
@@ -15,7 +16,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
   override def prepareSolver(
       p: SimpleAPI,
       instance: Instance
-  ): Try[Map[Counter, ConstantTerm]] = Try {
+  ): Try[Map[Counter, ConstantTerm]] = TryButThrowTimeouts {
     import ap.terfor.TerForConvenience._
     import p._
 
@@ -64,7 +65,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
           })
         )
 
-      for (term <- terms.tail) {
+      def computeProductStep(term: Automaton): Unit = {
         val newProduct = productSoFar productWithSources term
         productSoFar = newProduct.product
         ap.util.Timeout.check
@@ -90,13 +91,24 @@ class VermaBackend(override val arguments: CommandLineOptions)
             )(order)
           )
         )
+      }
 
-        if (trace("product unsatisfiable?")(p.checkSat(block = true))
-              == ProverStatus.Unsat) {
-          return Success(counterToSolverConstant)
+      def incrementallyComputeProduct(automataLeft: Seq[Automaton]): Unit =
+        automataLeft match {
+          case Seq() => ()
+          case term +: rest => {
+            computeProductStep(term)
+            val stillSatisfiable = trace("product SAT check")(
+              p.checkSat(block = true)
+            ) != ProverStatus.Unsat
+            if (stillSatisfiable) {
+              incrementallyComputeProduct(rest)
+            }
+          }
         }
 
-      }
+      incrementallyComputeProduct(terms.tail)
+
     }
     counterToSolverConstant
   }

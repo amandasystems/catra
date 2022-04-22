@@ -43,7 +43,6 @@ sealed case class CommandLineOptions(
 
   def runWithTimeout[T](p: SimpleAPI)(block: => T): Either[Timeout, T] =
     timeout_ms match {
-      // TODO catch timeout exceptions and return Left
       case Some(timeout_ms) =>
         try {
           p.withTimeout(timeout_ms) {
@@ -54,9 +53,8 @@ sealed case class CommandLineOptions(
             }
           }
         } catch {
-          case SimpleAPI.TimeoutException =>
+          case SimpleAPI.TimeoutException | ap.util.Timeout(_) =>
             Left(Timeout(timeout_ms)): Either[Timeout, T]
-
         }
       case None => Right(block)
     }
