@@ -6,6 +6,7 @@ import uuverifiers.common.Tracing
 import scala.util.{Success, Failure, Try}
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
+import uuverifiers.parikh_theory.TryButThrowTimeouts
 
 /**
  * A helper to construct backends that perform some kind of setup on the
@@ -51,53 +52,39 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   private def checkSolutions(p: SimpleAPI, instance: Instance)(
       counterToSolverConstant: Map[Counter, ConstantTerm]
-  ): Try[SatisfactionResult] = {
-    p.checkSat(block = false)
-
-    // FIXME this should be handled once, in the general timeout block.
-    val satStatus = timeout_ms match {
-      case Some(timeout_ms) =>
-        p.getStatus(timeout = timeout_ms)
-      case None => p.getStatus(block = true)
-    }
-
-    satStatus match {
+  ): Try[SatisfactionResult] = TryButThrowTimeouts {
+    trace("final sat status")(p.checkSat(block = true)) match {
       case ProverStatus.Sat | ProverStatus.Valid => {
-        Success(
-          Sat(
-            instance.counters
-              .map(
-                c => c -> p.eval(counterToSolverConstant(c)).bigIntValue
-              )
-              .toMap
-          )
+        Sat(
+          instance.counters
+            .map(
+              c => c -> p.eval(counterToSolverConstant(c)).bigIntValue
+            )
+            .toMap
         )
       }
-      case ProverStatus.Running => {
-        p.stop
-        Success(Timeout(timeout_ms.get))
-      }
-      case ProverStatus.Unsat       => Success(Unsat)
-      case ProverStatus.OutOfMemory => Success(OutOfMemory)
+      case ProverStatus.Unsat       => Unsat
+      case ProverStatus.OutOfMemory => OutOfMemory
       case otherStatus =>
-        Failure(
-          new Exception(s"unexpected solver status: ${otherStatus}")
-        )
+        throw new Exception(s"unexpected solver status: ${otherStatus}")
     }
   }
 
-  override def solveSatisfy(instance: Instance): Try[SatisfactionResult] = {
-    withProver { p =>
-      arguments.runWithTimeout(p) {
-        prepareSolver(p, instance).flatMap(checkSolutions(p, instance)(_))
-
-      } match {
-        case Left(someTimeout) => {
-          p.stop
-          Success(someTimeout)
+  override def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
+    trace("solveSatisfy result") {
+      withProver { p =>
+        arguments.runWithTimeout(p) {
+          prepareSolver(p, instance) match {
+            case Success(constants) => checkSolutions(p, instance)(constants)
+            case Failure(e)         => Failure(e)
+          }
+        } match {
+          case Left(someTimeout) => {
+            p.stop
+            Success(someTimeout)
+          }
+          case Right(someResult) => someResult
         }
-        case Right(someResult) => someResult
       }
     }
-  }
 }
