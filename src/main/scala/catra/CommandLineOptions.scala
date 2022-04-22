@@ -9,6 +9,8 @@ import java.nio.file.FileVisitResult
 import java.nio.file.attribute.BasicFileAttributes
 import java.io.{IOException, File}
 import ap.SimpleAPI
+import scala.util.Success
+import scala.util.Failure
 
 sealed trait BackendSelection
 
@@ -41,22 +43,31 @@ sealed case class CommandLineOptions(
     case ChooseVerma    => new VermaBackend(this)
   }
 
-  def runWithTimeout[T](p: SimpleAPI)(block: => T): Either[Timeout, T] =
-    timeout_ms match {
-      case Some(timeout_ms) =>
-        try {
+  def runWithTimeout(p: SimpleAPI)(block: => SatisfactionResult) =
+    try {
+      timeout_ms match {
+        case Some(timeout_ms) =>
           p.withTimeout(timeout_ms) {
             ap.util.Timeout.withTimeoutMillis(timeout_ms) {
-              Right(block): Either[Timeout, T]
+              Success(block)
             } {
-              Left(Timeout(timeout_ms)): Either[Timeout, T]
+              Success(Timeout(timeout_ms))
             }
           }
-        } catch {
-          case SimpleAPI.TimeoutException | ap.util.Timeout(_) =>
-            Left(Timeout(timeout_ms)): Either[Timeout, T]
-        }
-      case None => Right(block)
+        case None => Success(block)
+      }
+    } catch {
+      case SimpleAPI.TimeoutException => {
+        p.stop
+        Success(Timeout(timeout_ms.getOrElse(0)))
+      }
+      case ap.util.Timeout(_) => {
+        p.stop
+        Success(Timeout(timeout_ms.getOrElse(0)))
+
+      }
+      case e: Throwable => Failure(e)
+
     }
 
 }

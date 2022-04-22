@@ -3,7 +3,6 @@ import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import scala.util.{Success, Try}
 import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
-import uuverifiers.parikh_theory.TryButThrowTimeouts
 
 class PrincessBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
@@ -11,7 +10,7 @@ class PrincessBackend(override val arguments: CommandLineOptions)
   override def prepareSolver(
       p: SimpleAPI,
       instance: Instance
-  ): Try[Map[Counter, ConstantTerm]] = TryButThrowTimeouts {
+  ): Map[Counter, ConstantTerm] = {
     import instance._
     val theories = automata.map(
       automataGroup =>

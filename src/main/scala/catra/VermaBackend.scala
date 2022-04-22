@@ -7,8 +7,6 @@ import SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience.{l => toLinearCombination}
 import ap.basetypes.IdealInt
 import ap.terfor.ConstantTerm
-import scala.util.Try
-import uuverifiers.parikh_theory.TryButThrowTimeouts
 
 class VermaBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
@@ -16,7 +14,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
   override def prepareSolver(
       p: SimpleAPI,
       instance: Instance
-  ): Try[Map[Counter, ConstantTerm]] = TryButThrowTimeouts {
+  ): Map[Counter, ConstantTerm] = {
     import ap.terfor.TerForConvenience._
     import p._
 

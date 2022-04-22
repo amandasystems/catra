@@ -100,17 +100,3 @@ object VariousHelpers extends Tracing {
     }
 }
 
-object TryButThrowTimeouts {
-  def apply[T](block: => T): Try[T] = {
-    try {
-      Success(block)
-    } catch {
-      case SimpleAPI.TimeoutException =>
-        throw SimpleAPI.TimeoutException
-      case ap.util.Timeout(_) => {
-        throw SimpleAPI.TimeoutException
-      }
-      case e: Throwable => Failure(e)
-    }
-  }
-}

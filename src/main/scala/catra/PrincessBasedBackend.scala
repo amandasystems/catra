@@ -6,7 +6,6 @@ import uuverifiers.common.Tracing
 import scala.util.{Success, Failure, Try}
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
-import uuverifiers.parikh_theory.TryButThrowTimeouts
 
 /**
  * A helper to construct backends that perform some kind of setup on the
@@ -29,7 +28,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
   def prepareSolver(
       p: SimpleAPI,
       instance: Instance
-  ): Try[Map[Counter, ConstantTerm]]
+  ): Map[Counter, ConstantTerm]
 
   def withProver[T](f: SimpleAPI => T): T =
     dumpSMTDir match {
@@ -39,7 +38,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
 
   override def findImage(instance: Instance) = withProver { p =>
-    val counterToSolverConstant = prepareSolver(p, instance).get
+    val counterToSolverConstant = prepareSolver(p, instance)
     p.makeExistentialRaw(counterToSolverConstant.values)
     p.setMostGeneralConstraints(true)
     // TODO handle responses here
@@ -52,7 +51,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   private def checkSolutions(p: SimpleAPI, instance: Instance)(
       counterToSolverConstant: Map[Counter, ConstantTerm]
-  ): Try[SatisfactionResult] = TryButThrowTimeouts {
+  ): SatisfactionResult = {
     trace("final sat status")(p.checkSat(block = true)) match {
       case ProverStatus.Sat | ProverStatus.Valid => {
         Sat(
@@ -74,16 +73,8 @@ trait PrincessBasedBackend extends Backend with Tracing {
     trace("solveSatisfy result") {
       withProver { p =>
         arguments.runWithTimeout(p) {
-          prepareSolver(p, instance) match {
-            case Success(constants) => checkSolutions(p, instance)(constants)
-            case Failure(e)         => Failure(e)
-          }
-        } match {
-          case Left(someTimeout) => {
-            p.stop
-            Success(someTimeout)
-          }
-          case Right(someResult) => someResult
+          val counterToConstants = prepareSolver(p, instance)
+          checkSolutions(p, instance)(counterToConstants)
         }
       }
     }

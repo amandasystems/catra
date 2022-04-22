@@ -88,26 +88,28 @@ object SolveRegisterAutomata extends App with Tracing {
       case SolveSatisfy => arguments.getBackend().solveSatisfy(instance)
     }
 
-  CommandLineOptions.parse(args) match {
-    case Success(arguments) => {
-      for (fileName <- arguments.inputFiles) {
-        val fileContents = Source.fromFile(fileName).mkString("")
-        val (parsed, parseTime) = measureTime(
-          InputFileParser.parse(fileContents)
-        )
-        val (result, runtime) = measureTime {
-          parsed match {
-            case Parsed.Success(instance, _) => runInstance(instance, arguments)
-            case Parsed.Failure(expected, _, extra) => {
-              Console.err.println(s"E: parse error ${expected}")
-              Console.err.println(s"E: ${extra.trace().longMsg}")
-              Failure(new Exception(s"parse error: ${extra.trace().longMsg}"))
-            }
+  def runInstances(arguments: CommandLineOptions) = {
+    for (fileName <- arguments.inputFiles) {
+      val fileContents = Source.fromFile(fileName).mkString("")
+      val (parsed, parseTime) = measureTime(
+        InputFileParser.parse(fileContents)
+      )
+      val (result, runtime) = measureTime {
+        parsed match {
+          case Parsed.Success(instance, _) => runInstance(instance, arguments)
+          case Parsed.Failure(expected, _, extra) => {
+            Console.err.println(s"E: parse error ${expected}")
+            Console.err.println(s"E: ${extra.trace().longMsg}")
+            Failure(new Exception(s"parse error: ${extra.trace().longMsg}"))
           }
         }
-        reportRun(fileName, result, runtime, parseTime)
       }
+      reportRun(fileName, result, runtime, parseTime)
     }
-    case Failure(reason) => fatalError(reason)
+  }
+
+  CommandLineOptions.parse(args) match {
+    case Success(arguments) => runInstances(arguments)
+    case Failure(reason)    => fatalError(reason)
   }
 }
