@@ -7,6 +7,7 @@ import SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience.{l => toLinearCombination}
 import ap.basetypes.IdealInt
 import ap.terfor.ConstantTerm
+import scala.annotation.tailrec
 
 class VermaBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
@@ -37,49 +38,69 @@ class VermaBackend(override val arguments: CommandLineOptions)
 
     instance.automata.foreach { terms =>
       var productSoFar: Automaton = terms.head
-      var productTransitionToOffsets = instance.transitionToOffsets
-      // This enforces the bridging clause: c  = SUM t : sigma(t) * increment(c, t)
-      // NOTE:  We need to iterate over only the live counters, because the
-      // counters that were initially not mentioned by any automaton need to be
-      // left without constraints and would otherwise be set to zero, despite
-      // being unconstrained by the automata.
+      var productTransitionToOffsets =
+        trace("transition to offsets at start")(instance.transitionToOffsets)
 
-      def transitionsIncrementRegisters(
-          sigma: Map[Transition, ap.terfor.Term]
-      ) =
-        trace(s"binding clauses: counters are coherent:")(
-          conj(instance.liveCounters.map { counter =>
-            counterToSolverConstant(counter) === sum(
-              productSoFar.transitions.map { transition =>
-                (
-                  IdealInt.int2idealInt(
-                    productTransitionToOffsets(transition)
-                      .getOrElse(counter, 0)
-                  ),
-                  toLinearCombination(sigma(transition))
-                )
-              }
-            )
-          })
-        )
+      def incrementOf(counter: Counter, transition: Transition) =
+        trace(s"${transition} increments ${counter} to") {
+          IdealInt.int2idealInt(
+            productTransitionToOffsets(transition).getOrElse(counter, 0)
+          )
+        }
 
       def computeProductStep(term: Automaton): Unit = {
         val newProduct = productSoFar productWithSources term
         productSoFar = newProduct.product
         ap.util.Timeout.check
 
-        productTransitionToOffsets = productSoFar.transitions.map {
-          productTransition =>
-            val (partialProductTransition, termTransition) =
-              newProduct.originOfTransition(productTransition)
+        productTransitionToOffsets =
+          trace("transition to offsets after product") {
+            productSoFar.transitions.map { productTransition =>
+              val (partialProductTransition, termTransition) =
+                newProduct.originOfTransition(productTransition)
 
-            val counterIncrements = instance
-              .transitionToOffsets(termTransition) ++ productTransitionToOffsets(
-              partialProductTransition
-            )
+              trace("originating transitions")(
+                (partialProductTransition, termTransition)
+              )
 
-            productTransition -> counterIncrements
-        }.toMap
+              val counterIncrements = trace("left counter increments")(
+                instance
+                  .transitionToOffsets(termTransition)
+              ) ++ trace("right counter increments")(
+                productTransitionToOffsets(
+                  partialProductTransition
+                )
+              )
+
+              productTransition -> counterIncrements
+            }.toMap
+          }
+
+        val affectedCounters =
+          productTransitionToOffsets.values.flatMap(_.keys).toSet
+
+        // This enforces the bridging clause: c  = SUM t : sigma(t) * increment(c, t)
+        // NOTE:  We need to iterate over only the counters occurring in the
+        // partial product, or any counters appearing in later products will be
+        // forced to 0.
+        def transitionsIncrementRegisters(
+            sigma: Map[Transition, ap.terfor.Term]
+        ) =
+          trace(s"binding clauses: counters are coherent:") {
+            conj(affectedCounters.map { counter =>
+              val c = counterToSolverConstant(counter)
+
+              val incrementAndNrTaken =
+                productSoFar.transitions.map { transition =>
+                  (
+                    incrementOf(counter, transition),
+                    toLinearCombination(sigma(transition))
+                  )
+                }
+
+              c === sum(incrementAndNrTaken)
+            })
+          }
 
         p.addAssertion(
           trace("partial product Parikh image")(
@@ -91,6 +112,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
         )
       }
 
+      @tailrec
       def incrementallyComputeProduct(automataLeft: Seq[Automaton]): Unit =
         automataLeft match {
           case Seq() => ()
