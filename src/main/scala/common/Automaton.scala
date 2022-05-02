@@ -638,13 +638,53 @@ class AutomatonBuilder extends Tracing {
   import AutomataTypes._
 
   private var _autStates = Set[State]()
-  private var _transitions = Set[Transition]()
+  private var _neighbours = Map[State, Set[(State, Label)]]()
   private var _initial: Option[State] = None
   private var _accepting = Set[State]()
+  private var forwardReachable = Set[State]()
+
+  /**
+   * Transitively set s and any state reachable when starting in s as reachable.
+   *
+   * Does NOT update _reachableNeighbours!
+   *
+   * @param s The state to set reachable
+   */
+  private def setFwdReachable(s: State) =
+    trace(s"setting forward reachable ${s}") {
+      var todo = List(s)
+
+      def markReachable(s: State) = {
+        forwardReachable += s
+      }
+      def enqueue(s: State) = trace(s"adding ${s} to queue") {
+        todo = s :: todo
+      }
+
+      markReachable(s)
+
+      while (!todo.isEmpty) {
+        val current = todo.head
+        todo = todo.tail
+
+        for ((target, _) <- _neighbours.getOrElse(current, Seq())) {
+          val targetSeenBefore = forwardReachable contains target
+          if (!targetSeenBefore) {
+            enqueue(target)
+            markReachable(target)
+          }
+        }
+      }
+    }
 
   def containsState(s: State) = _autStates contains s
 
-  def containsTransition(t: Transition) = _transitions contains t
+  def containsTransition(t: Transition) = {
+    _neighbours
+      .get(t.from())
+      .map(outgoing => outgoing contains ((t.to(), t.label())))
+      .getOrElse(false)
+  }
 
   def addState(s: State): AutomatonBuilder = {
     _autStates += s
@@ -671,7 +711,9 @@ class AutomatonBuilder extends Tracing {
 
   def setInitial(newInitialState: State): AutomatonBuilder = {
     assertHasState(newInitialState)
+    forwardReachable = Set() // All states are now unreachable...
     _initial = Some(newInitialState)
+    setFwdReachable(newInitialState) //...until we recompute.
     this
   }
 
@@ -689,7 +731,15 @@ class AutomatonBuilder extends Tracing {
 
   def addTransition(from: State, label: Label, to: State): AutomatonBuilder = {
     assert((_autStates contains from) && (_autStates contains to))
-    _transitions += ((from, label, to))
+    _neighbours = _neighbours.updatedWith(from) {
+      case None                   => Some(Set((to, label)))
+      case Some(previousOutgoing) => Some(previousOutgoing + ((to, label)))
+    }
+
+    if (forwardReachable contains from) {
+      setFwdReachable(to)
+    }
+
     this
   }
 
@@ -699,19 +749,17 @@ class AutomatonBuilder extends Tracing {
   def getAutomaton(): Automaton = {
     assert(_initial != None, "Must have initial state!")
 
-    if (_accepting.isEmpty)
+    if (!_accepting.exists(forwardReachable contains _))
       return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
+
+    val reachableNeighbours =
+      _neighbours.view.filterKeys(forwardReachable contains _).toMap
 
     object Aut extends Automaton {
       override val initialState = _initial.get
       override def isAccept(s: State) = _accepting contains s
       override def outgoingTransitions(from: State) =
-        _transitions
-          .filter { case (thatFrom, _, _) => thatFrom == from }
-          .map {
-            case (_, label, to) => (to, label)
-          }
-          .iterator
+        reachableNeighbours.getOrElse(from, Iterator.empty).iterator
       override val states = _autStates
     }
 
@@ -738,6 +786,10 @@ object REJECT_ALL extends Automaton {
   override def states = Seq.empty
   override lazy val isEmpty = true
   override def toString = "∅ REJECT ALL"
+
+  override def filterTransitions(
+      keepEdge: AutomataTypes.Transition => Boolean
+  ) = this
 
   override def parikhImage(
       bridgingFormula: Map[AutomataTypes.Transition, Term] => Formula,

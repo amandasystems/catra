@@ -106,7 +106,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
           trace("partial product Parikh image")(
             productSoFar.parikhImage(
               transitionsIncrementRegisters(_),
-              quantElim = true
+              quantElim = false
             )(order)
           )
         )
