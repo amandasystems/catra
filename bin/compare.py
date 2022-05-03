@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import math
 import sys
 import re
 from collections import Counter, defaultdict
@@ -6,95 +7,125 @@ from collections import Counter, defaultdict
 LINE_RE = re.compile(
     r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[0-9\.]+)s parse: .*====$"
 )
+THRESHOLD_SECONDS = 2.0
+THRESHOLD_PERCENTAGE = 5.0
 
-left_name = sys.argv[1]
-right_name = sys.argv[2]
+file_names = sys.argv[1:]
 
-def parse_lines(lines):
+
+def parse_file(file_name) -> dict[str, tuple[str, float]]:
     results = dict()
-
-    for line in lines:
-        match = LINE_RE.match(line)
-        if not match:
-            continue
-        sat_status = match.group("sat_status")
-        results[match.group("file_name")] = (
-            sat_status,
-            float(match.group("runtime"))
-            if not "timeout" in sat_status
-            else float("inf"),
-        )
+    with open(file_name) as f:
+        for line in f:
+            match = LINE_RE.match(line)
+            if not match:
+                continue
+            sat_status = match.group("sat_status")
+            results[match.group("file_name")] = (
+                sat_status,
+                float(match.group("runtime"))
+                if not "timeout" in sat_status
+                else float("inf"),
+            )
     return results
 
 
-def classify_outcome(left_runtime, right_runtime):
-    runtime_diff = left_runtime - right_runtime
-    runtime_difference_is_large = (
-        abs(runtime_diff) / abs(max(left_runtime, right_runtime))
-    ) >= 0.10 and abs(runtime_diff) > 1.0
-
-    if runtime_difference_is_large:
-        # print(
-        #    f"I: {instance} runtime: {left_runtime} vs {right_runtime}: diff {runtime_diff}"
-        # )
-        if runtime_diff < 0:
-            return f"{left_name} wins"
-        else:
-            return f"{right_name} wins"
-    else:
-        return "draws"
+def describe_cluster(cluster, label):
+    if not cluster:
+        return []
+    name = "/".join(sorted([name for name in cluster]))
+    solo_or_shared = "shared" if len(cluster) > 1 else "solo"
+    return [f"{name} {solo_or_shared} {label}"]
 
 
-with open(left_name) as left, open(right_name) as right:
-    lefts = parse_lines(left)
-    rights = parse_lines(right)
+def classify_outcome(runtimes: list[float]) -> list[str]:
+    solver_and_runtime = list(zip(runtimes, file_names))
+    solver_and_runtime.sort()
 
-common_keys = set(lefts.keys()).intersection(rights.keys())
+    best_runtime, _ = solver_and_runtime[0]
+    worst_runtime, _ = solver_and_runtime[-1]
 
-if not lefts.keys() == rights.keys():
-    different_keys = set(lefts.keys()).symmetric_difference(set(rights.keys()))
-    different_keys_str = (
-        ", ".join(list(different_keys)[:5]) + f" ...and {len(different_keys) - 5} more"
-        if len(different_keys) > 5
-        else ", ".join(different_keys)
+    if best_runtime == worst_runtime:
+        # Catches the case when all are infinite, and the unlikely case when
+        # they are the same. Either way, we can stop now -- nobody won!
+        return ["all timeout"] if best_runtime == float("inf") else ["draw"]
+
+    # Best value is numeric -- it might be the only one. The following
+    # arithmetic requires this!
+
+    min_relative_improvement = best_runtime / (1 - (THRESHOLD_PERCENTAGE / 100))
+    winner_threshold_value = max(
+        best_runtime + THRESHOLD_SECONDS, min_relative_improvement
     )
-    print(f"W: The following files are not in both sets:\n{different_keys_str}")
-    print(f"I: Proceeding with the {len(common_keys)} common instance(s)...")
 
-nr_different = 0
-outcomes = defaultdict(Counter)
+    winners = [
+        name
+        for runtime, name in solver_and_runtime
+        if runtime <= winner_threshold_value
+    ]
+
+    losers = [
+        name
+        for runtime, name in solver_and_runtime
+        if runtime > winner_threshold_value and not runtime == float("inf")
+    ]
+
+    timeout_losers = [
+        name for runtime, name in solver_and_runtime if runtime == float("inf")
+    ]
+
+    if not losers and not timeout_losers:
+        return ["draw"]
+
+    win_description = describe_cluster(winners, "win")
+    timeout_description = describe_cluster(timeout_losers, "timeout loss")
+    lose_description = describe_cluster(losers, "non-timeout loss")
+
+    return win_description + timeout_description + lose_description
 
 
-for instance in common_keys:
-    left_status, left_runtime = lefts[instance]
-    right_status, right_runtime = rights[instance]
+log_to_results = [parse_file(file_name) for file_name in file_names]
 
-    instance_type = "unknown"
+instances = [set(r.keys()) for r in log_to_results]
+common_instances = instances[0].intersection(*instances[1:])
+unshared_instances = set.union(*instances).difference(common_instances)
 
-    if "timeout" in left_status and "timeout" in right_status:
-        outcomes[instance_type]["both timeout"] += 1
-        print(f"W: No ground truth for {instance}: both timed out!")
+if unshared_instances:
+    different_keys_str = (
+        ", ".join(list(unshared_instances)[:5])
+        + f" ...and {len(unshared_instances) - 5} more"
+        if len(unshared_instances) > 5
+        else ", ".join(unshared_instances)
+    )
+    print(f"W: The following instances are not in all logs:\n{different_keys_str}")
+    print(f"I: Proceeding with the {len(common_instances)} common instance(s)...")
+
+outcomes: defaultdict[str, Counter] = defaultdict(Counter)
+
+for instance in common_instances:
+    runtimes = [log[instance][1] for log in log_to_results]
+
+    statuses_without_timeouts = list(
+        {
+            log[instance][0]
+            for log in log_to_results
+            if "timeout" not in log[instance][0]
+        }
+    )
+
+    if len(statuses_without_timeouts) > 1:
+        # The solvers don't agree: we can't trust the numbers.
+        description = "/".join(sorted(statuses_without_timeouts))
+        outcomes[f"contested: {description}"]["uncertain"] += 1
         continue
 
-    results = {s for s in [left_status, right_status] if not "timeout" in s}
-
-    if len(results) == 1:
-        # At least one solver did not time out and reported a status: we assume
-        # it is correct and use that to classify the instance.
-        instance_type = list(results)[0]
-    else:
-        # The solvers both came to a conclusion, but don't agree: we can't trust
-        # the numbers.
-        print(f"W: different outcomes {left_status}/{right_status} for {instance}!")
-        nr_different += 1
-        continue
-
-    # Now we know: at least one solver has a solution.
-    outcomes[instance_type][classify_outcome(left_runtime, right_runtime)] += 1
+    instance_type = (
+        statuses_without_timeouts[0] if statuses_without_timeouts else "unknown"
+    )
+    outcomes[instance_type].update(classify_outcome(runtimes))
 
 print()
 print("======= Summary =======")
-print(f"\nDifferent outcomes: {nr_different}\n")
 for outer_label, counts in outcomes.items():
     print(f"## {outer_label}")
     inner_label_maxlen = max(len(l) for l in counts.keys()) + 4
