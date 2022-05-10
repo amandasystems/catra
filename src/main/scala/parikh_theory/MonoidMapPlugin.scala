@@ -79,7 +79,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       val productIsDone =
         trace("productIsDone")(activeAutomata.size <= 1)
-      val allAutomataGuaranteedConnected = connectedInstances.isEmpty
+      val allAutomataGuaranteedConnected = trace(
+        "all automata guaranteed to be connected"
+      )(connectedInstances.isEmpty)
       val isSubsumed =
         trace("isSubsumed")(productIsDone && allAutomataGuaranteedConnected)
 
@@ -248,8 +250,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
 
       val allTransitionsAssigned =
-        aut.transitions forall { t =>
-          deadTransitions(t) || definitelyReached(t._1)
+        trace("all transitions assigned?") {
+          aut.transitions forall { t =>
+            deadTransitions(t) || definitelyReached(t._1)
+          }
         }
 
       val subsumeActions =

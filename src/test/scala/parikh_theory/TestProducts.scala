@@ -48,13 +48,17 @@ class TestProducts extends AnyFunSuite with Tracing {
           (stateToProductStates contains to)
 
         val outgoingTransitions = stateToProductStates(from)
-          .flatMap(prod.product.outgoingTransitions)
+          .flatMap(prod.product.transitionsFrom _)
           .toSet
         val possibleTargetStates = stateToProductStates(to)
 
         val transitionExists = possibleTargetStates.exists(
           targetProductState =>
-            outgoingTransitions.contains((targetProductState, label))
+            stateToProductStates(from).exists(
+              sourceProductState =>
+                outgoingTransitions
+                  .contains((sourceProductState, label, targetProductState))
+            )
         )
         statesExist && transitionExists
     }

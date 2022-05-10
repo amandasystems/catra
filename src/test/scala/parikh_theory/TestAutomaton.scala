@@ -8,8 +8,14 @@ import ap.terfor.conjunctions.Conjunction
 import uuverifiers.common.AutomataTypes
 import uuverifiers.common.REJECT_ALL
 import uuverifiers.common.IntState
+import uuverifiers.common.AutomatonBuilder
+import uuverifiers.common.SymbolicLabel
 
 class TestAutomaton extends AnyFunSuite {
+  import scala.language.implicitConversions
+
+  implicit def range2States(idxs: Range): Seq[IntState] = IntState(idxs)
+  implicit def int2State(idx: Int): IntState = IntState(idx)
 
   test("transitions and transitionsBFS have the same transitions modulo order") {
     for (a <- AutomatonLibrary.allAutomata) {
@@ -91,6 +97,43 @@ class TestAutomaton extends AnyFunSuite {
       assert(??? == ProverStatus.Valid)
     }
   }
+
+  test("transitions to unreachable state disappears") {
+    val unreachableTransition = (IntState(2), SymbolicLabel('-'), IntState(2))
+    val reachableTransition =
+      (IntState(0), SymbolicLabel('-'), IntState(1))
+
+    val aut = AutomatonBuilder()
+      .addStates(0 to 2)
+      .setInitial(0)
+      .setAccepting(1)
+      .addTransition(reachableTransition)
+      .addTransition(unreachableTransition)
+      .getAutomaton()
+
+    assert(aut.containsTransition(reachableTransition))
+    assert(!aut.containsTransition(unreachableTransition))
+
+  }
+
+  test("transitions to dead state disappears") {
+    val deadTransition = (IntState(1), SymbolicLabel('-'), IntState(2))
+    val reachableTransition =
+      (IntState(0), SymbolicLabel('-'), IntState(1))
+
+    val aut = AutomatonBuilder()
+      .addStates(0 to 2)
+      .setInitial(0)
+      .setAccepting(1)
+      .addTransition(reachableTransition)
+      .addTransition(deadTransition)
+      .getAutomaton()
+
+    assert(aut.containsTransition(reachableTransition))
+    assert(!aut.containsTransition(deadTransition))
+
+  }
+
 }
 
 object AutomatonSpecification extends Properties("Automata") {

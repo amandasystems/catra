@@ -37,9 +37,13 @@ class VermaBackend(override val arguments: CommandLineOptions)
     }
 
     instance.automata.foreach { terms =>
+      var productStep = 0
+
       var productSoFar: Automaton = terms.head
       var productTransitionToOffsets =
         trace("transition to offsets at start")(instance.transitionToOffsets)
+
+      // productSoFar.dumpDotFile(s"verma-product-step-${productStep}.dot")
 
       def incrementOf(counter: Counter, transition: Transition) =
         trace(s"${transition} increments ${counter} to") {
@@ -50,6 +54,10 @@ class VermaBackend(override val arguments: CommandLineOptions)
 
       def computeProductStep(term: Automaton): Unit = {
         val newProduct = productSoFar productWithSources term
+        productStep += 1
+        // term.dumpDotFile(s"verma-product-term-${productStep}.dot")
+        // newProduct.dumpDotFile(s"verma-product-step-${productStep}.dot")
+
         productSoFar = newProduct.product
         ap.util.Timeout.check
 

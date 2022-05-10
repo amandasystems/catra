@@ -35,6 +35,7 @@ object AutomataTypes {
 sealed case class IntState(id: Int) extends Ordered[IntState] {
   def compare(that: IntState) = this.id compare that.id
   def successor(): IntState = IntState(id + 1)
+  def toPretty(): String = s"s${id}"
 }
 
 object IntState {
@@ -60,7 +61,7 @@ trait Automaton
   /**
    * Given a state, iterate over all outgoing transitions
    */
-  def outgoingTransitions(from: State): Iterator[(State, SymbolicLabel)]
+  def transitionsFrom(from: State): Seq[Transition]
 
   /**
    * The unique initial state
@@ -105,7 +106,7 @@ trait Automaton
   def toDot() =
     toDot(
       transitionAnnotator = _.label().toString(),
-      stateAnnotator = _.toString()
+      stateAnnotator = _.toPretty()
     )
 
   def toDot(
@@ -118,16 +119,15 @@ trait Automaton
     val builder = new StringBuilder("digraph Automaton {")
     builder ++= "rankdir = LR;\n"
     builder ++= "initial [shape=plaintext,label=\"\"];\n"
-    builder ++= s"initial -> ${initialState};\n" // Add an incoming edge to the initial state
+    builder ++= s"initial -> ${initialState.toPretty()};\n" // Add an incoming edge to the initial state
 
     states.foreach { s =>
       val shape = if (isAccept(s)) "doublecircle" else "circle"
       val quotedState = quote(stateAnnotator(s))
-      builder ++= s"${s} [shape=${shape},label=${quotedState}];\n"
-      transitionsFrom(s).foreach {
-        case t @ (from, _, to) =>
-          val quotedLabel = quote(transitionAnnotator(t))
-          builder ++= s"${from} -> ${to} [label=${quotedLabel}]\n"
+      builder ++= s"${s.toPretty()} [shape=${shape},label=${quotedState}];\n"
+      transitionsFrom(s).foreach { t =>
+        val quotedLabel = quote(transitionAnnotator(t))
+        builder ++= s"${t.from().toPretty()} -> ${t.to().toPretty()} [label=${quotedLabel}]\n"
       }
     }
 
@@ -164,10 +164,10 @@ trait Automaton
       val next = todo.head
       todo = todo.tail
 
-      for ((target, l) <- outgoingTransitions(next))
-        if (!disabledEdges.contains((next, l, target)) &&
-            (res add target))
-          todo = target :: todo
+      for (t <- transitionsFrom(next))
+        if (!disabledEdges.contains((next, t.label(), t.to())) &&
+            (res add t.to()))
+          todo = t.to() :: todo
     }
 
     res.toSet
@@ -431,11 +431,10 @@ trait Automaton
       if (isAccept(next))
         return Some(pathSoFar.reverse)
 
-      for ((target, l) <- outgoingTransitions(next)) {
-        val tr = (next, l, target)
-        if (!disabledEdges.contains(tr) && !reached.contains(target)) {
-          reached.put(target, tr :: pathSoFar)
-          todo = target :: todo
+      for (tr <- transitionsFrom(next)) {
+        if (!disabledEdges.contains(tr) && !reached.contains(tr.to())) {
+          reached.put(tr.to(), tr :: pathSoFar)
+          todo = tr.to() :: todo
         }
       }
     }
@@ -464,14 +463,11 @@ trait Automaton
    * Iterate over all transitions.
    */
   lazy val transitions =
-    (for (s1 <- states.iterator; (s2, lbl) <- outgoingTransitions(s1))
-      yield (s1, lbl, s2)).toIndexedSeq
+    (for (s1 <- states.iterator; t <- transitionsFrom(s1))
+      yield t).toIndexedSeq
 
   def allNodes() = states.toSeq
   def edges() = transitions.toSeq
-  def transitionsFrom(node: State) =
-    outgoingTransitions(node).map(t => (node, t._2, t._1)).toSeq
-
   def subgraph(selectedNodes: Set[State]): Automaton = {
     val builder = AutomatonBuilder()
     val statesToKeep = states.filter(selectedNodes.contains)
@@ -499,12 +495,12 @@ trait Automaton
    *
    * @param left to-label from the left automaton
    * @param right to-label from the right automaton
-   * @return the computed label and corresponding states from the left and
+   * @return the computed label and corresponding to-states from the left and
    * right automaton respectively
    */
   private def transitionsWithOverlappingLabels(
-      left: Iterator[(State, SymbolicLabel)],
-      right: Iterator[(State, SymbolicLabel)]
+      left: Iterable[Transition],
+      right: Iterable[Transition]
   ): Seq[(SymbolicLabel, SymbolicLabel, SymbolicLabel, State, State)] = {
     // NOTE: by sorting both lists by alternating lower and upper bounds, the
     // search can be accelerated by skipping ranges that can never overlap.
@@ -513,22 +509,23 @@ trait Automaton
     val leftValues = left.toSeq
     val rightValues = right.toSeq
 
-    leftValues.flatMap {
-      case (leftState, leftLabel) =>
-        rightValues
-          .map {
-            case (rightState, rightLabel) =>
-              (
-                trace(s"${leftLabel} INTERSECT ${rightLabel}")(
-                  leftLabel intersect rightLabel
-                ),
-                leftLabel,
-                rightLabel,
-                leftState,
-                rightState
-              )
-          }
-          .filter(!_._1.isEmpty())
+    leftValues.flatMap { leftTransition =>
+      rightValues
+        .map { rightTransition =>
+          val intersection = trace(
+            s"${leftTransition.label()} INTERSECT ${rightTransition.label()}"
+          )(
+            leftTransition.label() intersect rightTransition.label()
+          )
+          (
+            intersection,
+            leftTransition.label(),
+            rightTransition.label(),
+            leftTransition.to(),
+            rightTransition.to()
+          )
+        }
+        .filter(!_._1.isEmpty())
     }
 
   }
@@ -587,8 +584,8 @@ trait Automaton
         s"overlappingTransitions from ${thisSourceState}/${thatSourceState}"
       )(
         transitionsWithOverlappingLabels(
-          this outgoingTransitions thisSourceState,
-          that outgoingTransitions thatSourceState
+          this transitionsFrom thisSourceState,
+          that transitionsFrom thatSourceState
         ).toSeq
       )
       overlappingTransitions.foreach {
@@ -624,12 +621,29 @@ trait Automaton
       }
     }
 
+    val product = productBuilder.getAutomaton()
+
     AnnotatedProduct(
-      productBuilder.getAutomaton(),
-      termToProductEdges.view.mapValues(_.toSeq).toMap,
+      product,
+      termToProductEdges.view
+        .mapValues(_.filter(product.containsTransition).toSeq)
+        .filter { case (_, v) => v.nonEmpty }
+        .toMap,
       knownProductStates.toMap.map(_.swap)
     )
   }
+
+  /**
+   * Check if a transition exists.
+   *
+   * @param t A transition to check for
+   * @return True if t is a transition in this graph, false otherwise.
+   */
+  def containsTransition(t: Transition): Boolean =
+    trace(s"${transitionsFrom(t.from())} contains ${t}")(
+      transitionsFrom(t.from()) contains t
+    )
+
 }
 
 // TODO keep track of reachable states and make sure we return REJECT_ALL if unreachable.
@@ -638,15 +652,14 @@ class AutomatonBuilder extends Tracing {
   import AutomataTypes._
 
   private var _autStates = Set[State]()
-  private var _neighbours = Map[State, Set[(State, Label)]]()
+  private var _outgoingTransitions = Map[State, Set[Transition]]()
   private var _initial: Option[State] = None
   private var _accepting = Set[State]()
   private var forwardReachable = Set[State]()
+  private var backwardReachable = Set[State]()
 
   /**
    * Transitively set s and any state reachable when starting in s as reachable.
-   *
-   * Does NOT update _reachableNeighbours!
    *
    * @param s The state to set reachable
    */
@@ -667,22 +680,71 @@ class AutomatonBuilder extends Tracing {
         val current = todo.head
         todo = todo.tail
 
-        for ((target, _) <- _neighbours.getOrElse(current, Seq())) {
-          val targetSeenBefore = forwardReachable contains target
+        for (t <- _outgoingTransitions.getOrElse(current, Seq())) {
+          val targetSeenBefore = forwardReachable contains t.to()
           if (!targetSeenBefore) {
-            enqueue(target)
-            markReachable(target)
+            enqueue(t.to())
+            markReachable(t.to())
           }
         }
       }
     }
 
+  /**
+   * Start a backwards reachability search here, populating
+   * backwardsReachable.
+   *
+   * @param startingState
+   */
+  private def startBwdReachability(startingState: State) = {
+    val reachedFrom = new HashMap[State, ArrayBuffer[State]]
+    var todo = List[State](startingState)
+
+    def enqueue(s: State) = trace(s"adding ${s} to queue") {
+      todo = s :: todo
+    }
+
+    def dequeue() = {
+      val next = todo.head
+      todo = todo.tail
+      next
+    }
+
+    def markReachable(s: State) = {
+      backwardReachable += s
+    }
+
+    _outgoingTransitions.view
+      .filterKeys(forwardReachable contains _)
+      .values
+      .flatten
+      .foreach(
+        t => reachedFrom.getOrElseUpdate(t.to(), new ArrayBuffer) += t.from()
+      )
+
+    markReachable(startingState)
+
+    while (!todo.isEmpty) {
+      val next = dequeue()
+
+      for (sources <- reachedFrom get next)
+        for (source <- sources) {
+          val sourceSeenBefore = backwardReachable contains source
+          if (!sourceSeenBefore) {
+            markReachable(source)
+            enqueue(source)
+          }
+        }
+    }
+
+  }
+
   def containsState(s: State) = _autStates contains s
 
   def containsTransition(t: Transition) = {
-    _neighbours
+    _outgoingTransitions
       .get(t.from())
-      .map(outgoing => outgoing contains ((t.to(), t.label())))
+      .map(outgoing => outgoing contains t)
       .getOrElse(false)
   }
 
@@ -720,31 +782,41 @@ class AutomatonBuilder extends Tracing {
   def setAccepting(acceptingStates: State*) = {
     assert(acceptingStates forall (_autStates(_)))
     _accepting ++= acceptingStates
+    acceptingStates.foreach(s => startBwdReachability(s))
     this
   }
 
   def setNotAccepting(notAcceptingStates: State*) = {
     assert(notAcceptingStates forall (_autStates(_)))
+    backwardReachable = Set()
     _accepting --= notAcceptingStates
+    _accepting.foreach(s => startBwdReachability(s))
     this
   }
 
   def addTransition(from: State, label: Label, to: State): AutomatonBuilder = {
     assert((_autStates contains from) && (_autStates contains to))
-    _neighbours = _neighbours.updatedWith(from) {
-      case None                   => Some(Set((to, label)))
-      case Some(previousOutgoing) => Some(previousOutgoing + ((to, label)))
+    val newTransition = (from, label, to)
+
+    _outgoingTransitions = _outgoingTransitions.updatedWith(from) {
+      case None                   => Some(Set(newTransition))
+      case Some(previousOutgoing) => Some(previousOutgoing + newTransition)
     }
 
     if (forwardReachable contains from) {
       setFwdReachable(to)
     }
 
+    if (backwardReachable contains to) {
+      startBwdReachability(from)
+    }
+
     this
   }
 
-  def addTransition(t: (State, Label, State)): AutomatonBuilder =
+  def addTransition(t: Transition): AutomatonBuilder =
     (this.addTransition(_: State, _: Label, _: State)).tupled(t)
+
 
   def getAutomaton(): Automaton = {
     assert(_initial != None, "Must have initial state!")
@@ -752,14 +824,21 @@ class AutomatonBuilder extends Tracing {
     if (!_accepting.exists(forwardReachable contains _))
       return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
 
-    val reachableNeighbours =
-      _neighbours.view.filterKeys(forwardReachable contains _).toMap
+    // Ignore transitions into and from dead states (unreachable, or where no
+    // path leads on to an accepting state)
+    val reachableTransitions =
+      _outgoingTransitions.view
+        .filterKeys(
+          s => (forwardReachable contains s) && (backwardReachable contains s)
+        )
+        .mapValues(ts => ts.filter(backwardReachable contains _.to()))
+        .toMap
 
     object Aut extends Automaton {
       override val initialState = _initial.get
       override def isAccept(s: State) = _accepting contains s
-      override def outgoingTransitions(from: State) =
-        reachableNeighbours.getOrElse(from, Iterator.empty).iterator
+      override def transitionsFrom(from: State) =
+        reachableTransitions.getOrElse(from, Seq()).toSeq
       override val states = _autStates
     }
 
@@ -782,7 +861,7 @@ object AutomatonBuilder {
 object REJECT_ALL extends Automaton {
   override val initialState = IntState(0)
   override def isAccept(_s: AutomataTypes.State) = false
-  override def outgoingTransitions(_from: AutomataTypes.State) = Iterator.empty
+  override def transitionsFrom(_from: AutomataTypes.State) = Seq()
   override def states = Seq.empty
   override lazy val isEmpty = true
   override def toString = "∅ REJECT ALL"
@@ -927,7 +1006,7 @@ sealed case class AnnotatedProduct(
 
   private def stateAnnotation(productState: AutomataTypes.State) = {
     val (leftState, rightState) = originOf(productState)
-    s"${productState} = ${leftState}/${rightState}"
+    s"${productState.toPretty()} = ${leftState.toPretty()}/${rightState.toPretty()}"
   }
 
   def toDot() =
