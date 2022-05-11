@@ -239,17 +239,16 @@ trait TracingComputation extends ParikhTheory {
       }
     }
 
-  override def actionHook(
-      context: this.monoidMapPlugin.Context,
+  def actionHook(
+      context: uuverifiers.parikh_theory.Context,
       action: String,
       actions: Seq[Plugin.Action]
   ): Unit = {
     dumpTexSnippet(
       Tex.section(s"Step ${nrInvocations}: Executing ${action}")
     )
-    this.monoidMapPlugin.dumpGraphs(context)
     val dumpedFiles =
-      this.monoidMapPlugin.dumpGraphs(context, s"trace-${nrInvocations}")
+      context.dumpGraphs(new File("."), s"trace-${nrInvocations}")
     dumpTexSnippet(
       dumpedFiles
         .map(dot => automataFigure(dot, caption = dot))
@@ -267,5 +266,9 @@ trait TracingComputation extends ParikhTheory {
       )
     }
     nrInvocations += 1
+  }
+
+  override def actionHooks() = {
+    super.actionHooks() appended actionHook
   }
 }

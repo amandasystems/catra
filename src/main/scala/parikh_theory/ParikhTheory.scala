@@ -11,6 +11,7 @@ import ap.terfor.TerForConvenience._
 import uuverifiers.common.AutomataTypes._
 import uuverifiers.common.{Automaton, Tracing}
 import VariousHelpers.simplifyUnlessTimeout
+import java.io.File
 
 // TODO write a LengthCounting mixin which interns one term for length and
 // yields that for each transition
@@ -89,16 +90,21 @@ trait ParikhTheory
   lazy val monoidMapPlugin = new MonoidMapPlugin(this)
 
   /**
-   * A hook to do something whenever an action is taken. Typically used for
-   * logging and debugging. The default is to do...nothing.
+   * A sequence of hooks to do something whenever an action is taken. Typically
+   * used for logging and debugging. The default is to do...nothing.
    */
-  def actionHook(
-      context: monoidMapPlugin.Context,
-      action: String,
-      actions: Seq[Plugin.Action]
-  ): Unit = {}
+  def actionHooks(): Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq()
 
-  def plugin: Option[Plugin] = Some(monoidMapPlugin)
+  final def runHooks(
+      context: Context,
+      event: String,
+      actions: Seq[Plugin.Action]
+  ): Unit =
+    actionHooks().foreach { hook =>
+      hook(context, event, actions)
+    }
+
+  final def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
   // FIXME separate out the mapping to the monoid values
   /**
@@ -196,7 +202,7 @@ trait ParikhTheory
       simplifiedEquations
     }
 
-  def dumpGraphs() = monoidMapPlugin.dumpGraphs()
+  def dumpGraphs(directory: File) = monoidMapPlugin.dumpGraphs(directory)
 
 }
 
@@ -204,12 +210,16 @@ trait ParikhTheory
 object ParikhTheory {
   def apply(_auts: IndexedSeq[Automaton])(
       _toMonoid: Transition => Seq[Option[LinearCombination]],
-      _monoidDimension: Int
+      _monoidDimension: Int,
+      _hooks: Seq[
+        (Context, String, Seq[ap.proof.theoryPlugins.Plugin.Action]) => Unit
+      ] = Seq()
   ) = {
     new ParikhTheory {
       override val auts = _auts
       override def toMonoid(t: Transition) = _toMonoid(t)
       override val monoidDimension = _monoidDimension
+      override val actionHooks = _hooks
 
       TheoryRegistry register this
     }

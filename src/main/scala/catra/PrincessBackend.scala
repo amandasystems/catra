@@ -3,6 +3,9 @@ import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import scala.util.{Success, Try}
 import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
+import uuverifiers.common.Automaton
+import uuverifiers.parikh_theory.ParikhTheory
+import uuverifiers.parikh_theory.Context
 
 class PrincessBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
@@ -11,23 +14,41 @@ class PrincessBackend(override val arguments: CommandLineOptions)
       p: SimpleAPI,
       instance: Instance
   ): Map[Counter, ConstantTerm] = {
+
     import instance._
-    val theories = automata.map(
-      automataGroup =>
-        if (arguments.trace) {
-          new RegisterCounting(
-            instance.counters,
-            automataGroup,
-            transitionToOffsets
-          ) with TracingComputation
-        } else {
-          new RegisterCounting(
-            counters,
-            automataGroup,
-            transitionToOffsets
-          )
-        }
-    )
+
+    def buildTheory(automataGroup: Seq[Automaton]) = {
+      val dumpHook: Option[
+        (
+            uuverifiers.parikh_theory.Context,
+            String,
+            Seq[ap.proof.theoryPlugins.Plugin.Action]
+        ) => Unit
+      ] = arguments.dumpGraphvizDir.map(
+        directory =>
+          (context: Context, _: Any, _: Any) => context.dumpGraphs(directory)
+      )
+
+      val theory = if (arguments.trace) {
+        new RegisterCounting(
+          instance.counters,
+          automataGroup,
+          transitionToOffsets,
+          dumpHook
+        ) with TracingComputation
+      } else {
+        new RegisterCounting(
+          counters,
+          automataGroup,
+          transitionToOffsets,
+          dumpHook
+        )
+      }
+
+      theory
+    }
+
+    val theories = automata.map(buildTheory _)
 
     // Needs to happen first because it may affect order?
     theories.foreach(p addTheory _)

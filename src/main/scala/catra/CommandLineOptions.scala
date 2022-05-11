@@ -18,7 +18,7 @@ case object ChoosePrincess extends BackendSelection {
   override def toString: String = "princess"
 }
 case object ChooseNuxmv extends BackendSelection {
-  override def toString: String = "princess"
+  override def toString: String = "nuxmv"
 }
 
 case object ChooseVerma extends BackendSelection {
@@ -33,6 +33,7 @@ sealed case class CommandLineOptions(
     inputFiles: Seq[String],
     timeout_ms: Option[Long],
     dumpSMTDir: Option[File],
+    dumpGraphvizDir: Option[File],
     trace: Boolean,
     runMode: RunMode,
     backend: BackendSelection
@@ -82,6 +83,7 @@ object CommandLineOptions {
   private var trace = false
   private var inputFiles: Seq[String] = Seq()
   private var dumpSMTDir: Option[File] = None
+  private var dumpGraphvizDir: Option[File] = None
   private var backend: BackendSelection = ChoosePrincess
 
   private val usage =
@@ -101,6 +103,8 @@ object CommandLineOptions {
       --backend <backend> -- choose which back-end to use.
                              Available options are: nuxmv, princess, verma.
                              Default: ${backend}.
+      --dump-graphviz <directory> -- dump automata encountered while solving
+                            into this directory. Default is disabled.
     Environment variables:
       CATRA_TRACE -- if set to "true", enable very very verbose logging 🐌
   """
@@ -167,6 +171,11 @@ object CommandLineOptions {
         dumpSMTDir = Some(new File(directory))
         parseFilesAndFlags(tail)
       }
+      case "--dump-graphviz" :: directory :: tail => {
+        dumpGraphvizDir = Some(new File(directory))
+        parseFilesAndFlags(tail)
+      }
+
       case "--backend" :: "princess" :: tail => {
         parseFilesAndFlags(tail)
       }
@@ -210,6 +219,7 @@ object CommandLineOptions {
       timeout_ms = timeout_ms,
       trace = trace,
       dumpSMTDir = dumpSMTDir,
+      dumpGraphvizDir = dumpGraphvizDir,
       runMode = runMode,
       backend = backend
     )

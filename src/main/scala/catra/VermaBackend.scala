@@ -8,9 +8,13 @@ import ap.terfor.TerForConvenience.{l => toLinearCombination}
 import ap.basetypes.IdealInt
 import ap.terfor.ConstantTerm
 import scala.annotation.tailrec
+import uuverifiers.common.GraphvizDumper
 
 class VermaBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
+
+  def handleDumpingGraphviz(a: GraphvizDumper, fileName: String) =
+    arguments.dumpGraphvizDir.foreach(dir => a.dumpDotFile(dir, fileName))
 
   override def prepareSolver(
       p: SimpleAPI,
@@ -43,7 +47,10 @@ class VermaBackend(override val arguments: CommandLineOptions)
       var productTransitionToOffsets =
         trace("transition to offsets at start")(instance.transitionToOffsets)
 
-      // productSoFar.dumpDotFile(s"verma-product-step-${productStep}.dot")
+      handleDumpingGraphviz(
+        productSoFar,
+        s"verma-product-step-${productStep}.dot"
+      )
 
       def incrementOf(counter: Counter, transition: Transition) =
         trace(s"${transition} increments ${counter} to") {
@@ -55,8 +62,11 @@ class VermaBackend(override val arguments: CommandLineOptions)
       def computeProductStep(term: Automaton): Unit = {
         val newProduct = productSoFar productWithSources term
         productStep += 1
-        // term.dumpDotFile(s"verma-product-term-${productStep}.dot")
-        // newProduct.dumpDotFile(s"verma-product-step-${productStep}.dot")
+        handleDumpingGraphviz(term, s"verma-product-term-${productStep}.dot")
+        handleDumpingGraphviz(
+          newProduct,
+          s"verma-product-step-${productStep}.dot"
+        )
 
         productSoFar = newProduct.product
         ap.util.Timeout.check
