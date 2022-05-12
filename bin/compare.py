@@ -117,6 +117,7 @@ for instance in common_instances:
         # The solvers don't agree: we can't trust the numbers.
         description = "/".join(sorted(statuses_without_timeouts))
         outcomes[f"contested: {description}"]["uncertain"] += 1
+        print(f"W: instance {instance} had different results")
         continue
 
     instance_type = (

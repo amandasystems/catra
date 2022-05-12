@@ -1,4 +1,3 @@
-
 package uuverifiers.parikh_theory
 
 import ap.proof.theoryPlugins.Plugin
@@ -56,7 +55,5 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
       "Split",
       split
     )
-
-    split
   }
 }

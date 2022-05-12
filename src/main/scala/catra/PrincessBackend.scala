@@ -1,14 +1,23 @@
 package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
-import scala.util.{Success, Try}
 import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
 import uuverifiers.common.Automaton
-import uuverifiers.parikh_theory.ParikhTheory
 import uuverifiers.parikh_theory.Context
+import ap.proof.theoryPlugins.Plugin
 
 class PrincessBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
+
+  private def traceDecision(
+      context: Context,
+      event: String,
+      actions: Seq[Plugin.Action]
+  ) = {
+    System.err.println(
+      s"${event}. Taking actions: ${actions.mkString(",")}"
+    )
+  }
 
   override def prepareSolver(
       p: SimpleAPI,
@@ -18,30 +27,34 @@ class PrincessBackend(override val arguments: CommandLineOptions)
     import instance._
 
     def buildTheory(automataGroup: Seq[Automaton]) = {
-      val dumpHook: Option[
-        (
-            uuverifiers.parikh_theory.Context,
-            String,
-            Seq[ap.proof.theoryPlugins.Plugin.Action]
-        ) => Unit
-      ] = arguments.dumpGraphvizDir.map(
+      val dumpHook: Seq[
+        (Context, String, Seq[Plugin.Action]) => Unit
+      ] = arguments.dumpGraphvizDir.toSeq.map(
         directory =>
           (context: Context, _: Any, _: Any) => context.dumpGraphs(directory)
       )
+
+      val decisionTraceHook = if (arguments.printDecisions) {
+        Seq(traceDecision(_, _, _))
+      } else {
+        Seq()
+      }
+
+      val hooks = dumpHook ++ decisionTraceHook
 
       val theory = if (arguments.trace) {
         new RegisterCounting(
           instance.counters,
           automataGroup,
           transitionToOffsets,
-          dumpHook
+          hooks
         ) with TracingComputation
       } else {
         new RegisterCounting(
           counters,
           automataGroup,
           transitionToOffsets,
-          dumpHook
+          hooks
         )
       }
 

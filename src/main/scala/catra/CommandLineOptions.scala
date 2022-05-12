@@ -35,6 +35,7 @@ sealed case class CommandLineOptions(
     dumpSMTDir: Option[File],
     dumpGraphvizDir: Option[File],
     trace: Boolean,
+    printDecisions: Boolean,
     runMode: RunMode,
     backend: BackendSelection
 ) {
@@ -81,6 +82,7 @@ object CommandLineOptions {
   /// Option fields
   private var timeout_ms: Option[Long] = None
   private var trace = false
+  private var printDecisions = false
   private var inputFiles: Seq[String] = Seq()
   private var dumpSMTDir: Option[File] = None
   private var dumpGraphvizDir: Option[File] = None
@@ -97,6 +99,7 @@ object CommandLineOptions {
     Available options (🐌 = likely to negatively impact performance):
       --trace -- generate a trace of the computation into trace.tex,
                   plus various .dot files. (default = ${trace}) 🐌
+      --print-decisions -- log partial decisions. Less verbose trace.
       --timeout milliseconds -- set the timeout in ms (default = ${timeout_ms})
       --dump-smt <directory> -- dump SMT commands into this directory
                                  (default = ${dumpSMTDir}) 🐌
@@ -159,6 +162,11 @@ object CommandLineOptions {
       case Nil                       =>
       case "--" :: tail              => parseFilesAndFlags(tail)
       case "--help" :: _ | "-h" :: _ => throw new Exception(usage)
+      case "--print-decisions" :: tail => {
+        printDecisions = true
+        parseFilesAndFlags(tail)
+      }
+
       case "--trace" :: tail => {
         trace = true
         parseFilesAndFlags(tail)
@@ -218,6 +226,7 @@ object CommandLineOptions {
       inputFiles = inputFiles,
       timeout_ms = timeout_ms,
       trace = trace,
+      printDecisions = printDecisions,
       dumpSMTDir = dumpSMTDir,
       dumpGraphvizDir = dumpGraphvizDir,
       runMode = runMode,

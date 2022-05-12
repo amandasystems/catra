@@ -95,14 +95,24 @@ trait ParikhTheory
    */
   def actionHooks(): Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq()
 
+  /**
+    * Run a set of event hooks to report actions taken, and return the actions.
+    *
+    * @param context
+    * @param event
+    * @param actions
+    * @return The same actions
+    */
   final def runHooks(
       context: Context,
       event: String,
       actions: Seq[Plugin.Action]
-  ): Unit =
+  ): Seq[Plugin.Action] = {
     actionHooks().foreach { hook =>
       hook(context, event, actions)
     }
+    actions
+  }
 
   final def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
@@ -212,14 +222,14 @@ object ParikhTheory {
       _toMonoid: Transition => Seq[Option[LinearCombination]],
       _monoidDimension: Int,
       _hooks: Seq[
-        (Context, String, Seq[ap.proof.theoryPlugins.Plugin.Action]) => Unit
+        (Context, String, Seq[Plugin.Action]) => Unit
       ] = Seq()
-  ) = {
+  ): ParikhTheory = {
     new ParikhTheory {
-      override val auts = _auts
-      override def toMonoid(t: Transition) = _toMonoid(t)
-      override val monoidDimension = _monoidDimension
-      override val actionHooks = _hooks
+      override val auts: IndexedSeq[Automaton] = _auts
+      override def toMonoid(t: Transition): Seq[Option[LinearCombination]] = _toMonoid(t)
+      override val monoidDimension: Int = _monoidDimension
+      override def actionHooks(): Seq[(Context, String, Seq[Plugin.Action]) => Unit] = _hooks
 
       TheoryRegistry register this
     }

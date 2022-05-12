@@ -3,14 +3,13 @@ import ap.theories.TheoryRegistry
 import uuverifiers.common.Automaton
 import uuverifiers.common.AutomataTypes.Transition
 import ap.terfor.TerForConvenience.{l => toLinearCombination}
+import ap.proof.theoryPlugins.Plugin
 
 class RegisterCounting[C](
     counters: Seq[C],
     automata: Seq[Automaton],
     counterIncrements: Map[Transition, Map[C, Int]],
-    actionHook: Option[
-      (Context, String, Seq[ap.proof.theoryPlugins.Plugin.Action]) => Unit
-    ] = None
+    actionHooks: Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq()
 ) extends ParikhTheory {
   override val auts = automata.toIndexedSeq
   override val monoidDimension = counters.length
@@ -22,10 +21,7 @@ class RegisterCounting[C](
       .toSeq
   }
 
-  override def actionHooks() = actionHook match {
-    case Some(hook) => super.actionHooks() appended hook
-    case None => super.actionHooks()
-  }
+  override def actionHooks() = super.actionHooks() ++ actionHooks
 
   TheoryRegistry register this
 

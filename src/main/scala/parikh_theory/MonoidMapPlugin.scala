@@ -26,7 +26,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   import transitionExtractor.{
     termMeansDefinitelyAbsent,
     termMeansDefinitelyPresent,
-    transitionTerm,
     autId => autNr
   }
 
@@ -86,9 +85,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
         stats.report()
 
-        theoryInstance.runHooks(context, "Subsume", Seq())
-
-        removeAssociatedPredicates :+ removeThisPredicateInstance
+        theoryInstance.runHooks(
+          context,
+          "Subsume MonoidMap",
+          actions = removeAssociatedPredicates :+ removeThisPredicateInstance
+        )
       } else {
         Seq()
       }
@@ -146,30 +147,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-  private def handleMaterialiseOld(context: Context) =
-    trace("handleMaterialise") {
-      val knownConnectedAutomataNrs: Seq[Int] =
-        trace("knownConnectedAutomataNrs")(
-          context.activeAutomata
-            .diff(context.automataWithConnectedPredicate)
-            .toSeq
-        )
-
-      // TODO better heuristic for >2!
-      // TODO should we start materialise single automata?
-      knownConnectedAutomataNrs match {
-        case Seq()  => Seq()
-        case Seq(_) => Seq()
-        case Seq(left, right) =>
-          materialiseProduct(left, right, context)
-        case fst +: snd +: _ =>
-          materialiseProduct(fst, snd, context)
-        case _ =>
-          throw new IllegalArgumentException(
-            knownConnectedAutomataNrs mkString ","
-          )
-      }
-    }
 
   private def handleConnectedInstances(context: Context) =
     context.connectedInstances
@@ -239,19 +216,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       val subsumeActions =
         if (allTransitionsAssigned) {
-          // This cast is necessary to make the code compile because Scala cannot
-          // figure out that these two instances of associated types are the same at
-          // the current stage. In general, these problems are a sign that the
-          // architecture is not fully sound, and that we should perhaps not use
-          // callbacks (or associated types) this way. Please send help.
           theoryInstance.runHooks(
             context,
             "SubsumeConnected",
-            Seq()
+            actions = Seq(Plugin.RemoveFacts(connectedInstance))
           )
-
-          Seq(Plugin.RemoveFacts(connectedInstance))
-
         } else Seq()
 
       // constrain any terms associated with a transition from a
@@ -265,24 +234,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
         if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
         else {
-          val actions = Seq(
-            Plugin.AddAxiom(
-              myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
-              unreachableConstraints,
-              theoryInstance
-            )
-          )
+
           theoryInstance.runHooks(
             context,
             "Propagate-Connected",
-            actions
+            actions = Seq(
+              Plugin.AddAxiom(
+                myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
+                unreachableConstraints,
+                theoryInstance
+              )
+            )
           )
-          actions
         }
       }
-
       unreachableActions ++ subsumeActions
-
     }
 
   private def materialiseProduct(
@@ -291,16 +257,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ) = trace(s"materialise ${leftId}x${rightId}") {
     stats.increment("materialiseProduct")
-
-    theoryInstance.runHooks(
-      context,
-      "MaterialiseProduct",
-      Seq()
-    )
-
     val left = context.filteredAutomaton(leftId)
     val right = context.filteredAutomaton(rightId)
-
     trace(
       s"materialising product of ${left} and ${right}"
     )("")
@@ -349,7 +307,14 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-    removeUnusedPredicates ++ productClauses
+    val actions = removeUnusedPredicates ++ productClauses
+
+    theoryInstance.runHooks(
+      context,
+      "MaterialiseProduct",
+      actions
+    )
+    actions
   }
 
   private def formulaForNewAutomaton(

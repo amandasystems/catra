@@ -39,7 +39,21 @@ sealed case class Context(
     autId => autNr
   }
 
-  private val materialisedAutomata = theoryInstance.monoidMapPlugin.materialisedAutomata
+  /**
+   * Summarise what is going on.
+   *
+   * @return
+   */
+  def summarise(): String = {
+    val automata = activeAutomata.mkString(", ")
+    val predicates =
+      (transitionMasks ++ unusedInstances ++ connectedInstances).mkString(", ")
+
+    s"Context: active automata: ${automata}, predicates: ${predicates}"
+  }
+
+  private val materialisedAutomata =
+    theoryInstance.monoidMapPlugin.materialisedAutomata
 
   import theoryInstance.{
     transitionMaskPredicate => TransitionMask,

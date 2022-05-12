@@ -268,7 +268,6 @@ trait TracingComputation extends ParikhTheory {
     nrInvocations += 1
   }
 
-  override def actionHooks() = {
-    super.actionHooks() appended actionHook
-  }
+  override def actionHooks() = super.actionHooks() appended actionHook
+
 }

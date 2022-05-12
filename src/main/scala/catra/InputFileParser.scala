@@ -120,6 +120,7 @@ sealed case class Transition(
 sealed case class InitialState(name: String) extends AutomatonFragment
 sealed case class AcceptingStates(names: Seq[String]) extends AutomatonFragment
 
+// FIXME: make this a class
 object WhyCantIDefineGlobalTypeAliasesGoddammit {
   type TransitionToCounterOffsets =
     Map[(State, SymbolicLabel, State), Map[Counter, Int]]
