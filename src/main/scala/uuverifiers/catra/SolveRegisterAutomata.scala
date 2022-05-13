@@ -11,9 +11,9 @@ sealed trait Result {
 sealed trait SatisfactionResult extends Result {
   val counterValues: Map[Counter, BigInteger] = Map.empty
 
-  override def printRepresentation() = {
+  override def printRepresentation(): Unit = {
     counterValues.foreach {
-      case (c, value) => println(s"${c.name} = ${value}")
+      case (c, value) => println(s"${c.name} = $value")
     }
   }
 }
@@ -24,7 +24,7 @@ sealed trait ImageResult extends Result {
 case class Sat(assignments: Map[Counter, BigInteger])
     extends SatisfactionResult {
   override val name = "sat"
-  override val counterValues = assignments
+  override val counterValues: Map[Counter, BigInteger] = assignments
 }
 case object Unsat extends SatisfactionResult with ImageResult {
   override val name = "unsat"
@@ -56,7 +56,7 @@ object SolveRegisterAutomata extends App with Tracing {
   }
 
   def fatalError(reason: Throwable) = {
-    Console.err.println(reason.getMessage())
+    Console.err.println(reason.getMessage)
     sys.exit(1)
   }
 
@@ -67,14 +67,13 @@ object SolveRegisterAutomata extends App with Tracing {
       parsetime: Double
   ): Unit = {
     result match {
-      case Success(result) => {
+      case Success(result) =>
         println(
-          s"==== ${instanceFile}: ${result.name} run: ${runtime}s parse: ${parsetime}s ===="
+          s"==== $instanceFile: ${result.name} run: ${runtime}s parse: ${parsetime}s ===="
         )
         result.printRepresentation()
-      }
       case Failure(reason) =>
-        println(s"==== ${instanceFile} error: ${reason.getMessage()} ===")
+        println(s"==== $instanceFile error: ${reason.getMessage} ===")
         reason.printStackTrace()
     }
   }
@@ -90,10 +89,10 @@ object SolveRegisterAutomata extends App with Tracing {
             case (automaton, autIdx) =>
               automaton.dumpDotFile(
                 dir,
-                s"input-automaton-${groupIdx}-${autIdx}.dot"
+                s"input-automaton-$groupIdx-$autIdx.dot"
               )
-              // TODO also annotate the automata with their counters, use real
-              // state names!
+            // TODO also annotate the automata with their counters, use real
+            // state names!
           }
       }
     }
@@ -103,20 +102,26 @@ object SolveRegisterAutomata extends App with Tracing {
     }
   }
 
-  def runInstances(arguments: CommandLineOptions) = {
+  def runInstances(arguments: CommandLineOptions): Unit = {
     for (fileName <- arguments.inputFiles) {
-      val fileContents = Source.fromFile(fileName).mkString("")
+      val inputFileHandle = Source.fromFile(fileName)
+      val fileContents = inputFileHandle.mkString("")
+      inputFileHandle.close()
       val (parsed, parseTime) = measureTime(
         InputFileParser.parse(fileContents)
       )
       val (result, runtime) = measureTime {
         parsed match {
-          case Parsed.Success(instance, _) => runInstance(instance, arguments)
-          case Parsed.Failure(expected, _, extra) => {
-            Console.err.println(s"E: parse error ${expected}")
+          case Parsed.Success(instance, _) =>
+            instance.validate() match {
+              case Valid => runInstance(instance, arguments)
+              case Invalid(motivation) =>
+                Failure(new Exception(s"Invalid input: $motivation"))
+            }
+          case Parsed.Failure(expected, _, extra) =>
+            Console.err.println(s"E: parse error $expected")
             Console.err.println(s"E: ${extra.trace().longMsg}")
             Failure(new Exception(s"parse error: ${extra.trace().longMsg}"))
-          }
         }
       }
       reportRun(fileName, result, runtime, parseTime)

@@ -1,11 +1,12 @@
 package uuverifiers.parikh_theory
 import org.scalatest.funsuite.AnyFunSuite
 import uuverifiers.catra.{
-  Sum,
-  Inequality,
   Counter,
   CounterWithCoefficient,
-  InputFileParser
+  Inequality,
+  InputFileParser,
+  Invalid,
+  Sum
 }
 
 class TestInputFileParser extends AnyFunSuite {
@@ -22,7 +23,7 @@ class TestInputFileParser extends AnyFunSuite {
 
   test("example input file can be parsed") {
     import scala.io.Source
-    tryParse(Source.fromFile("input").mkString(""))
+    tryParse(Source.fromFile("input.par").mkString(""))
   }
 
   test("parse a constraint with and") {
@@ -160,6 +161,32 @@ class TestInputFileParser extends AnyFunSuite {
 
   test("constraint with only false") {
     tryParse("constraint false;")
+  }
+
+  test("two automata with overlapping counters errors") {
+    val inputFile =
+      """
+      | synchronised {
+        | automaton A {
+        | init s0;
+        | s0 -> s1 [15];
+        | s0 -> s1 [0, 10] { x += 1 , y -= 1};
+        | accepting s1;
+        |};
+        | automaton B {
+        | init s0;
+        | s0 -> s1 [15] {x += 1};
+        | accepting s1;
+        | };
+        | };
+          """.stripMargin
+    import fastparse.Parsed.Success
+    val Success(instance, _) = InputFileParser.parse(inputFile)
+
+    instance.validate() match {
+      case Invalid(_) => true
+      case _          => false
+    }
   }
 
 }

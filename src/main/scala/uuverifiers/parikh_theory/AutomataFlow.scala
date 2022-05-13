@@ -1,6 +1,6 @@
 package uuverifiers.parikh_theory
 import ap.terfor.{Formula, TermOrder, Term}
-import ap.terfor.conjunctions.{Conjunction}
+import ap.terfor.conjunctions.Conjunction
 import ap.terfor.arithconj.ArithConj
 import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt

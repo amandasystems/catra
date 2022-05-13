@@ -137,7 +137,7 @@ class VermaBackend(override val arguments: CommandLineOptions)
           case term +: rest => {
             computeProductStep(term)
             val stillSatisfiable = trace("product SAT check")(
-              p.checkSat(block = true)
+              p.checkSat(block = false)
             ) != ProverStatus.Unsat
             if (stillSatisfiable) {
               incrementallyComputeProduct(rest)

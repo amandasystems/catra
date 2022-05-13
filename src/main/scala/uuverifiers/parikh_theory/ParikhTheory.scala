@@ -4,7 +4,7 @@ import ap.proof.theoryPlugins.Plugin
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.{TermOrder, Formula, Term}
-import ap.terfor.substitutions.{VariableShiftSubst}
+import ap.terfor.substitutions.VariableShiftSubst
 import ap.theories._
 import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._

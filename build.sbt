@@ -32,7 +32,7 @@ ThisBuild / libraryDependencies += fastparse
 
 lazy val root = (project in file("."))
   .settings(
-    name := "catra",
+    name := "uuverifiers/catra",
     libraryDependencies += scalaTest % Test,
     libraryDependencies += scalaCheck % Test
   )

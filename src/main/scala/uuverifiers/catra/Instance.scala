@@ -9,9 +9,11 @@ sealed case class Instance(
     // These are global because we ensure all automata have mutually independent state IDs!
     transitionToOffsets: TransitionToCounterOffsets,
     constraints: Seq[Formula]
-) {
+) extends InputValidating {
 
   private def canAcceptRegisterAssignment(a: Automaton): Boolean = ???
+
+  def validate(): ValidationResult = super.validate(this)
 
   def verifyCounterAssignment(
       counterValues: Map[Counter, BigInteger]
