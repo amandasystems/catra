@@ -1,12 +1,9 @@
 package uuverifiers.common
-import EdgeWrapper._
 
-import collection.mutable.{ArrayBuffer, HashMap}
+import collection.mutable.ArrayBuffer
 import scala.collection.mutable
 
 class AutomatonBuilder extends Tracing {
-  import AutomataTypes._
-
   private var _autStates = Set[State]()
   private var _outgoingTransitions = Map[State, Set[Transition]]()
   private var _initial: Option[State] = None
@@ -20,13 +17,13 @@ class AutomatonBuilder extends Tracing {
    * @param s The state to set reachable
    */
   private def setFwdReachable(s: State) =
-    trace(s"setting forward reachable ${s}") {
+    trace(s"setting forward reachable $s") {
       var todo = List(s)
 
       def markReachable(s: State): Unit = {
         forwardReachable += s
       }
-      def enqueue(s: State) = trace(s"adding ${s} to queue") {
+      def enqueue(s: State): Unit = trace(s"adding $s to queue") {
         todo = s :: todo
       }
 
@@ -54,11 +51,11 @@ class AutomatonBuilder extends Tracing {
    * @param startingState
    */
   private def startBwdReachability(startingState: State) =
-    trace(s"start backwardsReachable ${startingState}") {
+    trace(s"start backwardsReachable $startingState") {
       val reachedFrom = new mutable.HashMap[State, ArrayBuffer[State]]
       var todo = List[State](startingState)
 
-      def enqueue(s: State): Unit = trace(s"adding ${s} to queue") {
+      def enqueue(s: State): Unit = trace(s"adding $s to queue") {
         todo = s :: todo
       }
 
@@ -68,20 +65,19 @@ class AutomatonBuilder extends Tracing {
         next
       }
 
-      def markReachable(s: State): Unit = trace(s"${s} is backwards reachable") {
-        backwardReachable += s
-      }
+      def markReachable(s: State): Unit =
+        trace(s"$s is backwards reachable") {
+          backwardReachable += s
+        }
 
-      _outgoingTransitions
-        .values
-        .flatten
+      _outgoingTransitions.values.flatten
         .foreach(
           t => reachedFrom.getOrElseUpdate(t.to(), new ArrayBuffer) += t.from()
         )
 
       markReachable(startingState)
 
-      while (!todo.isEmpty) {
+      while (todo.nonEmpty) {
         val next = dequeue()
 
         for (sources <- reachedFrom get next)
@@ -101,7 +97,8 @@ class AutomatonBuilder extends Tracing {
 
   def containsTransition(t: Transition): Boolean = {
     _outgoingTransitions
-      .get(t.from()).exists(outgoing => outgoing contains t)
+      .get(t.from())
+      .exists(outgoing => outgoing contains t)
   }
 
   def addState(s: State): AutomatonBuilder = {
@@ -114,18 +111,11 @@ class AutomatonBuilder extends Tracing {
     this
   }
 
-  private def assertHasState(state: State) =
+  private def assertHasState(state: State): Unit =
     assert(
       _autStates contains state,
-      s"${state} does not exist."
+      s"$state does not exist."
     )
-
-  def getNewState(): State = {
-    val newState =
-      if (_autStates.nonEmpty) _autStates.max.successor() else IntState(0)
-    addStates(Seq(newState))
-    newState
-  }
 
   def setInitial(newInitialState: State): AutomatonBuilder = {
     assertHasState(newInitialState)
@@ -150,32 +140,28 @@ class AutomatonBuilder extends Tracing {
     this
   }
 
-  def addTransition(from: State, label: Label, to: State): AutomatonBuilder =
-    trace(s"add transition ${from} ${label} ${to}") {
-      assert((_autStates contains from) && (_autStates contains to))
-      val newTransition = (from, label, to)
+  def addTransition(t: Transition): AutomatonBuilder =
+    trace(s"add transition $t") {
+      assert((_autStates contains t.from()) && (_autStates contains t.to()))
 
-      _outgoingTransitions = _outgoingTransitions.updatedWith(from) {
-        case None                   => Some(Set(newTransition))
-        case Some(previousOutgoing) => Some(previousOutgoing + newTransition)
+      _outgoingTransitions = _outgoingTransitions.updatedWith(t.from()) {
+        case None                   => Some(Set(t))
+        case Some(previousOutgoing) => Some(previousOutgoing + t)
       }
 
-      if (forwardReachable contains from) {
-        setFwdReachable(to)
+      if (forwardReachable contains t.from()) {
+        setFwdReachable(t.to())
       }
 
-      if (backwardReachable contains to) {
-        startBwdReachability(from)
+      if (backwardReachable contains t.to()) {
+        startBwdReachability(t.from())
       }
 
       this
     }
 
-  def addTransition(t: Transition): AutomatonBuilder =
-    this.addTransition(t.from(), t.label(), t.to())
-
   def getAutomaton(): Automaton = {
-    assert(_initial != None, "Must have initial state!")
+    assert(_initial.isDefined, "Must have initial state!")
 
     if (!_accepting.exists(forwardReachable contains _))
       return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
@@ -190,21 +176,25 @@ class AutomatonBuilder extends Tracing {
         .mapValues(ts => ts.filter(backwardReachable contains _.to()))
         .toMap
 
-    object Aut extends Automaton {
-      override val initialState = _initial.get
-      override def isAccept(s: State) = _accepting contains s
-      override def transitionsFrom(from: State) =
-        reachableTransitions.getOrElse(from, Seq()).toSeq
-      override val states = _autStates
-    }
-
-    Aut
+    new Aut(_initial.get, _accepting, reachableTransitions, _autStates)
   }
+}
+
+sealed private class Aut(
+    initial: State,
+    accepting: Set[State],
+    _transitions: Map[State, Set[Transition]],
+    override val states: Set[State]
+) extends Automaton {
+  override def transitionsFrom(from: State): Seq[Transition] =
+    _transitions.getOrElse(from, Seq()).toSeq
+  override val initialState: State = initial
+  override def isAccept(s: State): Boolean = accepting contains s
 }
 
 object AutomatonBuilder {
   def apply() = new AutomatonBuilder()
-  def apply(aut: Automaton) = {
+  def apply(aut: Automaton): AutomatonBuilder = {
     val builder = new AutomatonBuilder()
     builder.addStates(aut.states)
     builder.setInitial(aut.initialState)

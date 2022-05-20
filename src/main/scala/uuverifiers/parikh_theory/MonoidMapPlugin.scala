@@ -5,7 +5,6 @@ import ap.proof.goal.Goal
 import ap.terfor.TerForConvenience._
 import scala.collection.mutable.ArrayBuffer
 import ap.terfor.conjunctions.Conjunction
-import uuverifiers.common.AutomataTypes._
 import uuverifiers.common._
 import VariousHelpers.simplifyUnlessTimeout
 import java.io.File
@@ -147,7 +146,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     }
 
-
   private def handleConnectedInstances(context: Context) =
     context.connectedInstances
       .flatMap(handleConnectedInstance(_, context))
@@ -210,7 +208,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val allTransitionsAssigned =
         trace("all transitions assigned?") {
           aut.transitions forall { t =>
-            deadTransitions(t) || definitelyReached(t._1)
+            deadTransitions(t) || definitelyReached(t.from())
           }
         }
 
@@ -263,8 +261,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       s"materialising product of ${left} and ${right}"
     )("")
 
-    val annotatedProduct = left.productWithSources(right)
-    val product = annotatedProduct.product
+    val product = left.productWith(right)
 
     // TODO  keep track of automata we have already seen (mapping from
     // transitions set to zero, incoming IDs -> id)
@@ -301,7 +298,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         newAutomataNr,
         leftId,
         rightId,
-        annotatedProduct,
+        product,
         context
       )
 
@@ -321,7 +318,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       productNr: Int,
       leftNr: Int,
       rightNr: Int,
-      annotatedProduct: AnnotatedProduct,
+      product: Automaton,
       context: Context
   ) = {
     import ap.basetypes.IdealInt.ZERO
@@ -350,26 +347,32 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       Seq(leftNr, rightNr).flatMap(
         autNr => {
           val transitionToTerm = context.autTransitionTerm(autNr)(_)
-          val originTerm =
-            if (autNr == leftNr) TermOrigin.Left else TermOrigin.Right
+          // .get is safe here because we know we are dealing with product transitions!
+          def originTerm(pt: ProductTransition): Transition =
+            if (autNr == leftNr)
+              pt.originTransitions().get._1
+            else pt.originTransitions().get._2
 
-          def productTermsSum(t: Transition) = trace(s"${autNr}::${t}Σ") {
-            annotatedProduct.resultsOf(originTerm)(t) match {
-              case Some(productTransitions) =>
-                lcSum(
-                  trace(s"productTransitions of ${t}")(productTransitions)
-                    .map(productTransitionToLc)
+          def productTermsSum(termTransition: Transition) =
+            trace(s"$autNr::${termTransition}Σ") {
+              val resultsOfTransition =
+                product.transitions.filter(
+                  // FIXME: get rid of this asInstanceOf!
+                  pt => originTerm(pt.asInstanceOf[ProductTransition]) == termTransition
                 )
-              case None => l(ZERO)
+              lcSum(
+                trace(s"productTransitions of $termTransition")(
+                  resultsOfTransition
+                ).map(productTransitionToLc)
+              )
             }
-          }
 
           materialisedAutomata(autNr).transitions.map(
             termTransition =>
-              trace(s"a#${autNr} bridge: ${termTransition}") {
+              trace(s"a#$autNr bridge: $termTransition") {
                 val termTransitionTerm = transitionToTerm(termTransition)
                 val sumOfResultingEdges = productTermsSum(termTransition)
-                trace(s"${termTransitionTerm} = ${sumOfResultingEdges}")(
+                trace(s"$termTransitionTerm = $sumOfResultingEdges")(
                   termTransitionTerm === sumOfResultingEdges
                 )
               }
@@ -409,7 +412,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         // TODO extract transition labels and annotate the graph with them
         a.dumpDotFile(
           directory,
-          s"monoidMapTheory-${this.theoryInstance.hashCode()}-aut-${i}.dot"
+          s"monoidMapTheory-${this.theoryInstance.hashCode()}-aut-$i.dot"
         )
     }
   }

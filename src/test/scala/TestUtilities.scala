@@ -1,17 +1,22 @@
-package uuverifiers.parikh_theory
-
-import ap.{SimpleAPI, PresburgerTools}
-import ap.terfor.{Term, Formula, TermOrder}
+import ap.SimpleAPI.ProverStatus
+import ap.basetypes.IdealInt.ONE
+import ap.terfor.TerForConvenience.{conj, l, sum}
 import ap.terfor.conjunctions.Conjunction
-import SimpleAPI.ProverStatus
+import ap.terfor.{ConstantTerm, Formula, Term, TermOrder}
+import ap.{PresburgerTools, SimpleAPI}
 import org.scalatest.funsuite.AnyFunSuite
+import uuverifiers.common.{
+  Automaton,
+  Counting,
+  State,
+  SymbolicTransition,
+  Tracing,
+  Transition
+}
+import uuverifiers.parikh_theory.{ParikhTheory, RegisterCounting}
 import ap.terfor.TerForConvenience._
-import uuverifiers.common.AutomataTypes._
-import uuverifiers.common.{Tracing, Automaton}
-import ap.terfor.ConstantTerm
-import ap.basetypes.IdealInt
-import IdealInt.ONE
-import uuverifiers.common.EdgeWrapper._
+import uuverifiers.catra.Counter
+import uuverifiers.parikh_theory.VariousHelpers.transitionsIncrementRegisters
 
 object TestUtilities extends AnyFunSuite with Tracing {
 
@@ -20,7 +25,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
       letterVars: Map[Char, ConstantTerm],
       order: TermOrder
   )(m: Map[Transition, Term]): Formula = {
-    implicit val o = order
+    implicit val o: TermOrder = order
     conj(
       alphabet.map { ch =>
         trace(s"letter balance equation: ${ch}")(
@@ -40,8 +45,8 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def alphabetCounter(alphabet: Iterable[Char])(t: Transition) = {
-    import ap.terfor.linearcombination.LinearCombination
     import ap.basetypes.IdealInt
+    import ap.terfor.linearcombination.LinearCombination
     val ONE = LinearCombination(IdealInt.ONE)
     val ZERO = LinearCombination(IdealInt.ZERO)
 
@@ -126,35 +131,56 @@ object TestUtilities extends AnyFunSuite with Tracing {
   }
 
   def productsAreEqual(left: Automaton, right: Automaton) = {
-    val leftLabels = left.transitions.map(_._2).toSet
-    val rightLabels = right.transitions.map(_._2).toSet
-    val alphabet = trace("alphabet")(
-      (leftLabels.flatMap(_.iterate()) ++ rightLabels
-        .flatMap(_.iterate())).toIndexedSeq.sorted
-    )
+    val auts = Seq(left, right)
+      .zip(Seq("L", "R"))
+      .map {
+        case (a, lOrR) =>
+          def letterToCounter(c: Char) = Counter(s"$lOrR$c")
+          new Automaton {
 
-    val pt = ParikhTheory(IndexedSeq[Automaton](left, right))(
-      TestUtilities.alphabetCounter(alphabet) _,
-      alphabet.length
-    )
+            override def states: Iterable[State] = a.states
+            override def transitionsFrom(from: State): Seq[Counting] = {
+              a.transitionsFrom(from)
+                .map {
+                  case t: SymbolicTransition =>
+                    t.withIncrements(
+                      t.label
+                        .iterate()
+                        .map(letterToCounter)
+                        .map(c => c -> 1)
+                        .toMap
+                    )
+                }
+            }
+            override val initialState: State = a.initialState
+            override def isAccept(s: State): Boolean = a.isAccept(s)
+            override def counters(): Set[Counter] =
+              a.alphabet().map(letterToCounter).toSet
+          }
+      }
+
+    val pt = new RegisterCounting(auts)
 
     SimpleAPI.withProver { p =>
-      val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
+      val counterToTerm =
+        auts
+          .flatMap(_.counters())
+          .toSet
+          .map((c: Counter) => c -> c.toConstant(p))
+          .toMap
 
       p addTheory pt
 
-      implicit val order = p.order
+      implicit val order: TermOrder = p.order
       import p._
 
-      val oldImage = (left &&& right).parikhImage(
-        bridgingFormula = bridgingFormulaOccurrenceCounter(
-          alphabet,
-          alphabet.zip(constants).toMap,
-          order
-        )(_)
+      val product = auts(0) productWith auts(1)
+      val oldImage = product.parikhImage(
+        bridgingFormula =
+          transitionsIncrementRegisters(product, counterToTerm)(_)
       )
 
-      val newImage = pt allowsMonoidValues constants
+      val newImage = pt allowsCounterValues (counterToTerm)
 
       val reduced = PresburgerTools.elimQuantifiersWithPreds(
         Conjunction.conj(oldImage, p.order)
@@ -183,7 +209,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
   ) = {
     ensuresAlways(theory) {
       case (vars, order) =>
-        implicit val order2 = order
+        implicit val order2: TermOrder = order
         conj(
           vars
             .zip(expectedCounts)

@@ -1,4 +1,4 @@
-package uuverifiers.common
+import uuverifiers.common._
 import SymbolicLabelConversions._
 import scala.language.implicitConversions
 
@@ -18,12 +18,14 @@ object Regex {
 
   final case object AnyChar extends Regex {
     override def toAutomaton() = {
-      val states = (0 to 1).map(IntState(_)).toIndexedSeq
+      val states = (0 to 1).map(IntState(_))
       AutomatonBuilder()
         .addStates(states)
         .setInitial(states(0))
         .setAccepting(states(1))
-        .addTransition(states(0), SymbolicLabel.AnyChar, states(1))
+        .addTransition(
+          new SymbolicTransition(states(0), SymbolicLabel.AnyChar, states(1))
+        )
         .getAutomaton()
     }
   }
@@ -31,7 +33,7 @@ object Regex {
   final case class Word(w: String) extends Regex {
     override def toAutomaton() = {
       val builder = AutomatonBuilder()
-      val states = (0 to w.length).map(IntState(_)).toIndexedSeq
+      val states = (0 to w.length).map(IntState(_))
       builder
         .addStates(states)
         .setInitial(states(0))
@@ -40,7 +42,13 @@ object Regex {
       if (w.nonEmpty) {
         w.zipWithIndex.foreach {
           case (ch, thisState) =>
-            builder.addTransition(states(thisState), ch, states(thisState + 1))
+            builder.addTransition(
+              new SymbolicTransition(
+                states(thisState),
+                ch,
+                states(thisState + 1)
+              )
+            )
         }
       }
       builder.getAutomaton()
@@ -63,7 +71,11 @@ object Regex {
         // out-edges of accepting states inherit all out-edges of the initial state
         aut
           .transitionsFrom(aut.initialState)
-          .foreach(t => builder.addTransition(t.copy(_1 = s)))
+          .foreach(
+            t =>
+              builder
+                .addTransition(new SymbolicTransition(s, t.label(), t.to()))
+          )
       }
 
       builder.getAutomaton()

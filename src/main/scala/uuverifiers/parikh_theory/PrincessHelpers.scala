@@ -1,17 +1,21 @@
 package uuverifiers.parikh_theory
 
+import ap.basetypes.IdealInt
 import ap.parser._
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.{Plugin, TheoryProcedure}
 import ap.terfor.preds.Atom
 import ap.terfor.conjunctions.Conjunction
-import ap.terfor.{TermOrder, Formula}
+import ap.terfor.{ConstantTerm, Formula, TermOrder}
 import ap.theories._
 import ap.terfor.conjunctions.ReduceWithConjunction
-import uuverifiers.common.Tracing
+import uuverifiers.common.{Automaton, Tracing, Transition}
+
 import scala.util.Try
 import scala.util.Success
-import ap.SimpleAPI
+import ap.{SimpleAPI, terfor}
+import uuverifiers.catra.Counter
+
 import scala.util.Failure
 
 trait NoFunctions {
@@ -98,5 +102,39 @@ object VariousHelpers extends Tracing {
     } catch {
       case ap.util.Timeout(_) => trace("Timeout while simplifying")(formula)
     }
-}
 
+  /**
+   *  This enforces the bridging clause: c  = SUM t : sigma(t) * increment(c, t)
+   *  NOTE:  We need to iterate over only the counters occurring in the
+   *  partial product, or any counters appearing in later products will be
+   *  forced to 0.
+   * @return A conjunction that ensures this automaton is consistent with its registers.
+   */
+  def transitionsIncrementRegisters(
+      aut: Automaton,
+      counterToSolverConstant: Map[Counter, ConstantTerm]
+  )(
+      sigma: Map[Transition, terfor.Term]
+  )(implicit order: TermOrder): Conjunction =
+    trace(s"binding clauses: counters are coherent:") {
+      import ap.terfor.TerForConvenience._
+
+      conj(aut.counters().map { counter =>
+        val c = counterToSolverConstant(counter)
+
+        val incrementAndNrTaken =
+          aut.transitions.map { t =>
+            val increment = t
+              .increments(counter)
+              .map(IdealInt.int2idealInt)
+              .getOrElse(IdealInt.ZERO)
+
+            val transitionVar = l(sigma(t))
+
+            (increment, transitionVar)
+          }
+
+        c === sum(incrementAndNrTaken)
+      })
+    }
+}

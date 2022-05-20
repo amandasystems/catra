@@ -3,14 +3,14 @@ package uuverifiers.parikh_theory
 import ap.proof.theoryPlugins.Plugin
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
-import ap.terfor.{TermOrder, Formula, Term}
+import ap.terfor.{Formula, Term, TermOrder}
 import ap.terfor.substitutions.VariableShiftSubst
 import ap.theories._
 import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._
-import uuverifiers.common.AutomataTypes._
-import uuverifiers.common.{Automaton, Tracing}
+import uuverifiers.common.{Automaton, Tracing, Transition}
 import VariousHelpers.simplifyUnlessTimeout
+
 import java.io.File
 
 // TODO write a LengthCounting mixin which interns one term for length and
@@ -96,13 +96,13 @@ trait ParikhTheory
   def actionHooks(): Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq()
 
   /**
-    * Run a set of event hooks to report actions taken, and return the actions.
-    *
-    * @param context
-    * @param event
-    * @param actions
-    * @return The same actions
-    */
+   * Run a set of event hooks to report actions taken, and return the actions.
+   *
+   * @param context
+   * @param event
+   * @param actions
+   * @return The same actions
+   */
   final def runHooks(
       context: Context,
       event: String,
@@ -156,7 +156,7 @@ trait ParikhTheory
   def allowsMonoidValues(
       monoidValues: Seq[Term]
   )(implicit order: TermOrder): Conjunction =
-    trace(s"allowsMonoidValues(${monoidValues})") {
+    trace(s"allowsMonoidValues($monoidValues)") {
       assert(
         monoidValues.length == this.monoidDimension,
         s"got ${monoidValues.length} monoid values, monoid dimension is ${monoidDimension}"
@@ -227,9 +227,11 @@ object ParikhTheory {
   ): ParikhTheory = {
     new ParikhTheory {
       override val auts: IndexedSeq[Automaton] = _auts
-      override def toMonoid(t: Transition): Seq[Option[LinearCombination]] = _toMonoid(t)
+      override def toMonoid(t: Transition): Seq[Option[LinearCombination]] =
+        _toMonoid(t)
       override val monoidDimension: Int = _monoidDimension
-      override def actionHooks(): Seq[(Context, String, Seq[Plugin.Action]) => Unit] = _hooks
+      override def actionHooks()
+          : Seq[(Context, String, Seq[Plugin.Action]) => Unit] = _hooks
 
       TheoryRegistry register this
     }

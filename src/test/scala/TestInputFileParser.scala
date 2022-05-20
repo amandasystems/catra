@@ -1,13 +1,5 @@
-package uuverifiers.parikh_theory
 import org.scalatest.funsuite.AnyFunSuite
-import uuverifiers.catra.{
-  Counter,
-  CounterWithCoefficient,
-  Inequality,
-  InputFileParser,
-  Invalid,
-  Sum
-}
+import uuverifiers.catra._
 
 class TestInputFileParser extends AnyFunSuite {
 
@@ -129,7 +121,7 @@ class TestInputFileParser extends AnyFunSuite {
     val Success(instance, _) =
       InputFileParser.parse("constraint a - b + c = 0;")
     val Sum(terms) =
-      instance.constraints(0).leftSide.asInstanceOf[Inequality].lhs
+      instance.constraints.head.leftSide.asInstanceOf[Inequality].lhs
     assert(
       terms.toSet == Set(
         Counter("a"),

@@ -15,7 +15,7 @@ import scala.math.min
 import scala.collection.mutable.ArrayDeque
 
 trait Graphable[Node, Label] {
-  def transitionsFrom(node: Node): Seq[(Node, Label, Node)]
+  def outgoingEdges(node: Node): Seq[(Node, Label, Node)]
   def allNodes(): Seq[Node]
   def edges(): Seq[(Node, Label, Node)]
   def subgraph(selectedNodes: Set[Node]): Graphable[Node, Label]
@@ -44,7 +44,7 @@ trait Graphable[Node, Label] {
     override def next() = {
       val thisNode = toVisit.dequeue()
 
-      for (edge <- graph.transitionsFrom(thisNode).filter(walkWhen)
+      for (edge <- graph.outgoingEdges(thisNode).filter(walkWhen)
            if nodeUnseen contains edge.to()) {
         nodeUnseen -= edge.to()
         toVisit enqueue edge.to()
@@ -88,7 +88,7 @@ trait Graphable[Node, Label] {
   ) =
     new BFSVisitor(this, startNode, walkWhen)
 
-  def neighbours(node: Node): Seq[Node] = transitionsFrom(node).map(_.to())
+  def neighbours(node: Node): Seq[Node] = outgoingEdges(node).map(_.to())
 
   // Apply is what you'd expect
   def apply(n: Node) = neighbours(n)
@@ -324,7 +324,7 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
   override def hasNode(node: N) = underlying contains node
 
   def allNodes() = underlying.keys.toSeq
-  def transitionsFrom(node: N) =
+  def outgoingEdges(node: N) =
     underlying
       .getOrElse(node, Set())
       .map { case (to, label) => (node, label, to) }
@@ -449,7 +449,7 @@ object CompositeGraph {
 
 // Generate a graph with an equivalence class of nodes merged into one, while
 // still preserving identity for transitions, except self-looping edges to/from
-// the equivalent nodes. This means that e.g. transitionsFrom(n) might return
+// the equivalent nodes. This means that e.g. outgoingEdges(n) might return
 // edges not actually starting in n!
 class CompositeGraph[N, L](
     private val underlying: Graphable[CompositeNode[N], Set[(N, L, N)]],
@@ -469,10 +469,10 @@ class CompositeGraph[N, L](
       selectedNodes: Set[CompositeNode[N]]
   ): Graphable[CompositeNode[N], Set[(N, L, N)]] =
     underlying.subgraph(selectedNodes)
-  def transitionsFrom(
+  def outgoingEdges(
       node: CompositeNode[N]
   ): Seq[(CompositeNode[N], Set[(N, L, N)], CompositeNode[N])] =
-    underlying.transitionsFrom(node)
+    underlying.outgoingEdges(node)
 
   def allNodes() = underlying.allNodes()
   def edges() = underlying.edges()

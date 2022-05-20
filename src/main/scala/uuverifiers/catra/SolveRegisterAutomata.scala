@@ -83,7 +83,7 @@ object SolveRegisterAutomata extends App with Tracing {
       arguments: CommandLineOptions
   ): Try[Result] = {
     arguments.dumpGraphvizDir.foreach { dir =>
-      instance.automata.zipWithIndex.foreach {
+      instance.automataProducts.zipWithIndex.foreach {
         case (group, groupIdx) =>
           group.zipWithIndex.foreach {
             case (automaton, autIdx) =>

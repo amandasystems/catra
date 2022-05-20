@@ -7,18 +7,16 @@ case object Valid extends ValidationResult
 sealed case class Invalid(motivation: String) extends ValidationResult
 
 trait InputValidating {
-
+  // TODO ensure register offsets only increment declared registers
+  // FIXME warn about empty groups!
   /**
    * Ensure that each automata has unique counter values.
    * @param i The instance to validate
    * @return
    */
   private def noOverlappingCounters(i: Instance): ValidationResult = {
-    val automataCounters: Seq[Set[Counter]] = i.automata.flatMap { group =>
-      group.map(
-        _.transitions.flatMap(t => i.transitionToOffsets(t).keys).toSet
-      )
-    }
+    val automataCounters: Seq[Set[Counter]] =
+      i.automataProducts.flatMap(product => product.map(_.counters()))
 
     val counterCounts: Map[Counter, Int] =
       automataCounters.foldLeft(Map[Counter, Int]()) {

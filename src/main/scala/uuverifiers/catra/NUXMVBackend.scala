@@ -2,15 +2,16 @@ package uuverifiers.catra
 
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
-import scala.util.{Success, Failure}
-import uuverifiers.common.{Tracing, SymbolicLabel}
+
+import scala.util.{Failure, Success}
+import uuverifiers.common.{Counting, State, SymbolicLabel, Tracing}
 
 import java.io.{
+  BufferedReader,
   File,
-  PrintWriter,
-  OutputStreamWriter,
   InputStreamReader,
-  BufferedReader
+  OutputStreamWriter,
+  PrintWriter
 }
 import scala.util.Try
 import java.util.concurrent.TimeUnit
@@ -45,30 +46,28 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
     File.createTempFile("parikh-", ".smv")
 
   val blockNum =
-    automata.size
-  val automataStates =
-    for (auts <- automata)
+    automataProducts.size
+  val automataStates: Seq[Seq[IndexedSeq[State]]] =
+    for (auts <- automataProducts)
       yield (for (aut <- auts) yield aut.states.toIndexedSeq)
-  val stateNums =
+  val stateNums: Seq[Seq[Int]] =
     for (auts <- automataStates) yield (auts map (_.size))
-  val automataCounters =
-    for (auts <- automataStates) yield {
-      for (aut <- auts) yield {
-        (for (((s1, _, s2), m) <- transitionToOffsets.iterator;
-              if aut contains s1;
-              (cnt, _) <- m.iterator)
-          yield cnt).toSet.toIndexedSeq.sortBy((x: Counter) => x.name)
-      }
+  val automataCounters: Seq[Seq[Seq[Counter]]] =
+    for (auts <- automataProducts) yield for (a <- auts) yield {
+      a.counters()
+        .toSet
+        .toIndexedSeq
+        .sortBy((c: Counter) => c.name)
     }
 
-  val stateVars =
+  val stateVars: Seq[IndexedSeq[String]] =
     for ((auts, n) <- automataStates.zipWithIndex)
-      yield (for (m <- 0 until auts.size) yield "state_" + n + "_" + m)
+      yield (for (m <- auts.indices) yield "state_" + n + "_" + m)
   val inputVar =
     "l"
   val blockVar =
     "block"
-  val counterVars =
+  val counterVars: Map[Counter, String] =
     (for ((cnt, n) <- counters.zipWithIndex)
       yield (cnt -> ("counter_" + n))).toMap
   val counterAssignments: Array[BigInteger] = Array.ofDim(counters.size)
@@ -111,10 +110,10 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
     case SymbolicLabel.AnyChar => trueF
   }
 
-  val counterSubst =
-    (for ((c, v) <- counterVars) yield (c -> new ConstantTerm(v))).toMap
+  val counterSubst: Map[Counter, ConstantTerm] =
+    for ((c, v) <- counterVars) yield c -> new ConstantTerm(v)
 
-  def printNUXMVModule() = {
+  def printNUXMVModule(): Unit = {
     println("MODULE main")
 
     println("IVAR")
@@ -131,7 +130,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
 
     println("ASSIGN")
     println("  init(" + blockVar + ") := 0;")
-    for (((v, aut), states) <- stateVars.flatten zip automata.flatten zip automataStates.flatten)
+    for (((v, aut), states) <- stateVars.flatten zip automataProducts.flatten zip automataStates.flatten)
       println("  init(" + v + ") := " + (states indexOf aut.initialState) + ";")
     for (cnt <- counters)
       println("  init(" + counterVars(cnt) + ") := 0;")
@@ -140,10 +139,9 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
 
     val autTransitions =
       for (blockId <- 0 until blockNum) yield {
-        val blockAutomata = automata(blockId)
+        val blockAutomata = automataProducts(blockId)
         val blockAutomataStates = automataStates(blockId)
         val blockAutomataVars = stateVars(blockId)
-        val blockAutomataCounters = automataCounters(blockId)
 
         and(
           eq(blockVar, blockId),
@@ -160,26 +158,26 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
                   cs <- counters; c <- cs)
               yield unchanged(counterVars(c))): _*
           ),
-          and((for (autId <- 0 until blockAutomata.size) yield {
+          and((for (autId <- blockAutomata.indices) yield {
             val aut = blockAutomata(autId)
             val states = blockAutomataStates(autId)
             val stateVar = blockAutomataVars(autId)
-            val counters = blockAutomataCounters(autId)
+            val counters = aut.counters().toIndexedSeq.sortBy(_.name)
 
             or(
-              (for (trip @ (s1, l, s2) <- aut.transitions.toSeq;
-                    offsets = transitionToOffsets(trip))
-                yield and(
-                  eq(stateVar, states indexOf s1),
-                  eq(next(stateVar), states indexOf s2),
-                  inLabel(inputVar, l),
-                  and((for (c <- counters) yield (offsets get c) match {
+              (for (trip <- aut.transitions) yield {
+                and(
+                  eq(stateVar, states indexOf trip.from()),
+                  eq(next(stateVar), states indexOf trip.to()),
+                  inLabel(inputVar, trip.label()),
+                  and((for (c <- counters) yield trip.increments(c) match {
                     case Some(offset) =>
                       eq(next(counterVars(c)), counterVars(c) + " + " + offset)
                     case None =>
                       unchanged(counterVars(c))
                   }): _*)
-                )): _*
+                )
+              }): _*
             )
           }): _*)
         )
@@ -193,7 +191,9 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
           and((for (v <- stateVars.flatten) yield unchanged(v)): _*),
           and((for (v <- counterVars.values.toSeq) yield unchanged(v)): _*),
           and(
-            (for (((v, aut), states) <- stateVars(blockId) zip automata(blockId) zip automataStates(
+            (for (((v, aut), states) <- stateVars(blockId) zip automataProducts(
+                    blockId
+                  ) zip automataStates(
                     blockId
                   ))
               yield or(

@@ -2,46 +2,17 @@ package uuverifiers.common
 
 import ap.PresburgerTools
 import ap.basetypes.IdealInt
-import ap.terfor.{Formula, Term, TerForConvenience, TermOrder, OneTerm}
+import ap.terfor.{Formula, OneTerm, TerForConvenience, Term, TermOrder}
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
-import collection.mutable.{HashMap, ArrayBuffer, Queue, HashSet => MHashSet}
-import scala.language.implicitConversions
-import EdgeWrapper._
-import uuverifiers.common.Tracing
+import uuverifiers.catra.Counter
 
-object AutomataTypes {
-  type State = IntState
-  type Label = SymbolicLabel
+import collection.mutable.{ArrayBuffer, HashMap, HashSet => MHashSet}
+import scala.collection.mutable
 
-  /**
-   * Transitions are just tuples of from, label, to
-   */
-  type Transition = (State, SymbolicLabel, State)
-
-  type Origin = TermOrigin.TermOrigin
-
-  /**
-   * A type to track term transitions to their resulting transitions in a product
-   */
-  type ProductTransitionMap = Map[(Origin, Transition), Seq[Transition]]
-
-  /**
-   * A type to trace a product state to its origin term states
-   */
-  type ProductStateMap = Map[State, (State, State)]
-}
-
-sealed case class IntState(id: Int) extends Ordered[IntState] {
-  def compare(that: IntState) = this.id compare that.id
-  def successor(): IntState = IntState(id + 1)
-  def toPretty(): String = s"s${id}"
-}
-
-object IntState {
-  def apply(range: Range): IndexedSeq[IntState] = range.map(IntState(_))
-  def apply(ids: Int*): Seq[IntState] = ids.map(IntState(_))
-  //def unapply(thisState: IntState): Some[Int] = Some(thisState.id)
+object NrTransitionsOrdering extends Ordering[Automaton] {
+  def compare(a: Automaton, b: Automaton): Int =
+    a.transitions.lengthCompare(b.transitions)
 }
 
 /**
@@ -49,9 +20,8 @@ object IntState {
  */
 trait Automaton
     extends Tracing
-    with Graphable[AutomataTypes.State, AutomataTypes.Label]
+    with Graphable[State, SymbolicLabel]
     with GraphvizDumper {
-  import AutomataTypes._
 
   /**
    * Iterate over automaton states
@@ -62,6 +32,12 @@ trait Automaton
    * Given a state, iterate over all outgoing transitions
    */
   def transitionsFrom(from: State): Seq[Transition]
+
+  // Adapt to graph notation.
+  override def outgoingEdges(from: State): Seq[(State, SymbolicLabel, State)] =
+    transitionsFrom(from).map {
+      case Transition(from, label, to) => (from, label, to)
+    }
 
   /**
    * The unique initial state
@@ -136,7 +112,6 @@ trait Automaton
     builder.toString()
   }
 
-  // TODO maybe apply sorting to transitionsFrom here for Full Determinism
   /**
    * Iterate over all *reachable* transitions in breadh-first order.
    *
@@ -165,7 +140,7 @@ trait Automaton
       todo = todo.tail
 
       for (t <- transitionsFrom(next))
-        if (!disabledEdges.contains((next, t.label(), t.to())) &&
+        if (!disabledEdges.contains(t) &&
             (res add t.to()))
           todo = t.to() :: todo
     }
@@ -179,7 +154,7 @@ trait Automaton
   def bwdReachable(disabledEdges: Set[Transition]): Set[State] = {
     val reachedFrom = new HashMap[State, ArrayBuffer[State]]
 
-    for (t @ (s1, _, s2) <- transitions)
+    for (t @ Transition(s1, _, s2) <- transitions)
       if (!disabledEdges.contains(t))
         reachedFrom.getOrElseUpdate(s2, new ArrayBuffer) += s1
 
@@ -252,7 +227,7 @@ trait Automaton
                Iterator((IdealInt.MINUS_ONE, OneTerm))
              else
                Iterator.empty) ++
-            (for (((from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
+            (for ((Transition(from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
                   mult = (if (state2Index(from) == state) 1 else 0) -
                     (if (state2Index(to) == state) 1 else 0))
               yield (IdealInt(mult), prodVar)),
@@ -274,7 +249,7 @@ trait Automaton
 
     val prodImps =
       trace("production implications")(
-        (for (((_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
+        (for ((Transition(_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
           yield ((prodVar === 0) | (zVars(state2Index(to)) > 0))).toList
       )
 
@@ -284,7 +259,7 @@ trait Automaton
         disjFor(
           Iterator(zVars(state) === 0) ++
             (for (t <- finalVars get state) yield (t === 1)) ++
-            (for (((from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
+            (for ((Transition(from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
                   if state2Index(from) == state;
                   toInd = state2Index(to))
               yield conj(
@@ -317,12 +292,12 @@ trait Automaton
     "Automaton:\n" + states
       .map(fmtState)
       .mkString(", ") + "\n" + transitions.toSeq
-      .groupBy(_._1)
+      .groupBy(_.from())
       .map {
         case (state, outgoing) =>
           s"== ${fmtState(state)} ==\n" + outgoing
             .map {
-              case (_, label, to) =>
+              case Transition(_, label, to) =>
                 s"\t${label} → ${to}"
             }
             .mkString("\n") + "\n"
@@ -352,41 +327,49 @@ trait Automaton
   def accepts(input: String): Boolean =
     input.toSeq.foldLeft(Seq(initialState))(walkFrom).exists(isAccept)
 
-  def ++(that: Automaton) = {
+  def ++(that: Automaton): Automaton = {
     val builder = AutomatonBuilder(this)
+    // FIXME this breaks for any other type of state!
+    var nextFreeState =
+      states.map(s => s.asInstanceOf[IntState]).max.successor()
 
     // No states from this are accepting anymore
     builder.setNotAccepting(states.filter(isAccept).toSeq: _*)
 
-    states
-      .filter(isAccept)
-      .foreach(insertCopyOfThat(_))
+    states.filter(isAccept).foreach(insertCopyOfThat)
 
     def insertCopyOfThat(startingFrom: State) = {
       // Make fresh copies of all states, except the initial one which we merge
       // with the insertion point.
-      val thatStateMap = that.states
+      val thatStateMap: Map[State, State] = that.states
         .map(
           s =>
             (
               s,
               if (s == that.initialState) startingFrom
-              else builder.getNewState()
+              else {
+                val freshState = nextFreeState
+                nextFreeState = nextFreeState.successor()
+                builder.addState(freshState)
+                if (that isAccept s) {
+                  builder setAccepting freshState
+                }
+                freshState
+              }
             )
         )
         .toMap
 
       // Copy over the transitions modulo the state remapping
-      that.transitions.foreach {
-        case (from, label, to) =>
-          builder.addTransition(thatStateMap(from), label, thatStateMap(to))
+      that.transitions.foreach { t =>
+        builder.addTransition(
+          new SymbolicTransition(
+            thatStateMap(t.from()),
+            t.label(),
+            thatStateMap(t.to())
+          )
+        )
       }
-
-      // Mark all copied states that were accepting as still accepting.
-      builder.setAccepting(
-        that.states.filter(that.isAccept).map(thatStateMap).toSeq: _*
-      )
-
     }
 
     builder.getAutomaton()
@@ -454,7 +437,7 @@ trait Automaton
       .setInitial(initialState)
       .setAccepting(states.filter(isAccept).toSeq: _*)
 
-    for(t <- transitions if keepEdge(t)) {
+    for (t <- transitions if keepEdge(t)) {
       builder.addTransition(t)
     }
 
@@ -468,9 +451,12 @@ trait Automaton
     (for (s1 <- states.iterator; t <- transitionsFrom(s1))
       yield t).toIndexedSeq
 
-  def allNodes() = states.toSeq
-  def edges() = transitions.toSeq
-  def subgraph(selectedNodes: Set[State]): Automaton = {
+  override def allNodes() = states.toSeq
+  override def edges() =
+    transitions.map {
+      case Transition(from, label, to) => (from, label, to)
+    }.toSeq
+  override def subgraph(selectedNodes: Set[State]): Automaton = {
     val builder = AutomatonBuilder()
     val statesToKeep = states.filter(selectedNodes.contains)
     builder.addStates(statesToKeep)
@@ -481,12 +467,15 @@ trait Automaton
     builder.getAutomaton()
   }
 
-  def dropEdges(edgesToDrop: Set[Transition]) =
-    filterTransitions(!edgesToDrop.contains(_))
+  override def dropEdges(edgesToDrop: Set[(State, SymbolicLabel, State)]) =
+    filterTransitions(t => !edgesToDrop.contains((t.from(), t.label(), t.to())))
 
-  def addEdges(edgesToAdd: Iterable[Transition]) = {
+  override def addEdges(edgesToAdd: Iterable[(State, SymbolicLabel, State)]) = {
     val builder = AutomatonBuilder(this)
-    edgesToAdd.foreach(builder.addTransition)
+    edgesToAdd.foreach {
+      case (from, label, to) =>
+        builder.addTransition(new SymbolicTransition(from, label, to))
+    }
     builder.getAutomaton()
   }
 
@@ -500,143 +489,71 @@ trait Automaton
    * @return the computed label and corresponding to-states from the left and
    * right automaton respectively
    */
-  private def transitionsWithOverlappingLabels(
-      left: Iterable[Transition],
-      right: Iterable[Transition]
-  ): Seq[(SymbolicLabel, SymbolicLabel, SymbolicLabel, State, State)] = {
-    // NOTE: by sorting both lists by alternating lower and upper bounds, the
-    // search can be accelerated by skipping ranges that can never overlap.
-    // NOTE: we need to revisit the lists so we store the results of the
-    // iteration here.
-    val leftValues = left.toSeq
-    val rightValues = right.toSeq
+  private def transitionsWithOverlappingLabels[
+      L <: Transition,
+      R <: Transition
+  ](
+      left: Iterable[L],
+      right: Iterable[R]
+  ): Iterable[ProductTransition] = {
+    val rightTransitions = right.toSeq
 
-    leftValues.flatMap { leftTransition =>
-      rightValues
-        .map { rightTransition =>
-          val intersection = trace(
-            s"${leftTransition.label()} INTERSECT ${rightTransition.label()}"
-          )(
-            leftTransition.label() intersect rightTransition.label()
-          )
-          (
-            intersection,
-            leftTransition.label(),
-            rightTransition.label(),
-            leftTransition.to(),
-            rightTransition.to()
-          )
-        }
-        .filter(!_._1.isEmpty())
-    }
+    // TODO accelerate search by sorting them by interval
 
+    val results =
+      for (leftTransition <- left; rightTransition <- rightTransitions)
+        yield (leftTransition intersect rightTransition)
+
+    results.filterNot(_.isEmpty).map(_.get)
   }
 
   /**
-   * Compute the product of two automata, somewhat smallish.
-   */
-  def &&&(that: Automaton): Automaton =
-    trace(s"${this} &&& ${that} gives") {
-      this.productWithSources(that).product
-    }
-
-  /**
-   * Compute the product of two automata, returning a mapping from the product's
-    transitions to the term's.
+   * Compute the product of two automata.
     **/
-  def productWithSources(that: Automaton): AnnotatedProduct = {
-    // NOTE We have to tag keys with the origin of the term, since there is no
-    // guarantee that transitions are unique between automata.
-    val termToProductEdges =
-      HashMap[(Origin, Transition), ArrayBuffer[Transition]]()
+  def productWith(that: Automaton): Automaton = {
     val productBuilder = AutomatonBuilder()
-    // this, that to product
-    val knownProductStates = HashMap[(State, State), State]()
-    val statesToVisit = Queue[(State, State)]()
+    val knownProductStates = mutable.HashSet[ProductState]()
+    val statesToVisit = mutable.Queue[ProductState]()
 
-    def newStateDiscovered(left: State, right: State) =
+    def newStateDiscovered(state: ProductState) =
       trace("newStateDiscovered") {
-        val productState = productBuilder.getNewState()
-        knownProductStates += ((left, right) -> productState)
-        statesToVisit enqueue ((left, right))
-        productBuilder.addStates(Seq(productState))
-
-        if ((this isAccept left) && (that isAccept right)) {
-          productBuilder setAccepting trace("product accepting")(productState)
+        knownProductStates += state
+        statesToVisit enqueue state
+        productBuilder addState state
+        if ((this isAccept state.left) && (that isAccept state.right)) {
+          productBuilder setAccepting trace("product accepting")(state)
         }
-
-        productState
+        state
       }
 
     val initial = trace("product initial state")(
-      newStateDiscovered(this.initialState, that.initialState)
+      newStateDiscovered(this.initialState intersect that.initialState)
     )
     productBuilder.setInitial(initial)
 
-    while (!statesToVisit.isEmpty) {
+    while (statesToVisit.nonEmpty) {
       ap.util.Timeout.check
 
       val nextTarget = statesToVisit.dequeue()
-
-      val (thisSourceState, thatSourceState) = nextTarget
-      val fromProductState = knownProductStates(
-        (thisSourceState, thatSourceState)
-      )
       val overlappingTransitions = trace(
-        s"overlappingTransitions from ${thisSourceState}/${thatSourceState}"
+        s"overlappingTransitions from $nextTarget"
       )(
         transitionsWithOverlappingLabels(
-          trace(s"transitions from ${thisSourceState}")(
-            this transitionsFrom thisSourceState
-          ),
-          trace(s"transitions from ${thisSourceState}")(
-            that transitionsFrom thatSourceState
-          )
+          this transitionsFrom nextTarget.left,
+          that transitionsFrom nextTarget.right
         ).toSeq
       )
-      overlappingTransitions.foreach {
-        case (newLabel, leftOldLabel, rightOldLabel, leftTo, rightTo) =>
-          val toProductState =
-            if (!(knownProductStates contains ((leftTo, rightTo))))
-              newStateDiscovered(leftTo, rightTo)
-            else knownProductStates((leftTo, rightTo))
+      overlappingTransitions.foreach { productTransition =>
+        val toProductState = productTransition.to().asInstanceOf[ProductState]
+        if (!(knownProductStates contains toProductState))
+          newStateDiscovered(toProductState)
 
-          val productTransition = trace("productTransition")(
-            (fromProductState, newLabel, toProductState)
-          )
-
-          if (!(productBuilder containsTransition productTransition)) {
-            productBuilder.addTransition(
-              productTransition
-            )
-
-            termToProductEdges.getOrElseUpdate(
-              (TermOrigin.Left, (thisSourceState, leftOldLabel, leftTo)),
-              ArrayBuffer()
-            ) += productTransition
-
-            termToProductEdges.getOrElseUpdate(
-              (TermOrigin.Right, (thatSourceState, rightOldLabel, rightTo)),
-              ArrayBuffer()
-            ) += productTransition
-
-            trace("termtoProductEdges")(termToProductEdges)
-          } else {
-            trace("saw transition twice!")(productTransition)
-          }
+        if (!(productBuilder containsTransition productTransition)) {
+          productBuilder.addTransition(productTransition)
+        }
       }
     }
-
-    val product = productBuilder.getAutomaton()
-
-    AnnotatedProduct(
-      product,
-      termToProductEdges.view
-        .mapValues(_.filter(product.containsTransition).toSeq)
-        .filter { case (_, v) => v.nonEmpty }
-        .toMap,
-      knownProductStates.toMap.map(_.swap)
-    )
+    productBuilder.getAutomaton()
   }
 
   /**
@@ -650,186 +567,76 @@ trait Automaton
       transitionsFrom(t.from()) contains t
     )
 
+  def counters(): Set[Counter] =
+    this.transitions.flatMap(_.affectsCounters()).toSet
 }
 
 object REJECT_ALL extends Automaton {
   override val initialState = IntState(0)
-  override def isAccept(_s: AutomataTypes.State) = false
-  override def transitionsFrom(_from: AutomataTypes.State) = Seq()
+  override def isAccept(_s: State) = false
+  override def transitionsFrom(_from: State) = Seq()
   override def states = Seq.empty
   override lazy val isEmpty = true
   override def toString = "∅ REJECT ALL"
 
-  override def filterTransitions(
-      keepEdge: AutomataTypes.Transition => Boolean
-  ) = this
+  override def filterTransitions(keepEdge: Transition => Boolean) = this
 
   override def parikhImage(
-      bridgingFormula: Map[AutomataTypes.Transition, Term] => Formula,
+      bridgingFormula: Map[Transition, Term] => Formula,
       quantElim: Boolean = true
   )(implicit p: TermOrder): Conjunction = Conjunction.FALSE
 }
 
-sealed abstract class SymbolicLabel
-    extends Product
-    with Serializable
-    with Ordered[SymbolicLabel] {
-  def iterate(): Iterator[Char]
-  def subtract(that: SymbolicLabel): SymbolicLabel
-  def intersect(that: SymbolicLabel): SymbolicLabel
-  def isEmpty(): Boolean
-  def contains(ch: Char) = this.overlaps(SymbolicLabel.SingleChar(ch))
-  def overlaps(that: SymbolicLabel) = !this.intersect(that).isEmpty()
-  def upperBoundExclusive(): Option[Char]
-  override def compare(that: SymbolicLabel) = {
-    (this.upperBoundExclusive(), that.upperBoundExclusive()) match {
-      case (None, None)                       => 0
-      case (None, Some(_))                    => 1
-      case (Some(_), None)                    => -1
-      case (Some(thisBound), Some(thatBound)) => thisBound compareTo thatBound
-    }
-  }
-}
-
-object SymbolicLabel {
-  // TODO do something better; only escape characters that are unprintable
-  private def formatChar(c: Char): String =
-    if (c.isLetterOrDigit) c.toString() else c.toInt.toString()
-  def apply() = NoChar
-  def apply(c: Char) = SingleChar(c)
-  def apply(fromInclusive: Char, toInclusive: Char) =
-    (fromInclusive, toInclusive) match {
-      case _ if fromInclusive > toInclusive  => NoChar
-      case _ if fromInclusive == toInclusive => SingleChar(fromInclusive)
-      case _                                 => CharRange(fromInclusive, toInclusive)
-    }
-
-  final case object NoChar extends SymbolicLabel {
-    override def overlaps(that: SymbolicLabel) = false
-    override def intersect(that: SymbolicLabel) = this
-    override def isEmpty() = true
-    override def subtract(that: SymbolicLabel) = this
-    override def upperBoundExclusive() = Some(0.toChar)
-    override def iterate() = Iterator()
-    override def toString() = "∅"
-  }
-
-  final case class SingleChar(c: Char) extends SymbolicLabel with Tracing {
-    override def subtract(that: SymbolicLabel) = that match {
-      case NoChar          => this
-      case AnyChar         => NoChar
-      case SingleChar(`c`) => NoChar
-      case SingleChar(_)   => this
-      case CharRange(from, toInclusive) if c <= toInclusive && from <= c =>
-        NoChar
-      case CharRange(_, _) => this
-      // NOTE: this could be compactified with a final catch-all case, but I
-      // avoided that in order to keep this safe against future
-      // refactorings. --Amanda
-    }
-
-    override def intersect(that: SymbolicLabel) =
-      trace(s"${this} ∩ ${that}") {
-        that match {
-          case AnyChar => this // Redundant but OK
-          case SingleChar(otherChar) =>
-            if (otherChar == this.c) this else NoChar
-          case CharRange(lower, upper) =>
-            if (c >= lower && c <= upper) this else NoChar
-          case NoChar => NoChar
-        }
-      }
-    override def isEmpty() = false
-    override def upperBoundExclusive() = Some((c + 1).toChar)
-    override def iterate() = Iterator(c)
-    override def toString() = formatChar(c)
-
-  }
-
-  final case class CharRange(from: Char, toInclusive: Char)
-      extends SymbolicLabel
-      with Tracing {
-    override def subtract(that: SymbolicLabel) = ???
-    override def intersect(that: SymbolicLabel): SymbolicLabel =
-      trace(s"${this} INTERSECTS ${that}") {
-        that match {
-          case CharRange(thatFrom, thatToInclusive) =>
-            SymbolicLabel(thatFrom max from, thatToInclusive min toInclusive)
-          case _ => that.intersect(this)
-        }
-      }
-    override def isEmpty() = false
-    override def upperBoundExclusive() = Some((toInclusive + 1).toChar)
-    override def iterate() = (from to toInclusive).iterator
-    override def toString() =
-      s"[${formatChar(from)}, ${formatChar(toInclusive)}]"
-  }
-
-  final case object AnyChar extends SymbolicLabel {
-    override def overlaps(that: SymbolicLabel) = true
-    override def intersect(that: SymbolicLabel) = that
-    override def isEmpty() = false
-    override def subtract(that: SymbolicLabel) = ???
-    override def upperBoundExclusive() = None
-    override def iterate() = (Char.MinValue to Char.MaxValue).iterator
-    override def toString() = "Σ"
-  }
-}
-
-object SymbolicLabelConversions {
-  implicit def charToSymbolicLabel(c: Char): SymbolicLabel = SymbolicLabel(c)
-}
-
-/**
- * A container to store the origins of states and transitions from a product of
- * automata.
- *
- * @param product
- * @param termTransitionToProductTransitions
- * @param productStateToTermStates
- */
-sealed case class AnnotatedProduct(
-    val product: Automaton,
-    val termTransitionToProductTransitions: AutomataTypes.ProductTransitionMap,
-    val productStateToTermStates: AutomataTypes.ProductStateMap
-) extends GraphvizDumper {
-
-  // TODO reverse lookup and show the label origins!
-  private def labelAnnotation(t: AutomataTypes.Transition) =
-    t.label().toString()
-
-  private def stateAnnotation(productState: AutomataTypes.State) = {
-    val (leftState, rightState) = originOf(productState)
-    s"${productState.toPretty()} = ${leftState.toPretty()}/${rightState.toPretty()}"
-  }
-
-  def toDot() =
-    product.toDot(
-      transitionAnnotator = labelAnnotation,
-      stateAnnotator = stateAnnotation
-    )
-
-  def originOf(productState: AutomataTypes.State) =
-    productStateToTermStates(productState)
-
-  def originOfTransition(t: AutomataTypes.Transition) = {
-    val (leftOrigin, rightOrigin) = termTransitionToProductTransitions
-      .filter(_._2 contains t)
-      .keys
-      .toSet
-      .toSeq
-      .partition(_._1 == TermOrigin.Left)
-
-    (leftOrigin(0)._2, rightOrigin(0)._2)
-  }
-
-  def resultsOf(
-      leftOrRight: TermOrigin.TermOrigin
-  )(transition: AutomataTypes.Transition) =
-    termTransitionToProductTransitions.get((leftOrRight, transition))
-}
-
-object TermOrigin extends Enumeration {
-  type TermOrigin = Value
-  val Left, Right = Value
-}
+///**
+// * A container to store the origins of states and transitions from a product of
+// * automata.
+// *
+// * @param product
+// * @param termTransitionToProductTransitions
+// * @param productStateToTermStates
+// */
+//sealed case class AnnotatedProduct(
+//    val product: Automaton,
+//    val termTransitionToProductTransitions: AutomataTypes.ProductTransitionMap,
+//    val productStateToTermStates: AutomataTypes.ProductStateMap
+//) extends GraphvizDumper {
+//
+//  // TODO reverse lookup and show the label origins!
+//  private def labelAnnotation(t: Transition) =
+//    t.label().toString()
+//
+//  private def stateAnnotation(productState: State) = {
+//    val (leftState, rightState) = originOf(productState)
+//    s"${productState.toPretty()} = ${leftState.toPretty()}/${rightState.toPretty()}"
+//  }
+//
+//  def toDot() =
+//    product.toDot(
+//      transitionAnnotator = labelAnnotation,
+//      stateAnnotator = stateAnnotation
+//    )
+//
+//  def originOf(productState: State) =
+//    productStateToTermStates(productState)
+//
+//  def originOfTransition(t: Transition) = {
+//    val (leftOrigin, rightOrigin) = termTransitionToProductTransitions
+//      .filter(_._2 contains t)
+//      .keys
+//      .toSet
+//      .toSeq
+//      .partition(_._1 == TermOrigin.Left)
+//
+//    (leftOrigin(0)._2, rightOrigin(0)._2)
+//  }
+//
+//  def resultsOf(
+//      leftOrRight: TermOrigin.TermOrigin
+//  )(transition: Transition) =
+//    termTransitionToProductTransitions.get((leftOrRight, transition))
+//}
+//
+//object TermOrigin extends Enumeration {
+//  type TermOrigin = Value
+//  val Left, Right = Value
+//}

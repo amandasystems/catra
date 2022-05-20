@@ -1,8 +1,6 @@
-package uuverifiers.parikh_theory
-
 import org.scalatest.funsuite.AnyFunSuite
-import uuverifiers.common.RegexImplicits._
-import uuverifiers.common.{Regex, Tracing}
+import RegexImplicits._
+import uuverifiers.common.Tracing
 
 class TestRegex extends AnyFunSuite with Tracing {
 

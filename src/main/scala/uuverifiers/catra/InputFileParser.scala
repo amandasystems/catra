@@ -1,26 +1,32 @@
 package uuverifiers.catra
+import ap.SimpleAPI
 import ap.terfor.ConstantTerm
-import ap.parser.{IFormula, ITerm, ITimes, IBoolLit}
-import java.math.BigInteger
+import ap.parser.{IBoolLit, IFormula, ITerm, ITimes}
+
 import uuverifiers.common.{
-  SymbolicLabel,
-  IntState,
   Automaton,
   AutomatonBuilder,
+  Counting,
+  IntState,
+  SymbolicLabel,
   Tracing
 }
-import uuverifiers.common.AutomataTypes.State
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     value
-  override def negate() = Constant(value * -1)
+  override def negate(): Constant = Constant(value * -1)
 }
 
 sealed case class Counter(name: String) extends Term {
+  def incrementBy(i: Int): Map[Counter, Int] = Map(this -> i)
+
+  def toConstant(p: SimpleAPI): ConstantTerm = p.createConstantRaw(name)
+
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     counterConstants(this)
-  override def negate() = CounterWithCoefficient(-1, this)
+  override def negate(): CounterWithCoefficient =
+    CounterWithCoefficient(-1, this)
 }
 
 sealed abstract class Atom extends Formula {
@@ -35,7 +41,9 @@ sealed case class Inequality(
   def negated(): Inequality =
     Inequality(this.lhs, this.inequality, this.rhs, !this.isPositive)
 
-  override def toPrincess(counterConstants: Map[Counter, ConstantTerm]) = {
+  override def toPrincess(
+      counterConstants: Map[Counter, ConstantTerm]
+  ): IFormula = {
     val left = lhs.toPrincess(counterConstants)
     val right = rhs.toPrincess(counterConstants)
 
@@ -65,7 +73,7 @@ sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
     extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     ITimes(coefficient, counterConstants(counter))
-  override def negate() =
+  override def negate(): Term =
     if (coefficient == -1) counter
     else CounterWithCoefficient(coefficient * -1, counter)
 }
@@ -90,8 +98,6 @@ case object NotEquals extends InequalitySymbol
 sealed trait Formula extends DocumentFragment {
   def negated(): Formula
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
-  // TODO
-  def accepts(counterValues: Map[Counter, BigInteger]): Boolean = ???
 }
 
 sealed case class And(left: Formula, right: Formula) extends Formula {
@@ -120,27 +126,13 @@ sealed case class Transition(
 sealed case class InitialState(name: String) extends AutomatonFragment
 sealed case class AcceptingStates(names: Seq[String]) extends AutomatonFragment
 
-// FIXME: make this a class
-object WhyCantIDefineGlobalTypeAliasesGoddammit {
-  type TransitionToCounterOffsets =
-    Map[(State, SymbolicLabel, State), Map[Counter, Int]]
-}
-
-import WhyCantIDefineGlobalTypeAliasesGoddammit.TransitionToCounterOffsets
-
 sealed trait DocumentFragment
 
 sealed case class CounterDefinition(counters: Seq[Counter])
     extends DocumentFragment
 
-sealed case class AutomatonGroup(automata: Seq[NamedCounterAutomaton])
+sealed case class AutomatonGroup(automata: Seq[Automaton])
     extends DocumentFragment
-
-sealed case class NamedCounterAutomaton(
-    name: String,
-    automaton: Automaton,
-    offsets: TransitionToCounterOffsets
-)
 
 class InputFileParser extends Tracing {
   import fastparse._
@@ -148,19 +140,15 @@ class InputFileParser extends Tracing {
 
   private val interner = new Interner()
 
-  def automatonFromFragments(
-      fragments: Seq[AutomatonFragment]
-  ): (Automaton, TransitionToCounterOffsets) = {
+  def automatonFromFragments(fragments: Seq[AutomatonFragment]): Automaton = {
     val builder = AutomatonBuilder()
-    var counterOffsets: TransitionToCounterOffsets = Map()
 
     interner.freshNamespace()
 
     for (fragment <- fragments) {
       fragment match {
         case AcceptingStates(names) => {
-          val nameIds =
-            names.map(interner.getOrUpdate(_)).map(IntState(_)).toSeq
+          val nameIds = names.map(interner.getOrUpdate(_)).map(IntState(_))
           builder.addStates(nameIds)
           nameIds.foreach(builder.setAccepting(_))
         }
@@ -172,50 +160,39 @@ class InputFileParser extends Tracing {
           val fromIdx = IntState(interner.getOrUpdate(from))
           val toIdx = IntState(interner.getOrUpdate(to))
           builder.addStates(Seq(fromIdx, toIdx))
-          val transition = (fromIdx, label, toIdx)
-          builder.addTransition(transition)
-          counterOffsets += ((transition, counterIncrements))
+          builder.addTransition(
+            Counting(fromIdx, label, counterIncrements, toIdx)
+          )
         }
       }
     }
-    (builder.getAutomaton(), counterOffsets)
+    builder.getAutomaton()
   }
 
-  // TODO ensure register offsets are on disjoint transitions
-  // TODO ensure register offsets only increment declared registers
   def documentToInstance(fragments: Seq[DocumentFragment]): Instance =
     trace("documentToInstance") {
       var groupedAutomata: Seq[Seq[Automaton]] = Seq()
-      var transitionToOffsets: TransitionToCounterOffsets = Map()
       var counters = List[Counter]()
       var constraints = List[Formula]()
 
       for (fragment <- fragments) {
         fragment match {
-          // FIXME warn about empty groups!
           case AutomatonGroup(a) if a.isEmpty => ()
           case AutomatonGroup(group) => {
-            groupedAutomata =
-              groupedAutomata.appended(group.map(_.automaton).toSeq)
-            group.foreach { a =>
-              a.offsets.foreach(transitionToOffsets += _)
-            }
+            groupedAutomata = groupedAutomata.appended(group)
           }
           case cs: CounterDefinition => counters ++= cs.counters
           case f: Formula            => constraints ::= f
         }
       }
-      Instance(counters, groupedAutomata, transitionToOffsets, constraints)
+      Instance(counters, groupedAutomata, constraints)
     }
 
-  def digit[_ : P] = P(CharIn("0-9"))
-  def asciiLetter[_ : P] = CharIn("A-Z") | CharIn("a-z") | "_"
-
-  def counterType[_ : P] = P("int").!
-
+  def digit[_ : P]: P[Unit] = P(CharIn("0-9"))
+  def asciiLetter[_ : P]: P[Unit] = CharIn("A-Z") | CharIn("a-z") | "_"
+  def counterType[_ : P]: P[String] = P("int").!
   def constant[_ : P]: P[Int] =
     P("-".? ~ ("0" | (CharIn("1-9") ~ digit.rep(0)))).!.map(_.toInt)
-
   // FIXME I don't like how NotEquals isn't negated equals, but there is no
   // clean way I can think of to fix it.
   def atom[_ : P]: P[Atom] =
@@ -327,13 +304,13 @@ class InputFileParser extends Tracing {
       }
 
   def constraintDefinition[_ : P]: P[Formula] = P("constraint" ~/ formula)
-  def automatonBody[_ : P]: P[(Automaton, TransitionToCounterOffsets)] =
+  def automatonBody[_ : P]: P[Automaton] =
     P("{" ~ (init | accepting | transition).rep ~ "}")
       .map(automatonFromFragments(_))
 
-  def automatonDefinition[_ : P]: P[NamedCounterAutomaton] =
+  def automatonDefinition[_ : P]: P[Automaton] =
     P("automaton" ~/ identifier ~ automatonBody).map {
-      case (name, (a, offsets)) => NamedCounterAutomaton(name, a, offsets)
+      case (_, automaton) => automaton // FIXME use the name, somehow!
     }
 
   /**

@@ -1,38 +1,36 @@
-package uuverifiers.parikh_theory
-import uuverifiers.common.AutomatonBuilder
-import uuverifiers.common.SymbolicLabelConversions._
-import uuverifiers.common.IntState
+import uuverifiers.common.{AutomatonBuilder, IntState, SymbolicTransition}
 
 object AutomatonLibrary {
   import scala.language.implicitConversions
   implicit def int2State(idx: Int): IntState = IntState(idx)
+  import uuverifiers.common.SymbolicLabelConversions.charToSymbolicLabel
 
   val automata = Map(
     "trivial" -> AutomatonBuilder()
       .addStates(IntState(0, 1))
       .setInitial(IntState(0))
       .setAccepting(IntState(1))
-      .addTransition(IntState(0), 'a', IntState(1))
+      .addTransition(new SymbolicTransition(IntState(0), 'a', IntState(1)))
       .getAutomaton(),
     "fourStatePerTransitionWithLoop" -> AutomatonBuilder()
       .addStates(IntState(0 to 3))
       .setAccepting(IntState(3))
       .setInitial(IntState(0))
-      .addTransition(0, 'a', 1)
-      .addTransition(0, '-', 2)
-      .addTransition(1, '-', 3)
-      .addTransition(1, 'b', 0)
-      .addTransition(2, '-', 3)
-      .addTransition(2, 'c', 2)
-      .addTransition(3, '-', 2)
+      .addTransition(new SymbolicTransition(0, 'a', 1))
+      .addTransition(new SymbolicTransition(0, '-', 2))
+      .addTransition(new SymbolicTransition(1, '-', 3))
+      .addTransition(new SymbolicTransition(1, 'b', 0))
+      .addTransition(new SymbolicTransition(2, '-', 3))
+      .addTransition(new SymbolicTransition(2, 'c', 2))
+      .addTransition(new SymbolicTransition(3, '-', 2))
       .getAutomaton(),
     "threeStateLoopFree" -> AutomatonBuilder()
       .addStates(List(0, 1, 2))
       .setInitial(0)
       .setAccepting(1, 2)
-      .addTransition(0, 'c', 2)
-      .addTransition(0, 'a', 1)
-      .addTransition(1, 'b', 2)
+      .addTransition(new SymbolicTransition(0, 'c', 2))
+      .addTransition(new SymbolicTransition(0, 'a', 1))
+      .addTransition(new SymbolicTransition(1, 'b', 2))
       .getAutomaton()
   )
 

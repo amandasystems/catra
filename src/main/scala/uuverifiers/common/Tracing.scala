@@ -31,7 +31,6 @@ class Statistics() {
 
 // TODO convert this to a hierarchical logger writing to some file somewhere
 trait Tracing {
-
   def enableTracing(verbose: Boolean = true) = {
     dynTraceEnable = verbose
     this

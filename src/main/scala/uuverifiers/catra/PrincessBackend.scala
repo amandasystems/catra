@@ -44,16 +44,12 @@ class PrincessBackend(override val arguments: CommandLineOptions)
 
       val theory = if (arguments.trace) {
         new RegisterCounting(
-          instance.counters,
           automataGroup,
-          transitionToOffsets,
           hooks
         ) with TracingComputation
       } else {
         new RegisterCounting(
-          counters,
           automataGroup,
-          transitionToOffsets,
           hooks
         )
       }
@@ -61,7 +57,7 @@ class PrincessBackend(override val arguments: CommandLineOptions)
       theory
     }
 
-    val theories = automata.map(buildTheory _)
+    val theories = automataProducts.map(buildTheory _)
 
     // Needs to happen first because it may affect order?
     theories.foreach(p addTheory _)
@@ -81,10 +77,7 @@ class PrincessBackend(override val arguments: CommandLineOptions)
     }
 
     for (theory <- theories) {
-      val isInImage = theory allowsMonoidValues counters.map(
-        counterToSolverConstant(_)
-      )
-      p.addAssertion(isInImage)
+      p.addAssertion(theory allowsCounterValues counterToSolverConstant)
     }
 
     counterToSolverConstant

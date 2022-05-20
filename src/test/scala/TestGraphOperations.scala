@@ -1,5 +1,3 @@
-package uuverifiers.parikh_theory
-
 import org.scalatest.funsuite.AnyFunSuite
 import uuverifiers.common.MapGraph._
 

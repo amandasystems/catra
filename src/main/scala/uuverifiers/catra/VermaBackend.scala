@@ -1,36 +1,33 @@
 package uuverifiers.catra
 
-import uuverifiers.common.AutomataTypes.Transition
-import uuverifiers.common.Automaton
+import uuverifiers.common.{Automaton, GraphvizDumper, NrTransitionsOrdering}
 import ap.SimpleAPI
 import SimpleAPI.ProverStatus
-import ap.terfor.TerForConvenience.{l => toLinearCombination}
-import ap.basetypes.IdealInt
-import ap.terfor.ConstantTerm
+import ap.basetypes.LeftistHeap
+import ap.terfor.{ConstantTerm, TermOrder}
+import uuverifiers.parikh_theory.VariousHelpers.transitionsIncrementRegisters
+
 import scala.annotation.tailrec
-import uuverifiers.common.GraphvizDumper
 
 class VermaBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
 
-  def handleDumpingGraphviz(a: GraphvizDumper, fileName: String) =
+  def handleDumpingGraphviz(a: GraphvizDumper, fileName: String): Unit =
     arguments.dumpGraphvizDir.foreach(dir => a.dumpDotFile(dir, fileName))
+
+  private def logDecision(msg: String): Unit = if (arguments.printDecisions) {
+    System.err.println(msg)
+  }
 
   override def prepareSolver(
       p: SimpleAPI,
       instance: Instance
   ): Map[Counter, ConstantTerm] = {
-    import ap.terfor.TerForConvenience._
-    import p._
 
     val counterToSolverConstant =
       trace("Counter -> solver constant")(
-        instance.counters
-          .map(c => c -> p.createConstantRaw(c.name))
-          .toMap
+        instance.counters.map(c => c -> c.toConstant(p)).toMap
       )
-
-    implicit val o = order // This needs to happen after the constant creation.
 
     for (constraint <- instance.constraints) {
       p.addAssertion(
@@ -40,114 +37,80 @@ class VermaBackend(override val arguments: CommandLineOptions)
       )
     }
 
-    instance.automata.foreach { terms =>
-      var productStep = 0
-
-      var productSoFar: Automaton = terms.head
-      var productTransitionToOffsets =
-        trace("transition to offsets at start")(instance.transitionToOffsets)
-
-      handleDumpingGraphviz(
-        productSoFar,
-        s"verma-product-step-${productStep}.dot"
-      )
-
-      def incrementOf(counter: Counter, transition: Transition) =
-        trace(s"${transition} increments ${counter} to") {
-          IdealInt.int2idealInt(
-            productTransitionToOffsets(transition).getOrElse(counter, 0)
-          )
-        }
-
-      def computeProductStep(term: Automaton): Unit = {
-        val newProduct = productSoFar productWithSources term
-        productStep += 1
-        handleDumpingGraphviz(term, s"verma-product-term-${productStep}.dot")
-        handleDumpingGraphviz(
-          newProduct,
-          s"verma-product-step-${productStep}.dot"
+    instance.automataProducts.foreach(
+      terms =>
+        incrementallyComputeProduct(
+          p,
+          counterToSolverConstant,
+          0,
+          LeftistHeap.EMPTY_HEAP(ord = NrTransitionsOrdering) ++ terms
         )
-
-        productSoFar = newProduct.product
-        ap.util.Timeout.check
-
-        productTransitionToOffsets =
-          trace("transition to offsets after product") {
-            productSoFar.transitions.map { productTransition =>
-              val (partialProductTransition, termTransition) =
-                newProduct.originOfTransition(productTransition)
-
-              trace("originating transitions")(
-                (partialProductTransition, termTransition)
-              )
-
-              val counterIncrements = trace("left counter increments")(
-                instance
-                  .transitionToOffsets(termTransition)
-              ) ++ trace("right counter increments")(
-                productTransitionToOffsets(
-                  partialProductTransition
-                )
-              )
-
-              productTransition -> counterIncrements
-            }.toMap
-          }
-
-        val affectedCounters =
-          productTransitionToOffsets.values.flatMap(_.keys).toSet
-
-        // This enforces the bridging clause: c  = SUM t : sigma(t) * increment(c, t)
-        // NOTE:  We need to iterate over only the counters occurring in the
-        // partial product, or any counters appearing in later products will be
-        // forced to 0.
-        def transitionsIncrementRegisters(
-            sigma: Map[Transition, ap.terfor.Term]
-        ) =
-          trace(s"binding clauses: counters are coherent:") {
-            conj(affectedCounters.map { counter =>
-              val c = counterToSolverConstant(counter)
-
-              val incrementAndNrTaken =
-                productSoFar.transitions.map { transition =>
-                  (
-                    incrementOf(counter, transition),
-                    toLinearCombination(sigma(transition))
-                  )
-                }
-
-              c === sum(incrementAndNrTaken)
-            })
-          }
-
-        p.addAssertion(
-          trace("partial product Parikh image")(
-            productSoFar.parikhImage(
-              transitionsIncrementRegisters(_),
-              quantElim = false
-            )(order)
-          )
-        )
-      }
-
-      @tailrec
-      def incrementallyComputeProduct(automataLeft: Seq[Automaton]): Unit =
-        automataLeft match {
-          case Seq() => ()
-          case term +: rest => {
-            computeProductStep(term)
-            val stillSatisfiable = trace("product SAT check")(
-              p.checkSat(block = false)
-            ) != ProverStatus.Unsat
-            if (stillSatisfiable) {
-              incrementallyComputeProduct(rest)
-            }
-          }
-        }
-
-      incrementallyComputeProduct(terms.tail)
-
-    }
+    )
     counterToSolverConstant
+  }
+
+  private def postParikhSat(
+      p: SimpleAPI,
+      counterToSolverConstant: Map[Counter, ConstantTerm],
+      newProduct: Automaton
+  ): Unit = {
+    implicit val order: TermOrder = p.order
+
+    p.addAssertion(
+      trace("partial product Parikh image")(
+        newProduct.parikhImage(
+          transitionsIncrementRegisters(newProduct, counterToSolverConstant)(_),
+          quantElim = false
+        )
+      )
+    )
+  }
+
+  private def computeProductStep(
+      productStep: Int,
+      left: Automaton,
+      right: Automaton
+  ): Automaton = {
+    val newProduct = left productWith right
+    handleDumpingGraphviz(left, s"verma-product-left-$productStep.dot")
+    handleDumpingGraphviz(right, s"verma-product-right-$productStep.dot")
+    handleDumpingGraphviz(newProduct, s"verma-product-step-$productStep.dot")
+    ap.util.Timeout.check
+    newProduct
+  }
+
+  @tailrec
+  private def incrementallyComputeProduct(
+      p: SimpleAPI,
+      counterToSolverConstant: Map[Counter, ConstantTerm],
+      productStep: Int,
+      automataLeft: LeftistHeap[Automaton, _]
+  ): Unit = if (automataLeft.size >= 2) {
+    val first = automataLeft.findMin
+    val rest1 = automataLeft.deleteMin
+    val second = rest1.findMin
+    val product = computeProductStep(productStep, first, second)
+
+    logDecision(
+      s"""Computed product step $productStep.
+         |\tSize of terms: ${first.transitions.size}, ${second.transitions.size}
+         |\tSize of product: ${product.transitions.size}""".stripMargin
+    )
+
+    postParikhSat(p, counterToSolverConstant, product)
+
+    val stillSatisfiable = trace("product SAT check")(
+      p.checkSat(block = true)
+    ) != ProverStatus.Unsat
+
+    logDecision(s"Satisfiable? $stillSatisfiable")
+    if (stillSatisfiable) {
+      incrementallyComputeProduct(
+        p,
+        counterToSolverConstant,
+        productStep + 1,
+        rest1.deleteMin + product
+      )
+    }
   }
 }

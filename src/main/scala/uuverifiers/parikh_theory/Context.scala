@@ -1,38 +1,29 @@
 package uuverifiers.parikh_theory
-import ap.proof.theoryPlugins.Plugin
 import ap.terfor.preds.Atom
-import ap.terfor.Term
+import ap.terfor.{Term, TermOrder}
 import ap.proof.goal.Goal
-import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.TerForConvenience._
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.SortedSet
-import ap.terfor.conjunctions.Conjunction
-import collection.mutable.HashMap
-import uuverifiers.common.AutomataTypes._
-import uuverifiers.common.EdgeWrapper._
-import uuverifiers.common._
-import VariousHelpers.simplifyUnlessTimeout
-import java.io.File
+import ap.terfor.linearcombination.LinearCombination
 
-import ap.proof.goal.Goal
-import ap.terfor.preds.Atom
+import scala.collection.{SortedSet, mutable}
+import uuverifiers.common._
+
+import java.io.File
 
 /**
  * This class captures common contextual values that can be extracted from a
  * proof goal.
  */
 sealed case class Context(
-    val goal: Goal,
-    val monoidMapPredicateAtom: Atom,
-    val theoryInstance: ParikhTheory
+    goal: Goal,
+    monoidMapPredicateAtom: Atom,
+    theoryInstance: ParikhTheory
 ) extends Tracing {
 
   private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
   import transitionExtractor.{
     transitionStatusFromTerm,
     termMeansDefinitelyAbsent,
-    termMeansDefinitelyPresent,
     goalAssociatedPredicateInstances,
     transitionNr,
     transitionTerm,
@@ -49,7 +40,7 @@ sealed case class Context(
     val predicates =
       (transitionMasks ++ unusedInstances ++ connectedInstances).mkString(", ")
 
-    s"Context: active automata: ${automata}, predicates: ${predicates}"
+    s"Context: active automata: $automata, predicates: $predicates"
   }
 
   private val materialisedAutomata =
@@ -60,10 +51,11 @@ sealed case class Context(
     unusedPredicate => Unused,
     connectedPredicate => Connected
   }
-  val instanceTerm = monoidMapPredicateAtom(0)
-  implicit val order = goal.order
+  val instanceTerm: LinearCombination = monoidMapPredicateAtom(0)
+  implicit val order: TermOrder = goal.order
 
-  private val transitionTermCache = HashMap[Int, Map[Transition, Term]]()
+  private val transitionTermCache =
+    mutable.HashMap[Int, Map[Transition, Term]]()
 
   private val predicateInstances =
     goalAssociatedPredicateInstances(goal, instanceTerm)(_)
@@ -92,7 +84,7 @@ sealed case class Context(
     val autMap: Map[Transition, Term] =
       transitionTermCache.getOrElseUpdate(
         autId,
-        trace(s"getOrUpdateTransitionTermMap::materialise(aut=${autId})")(
+        trace(s"getOrUpdateTransitionTermMap::materialise(aut=$autId)")(
           materialisedAutomata(autId).transitions
             .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
             .toMap
@@ -112,7 +104,6 @@ sealed case class Context(
     transitionMasks
       .filter(autNr(_) == autId)
       .sortBy(transitionNr)
-      .toIndexedSeq
   }
 
   // FIXME excellent candidate for memoisation!
@@ -143,7 +134,7 @@ sealed case class Context(
             // TransitionMask predicates are eliminated, which means that we do
             // not have any information about the labelling.
             val transitionTermMap = getOrUpdateTransitionTermMap(i)
-            val term = transitionTermMap.get(t).getOrElse("No term")
+            val term = transitionTermMap.getOrElse(t, "No term")
             s"${t.label()}: ${transitionToIdx(t)}/$term"
           }
 
@@ -152,8 +143,8 @@ sealed case class Context(
             stateAnnotator = _.toString()
           )
 
-        }.dumpDotFile(directory, fileNamePrefix + s"-aut-${i}.dot")
-        fileNamePrefix + s"-aut-${i}.dot"
+        }.dumpDotFile(directory, fileNamePrefix + s"-aut-$i.dot")
+        fileNamePrefix + s"-aut-$i.dot"
     }.toSeq
   }
 

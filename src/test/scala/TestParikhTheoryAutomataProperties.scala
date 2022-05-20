@@ -1,8 +1,6 @@
-package uuverifiers.parikh_theory
-
-import org.scalacheck.Properties
 import org.scalacheck.Prop.{forAll, propBoolean}
-import uuverifiers.common.Regex
+import org.scalacheck.Properties
+import uuverifiers.parikh_theory.ParikhTheory
 
 object WordSpecification extends Properties("WordAutmata") {
 
