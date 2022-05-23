@@ -142,15 +142,18 @@ class VermaBackend(override val arguments: CommandLineOptions)
            |\tSize of product: ${product.transitions.size}""".stripMargin
       )
 
-      if (rest.isEmpty || arguments.checkIntermediateSat) {
-        postParikhSat(p, counterToSolverConstant, product)
-      }
+      val stillSatisfiable =
+        if (rest.isEmpty || arguments.checkIntermediateSat) {
+          postParikhSat(p, counterToSolverConstant, product)
+          val stillSatisfiable = trace("product SAT check")(
+            p.checkSat(block = true)
+          ) != ProverStatus.Unsat
+          logDecision(s"Satisfiable? $stillSatisfiable")
+          stillSatisfiable
+        } else {
+          true
+        }
 
-      val stillSatisfiable = trace("product SAT check")(
-        p.checkSat(block = true)
-      ) != ProverStatus.Unsat
-
-      logDecision(s"Satisfiable? $stillSatisfiable")
       if (stillSatisfiable) {
         incrementallyComputeProduct(
           p,

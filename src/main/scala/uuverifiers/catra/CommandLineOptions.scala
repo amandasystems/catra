@@ -7,8 +7,10 @@ import java.nio.file.Paths
 import java.nio.file.Path
 import java.nio.file.FileVisitResult
 import java.nio.file.attribute.BasicFileAttributes
-import java.io.{IOException, File}
+import java.io.{File, IOException}
 import ap.SimpleAPI
+
+import scala.annotation.tailrec
 import scala.util.Success
 import scala.util.Failure
 
@@ -49,7 +51,7 @@ sealed case class CommandLineOptions(
     case ChooseVerma    => new VermaBackend(this)
   }
 
-  def runWithTimeout(p: SimpleAPI)(block: => SatisfactionResult) =
+  def runWithTimeout(p: SimpleAPI)(block: => SatisfactionResult): Try[SatisfactionResult] =
     try {
       timeout_ms match {
         case Some(timeout_ms) =>
@@ -63,15 +65,12 @@ sealed case class CommandLineOptions(
         case None => Success(block)
       }
     } catch {
-      case SimpleAPI.TimeoutException => {
+      case SimpleAPI.TimeoutException =>
         p.stop
         Success(Timeout(timeout_ms.getOrElse(0)))
-      }
-      case ap.util.Timeout(_) => {
+      case ap.util.Timeout(_) =>
         p.stop
         Success(Timeout(timeout_ms.getOrElse(0)))
-
-      }
       case e: Throwable => Failure(e)
 
     }
@@ -91,9 +90,9 @@ object CommandLineOptions {
   private var dumpSMTDir: Option[File] = None
   private var dumpGraphvizDir: Option[File] = None
   private var backend: BackendSelection = ChoosePrincess
-  private var noCheckTermSat = true
-  private var noCheckIntermediateSat = true
-  private var noEliminateQuantifiers = true
+  private var noCheckTermSat = false
+  private var noCheckIntermediateSat = false
+  private var noEliminateQuantifiers = false
 
   private val usage =
     s"""
@@ -105,14 +104,14 @@ object CommandLineOptions {
     
     Available options (🐌 = likely to negatively impact performance):
       --trace -- generate a trace of the computation into trace.tex,
-                  plus various .dot files. (default = ${trace}) 🐌
+                  plus various .dot files. (default = $trace) 🐌
       --print-decisions -- log partial decisions. Less verbose trace.
-      --timeout milliseconds -- set the timeout in ms (default = ${timeout_ms})
+      --timeout milliseconds -- set the timeout in ms (default = $timeout_ms)
       --dump-smt <directory> -- dump SMT commands into this directory
-                                 (default = ${dumpSMTDir}) 🐌
+                                 (default = $dumpSMTDir) 🐌
       --backend <backend> -- choose which back-end to use.
                              Available options are: nuxmv, princess, verma.
-                             Default: ${backend}.
+                             Default: $backend.
       --dump-graphviz <directory> -- dump automata encountered while solving
                             into this directory. Default is disabled.
 
@@ -142,7 +141,7 @@ object CommandLineOptions {
   """
 
   private def enumerateDirectory(dir: Path): Seq[String] = {
-    val pathMatcher = fileSystem.getPathMatcher(s"glob:**${fileExtension}")
+    val pathMatcher = fileSystem.getPathMatcher(s"glob:**$fileExtension")
 
     var matchingFiles: Seq[String] = Seq()
 
@@ -155,9 +154,9 @@ object CommandLineOptions {
             attrs: BasicFileAttributes
         ): FileVisitResult = {
           if (pathMatcher.matches(file)) {
-            matchingFiles = matchingFiles appended (file
+            matchingFiles = matchingFiles appended file
               .toAbsolutePath()
-              .toString())
+              .toString()
           }
           CONTINUE
         }
@@ -179,13 +178,13 @@ object CommandLineOptions {
     expandedHomePath.toFile() match {
       case f if f.isDirectory() => enumerateDirectory(expandedHomePath)
       case f if f.exists()      => Seq(expandedHomePath.toString())
-      case f => {
-        Console.err.println(s"W: file ${f} does not exist; skipping!")
+      case f =>
+        Console.err.println(s"W: file $f does not exist; skipping!")
         Seq()
-      }
     }
   }
 
+  @tailrec
   def parseFilesAndFlags(args: List[String]): Unit = {
     args match {
       case Nil                       =>
@@ -224,27 +223,26 @@ object CommandLineOptions {
         backend = ChooseVerma
         parseFilesAndFlags(tail)
       case "--backend" :: other :: _ =>
-        throw new IllegalArgumentException(s"Unknown backend: ${other}!")
-      case option :: _ if (option.matches("--.*")) =>
+        throw new IllegalArgumentException(s"Unknown backend: $other!")
+      case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
-      case other :: tail => {
+      case other :: tail =>
         inputFiles ++= expandFileNameOrDirectoryOrGlob(other)
         parseFilesAndFlags(tail)
-      }
     }
   }
 
+  @tailrec
   def parseMode(args: List[String]): Unit = args match {
     case Nil                       => throw new Exception("Error: No mode specified! \n\n" + usage)
     case "--" :: tail              => parseMode(tail)
     case "--help" :: _ | "-h" :: _ => throw new Exception(usage)
     case "solve-satisfy" :: rest   => parseFilesAndFlags(rest)
-    case "find-image" :: rest => {
+    case "find-image" :: rest =>
       runMode = FindImage
       parseFilesAndFlags(rest)
-    }
     case other :: _ =>
-      throw new Exception(s"Error: Invalid mode `${other}`!\n\n" + usage)
+      throw new Exception(s"Error: Invalid mode `$other`!\n\n" + usage)
   }
 
   def parse(args: Array[String]): Try[CommandLineOptions] = Try {
