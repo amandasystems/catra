@@ -42,7 +42,8 @@ sealed case class CommandLineOptions(
     backend: BackendSelection,
     checkTermSat: Boolean,
     checkIntermediateSat: Boolean,
-    eliminateQuantifiers: Boolean
+    eliminateQuantifiers: Boolean,
+    dumpEquationDir: Option[File]
 ) {
 
   def getBackend(): Backend = backend match {
@@ -93,6 +94,7 @@ object CommandLineOptions {
   private var noCheckTermSat = false
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
+  private var dumpEquationDir: Option[File] = None
 
   private val usage =
     s"""
@@ -118,6 +120,8 @@ object CommandLineOptions {
     For specific back-ends:
 
       Verma:
+      --dump-equations <directory> -- dump the flow equations of each consecutive
+                        product (and all terms) as LaTeX equations into this directory.
       --no-check-term-sat -- Check first if the terms of the product alone are
                         unsatisfiable. This corresponds to over-approximating the
                         Parikh image to the conjunction of the images, but leaves
@@ -206,13 +210,13 @@ object CommandLineOptions {
         dumpGraphvizDir = Some(new File(directory))
         parseFilesAndFlags(tail)
       case "--no-check-term-sat" :: tail =>
-        noCheckTermSat = false
+        noCheckTermSat = true
         parseFilesAndFlags(tail)
       case "--no-check-intermediate-sat" :: tail =>
-        noCheckIntermediateSat = false
+        noCheckIntermediateSat = true
         parseFilesAndFlags(tail)
       case "--no-eliminate-quantifiers" :: tail =>
-        noEliminateQuantifiers = false
+        noEliminateQuantifiers = true
         parseFilesAndFlags(tail)
       case "--backend" :: "princess" :: tail =>
         parseFilesAndFlags(tail)
@@ -221,6 +225,9 @@ object CommandLineOptions {
         parseFilesAndFlags(tail)
       case "--backend" :: "verma" :: tail =>
         backend = ChooseVerma
+        parseFilesAndFlags(tail)
+      case "--dump-equations" :: directory :: tail =>
+        dumpEquationDir = Some(new File(directory))
         parseFilesAndFlags(tail)
       case "--backend" :: other :: _ =>
         throw new IllegalArgumentException(s"Unknown backend: $other!")
@@ -260,7 +267,8 @@ object CommandLineOptions {
       backend = backend,
       checkTermSat = !noCheckTermSat,
       checkIntermediateSat = !noCheckIntermediateSat,
-      eliminateQuantifiers = !noEliminateQuantifiers
+      eliminateQuantifiers = !noEliminateQuantifiers,
+      dumpEquationDir = dumpEquationDir
     )
   }
 }

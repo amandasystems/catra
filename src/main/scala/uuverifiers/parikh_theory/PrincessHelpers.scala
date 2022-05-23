@@ -11,12 +11,8 @@ import ap.theories._
 import ap.terfor.conjunctions.ReduceWithConjunction
 import uuverifiers.common.{Automaton, Tracing, Transition}
 
-import scala.util.Try
-import scala.util.Success
-import ap.{SimpleAPI, terfor}
+import ap.terfor
 import uuverifiers.catra.Counter
-
-import scala.util.Failure
 
 trait NoFunctions {
   val functionPredicateMapping

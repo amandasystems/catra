@@ -4,9 +4,12 @@ import uuverifiers.common.{Automaton, NrTransitionsOrdering}
 import ap.SimpleAPI
 import SimpleAPI.ProverStatus
 import ap.basetypes.LeftistHeap
+import ap.parser.IFormula
 import ap.terfor.{ConstantTerm, TermOrder}
+import uuverifiers.common.Tex.formulaToTex
 import uuverifiers.parikh_theory.VariousHelpers.transitionsIncrementRegisters
 
+import java.io.{BufferedWriter, File, FileWriter}
 import scala.annotation.tailrec
 
 private class ProductQueue(private val queue: LeftistHeap[Automaton, _]) {
@@ -35,6 +38,14 @@ class VermaBackend(override val arguments: CommandLineOptions)
     arguments.dumpGraphvizDir.foreach(
       dir => a.dumpDotFile(dir, s"${a.name}.dot")
     )
+
+  private def handleDumpingFlow(a: Automaton, eq: IFormula): Unit =
+    arguments.dumpEquationDir.foreach { dir =>
+      val file = new FileWriter(new File(dir, s"${a.name}.flow.tex"))
+      val bw = new BufferedWriter(file)
+      bw.write(formulaToTex(eq))
+      bw.close()
+    }
 
   private def logDecision(msg: String): Unit = if (arguments.printDecisions) {
     System.err.println(msg)
@@ -106,15 +117,15 @@ class VermaBackend(override val arguments: CommandLineOptions)
       newProduct: Automaton
   ): Unit = {
     implicit val order: TermOrder = p.order
-
-    p.addAssertion(
-      trace("partial product Parikh image")(
-        newProduct.parikhImage(
-          transitionsIncrementRegisters(newProduct, counterToSolverConstant)(_),
-          quantElim = arguments.eliminateQuantifiers
-        )
+    val parikhImageIsConsistent = trace("partial product Parikh image")(
+      newProduct.parikhImage(
+        transitionsIncrementRegisters(newProduct, counterToSolverConstant)(_),
+        quantElim = arguments.eliminateQuantifiers
       )
     )
+
+    handleDumpingFlow(newProduct, p asIFormula parikhImageIsConsistent)
+    p.addAssertion(parikhImageIsConsistent)
   }
 
   private def computeProductStep(

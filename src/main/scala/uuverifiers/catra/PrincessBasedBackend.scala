@@ -3,7 +3,7 @@ package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import uuverifiers.common.Tracing
-import scala.util.{Success, Failure, Try}
+import scala.util.{Success, Try}
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
 
