@@ -7,7 +7,31 @@ case object Valid extends ValidationResult
 sealed case class Invalid(motivation: String) extends ValidationResult
 
 trait InputValidating {
-  // TODO ensure register offsets only increment declared registers
+
+  private def warnUndeclaredCounter(usedHow: String)(undeclaredCounter: Counter) =
+    Invalid(s"Counter $undeclaredCounter $usedHow but never declared")
+
+  private def undeclaredCounter(i: Instance)(c: Counter): Boolean =
+    !(i.counters contains c)
+
+  private def onlyDeclaredCountersIncremented(i: Instance): ValidationResult = {
+    i.automataProducts
+      .flatMap(automata => automata.flatMap(_.counters()))
+      .find(undeclaredCounter(i))
+      .map(warnUndeclaredCounter("incremented"))
+      .getOrElse(Valid)
+  }
+
+  private def onlyDeclaredCountersUsedInConstraints(
+      i: Instance
+  ): ValidationResult = {
+    i.constraints
+      .flatMap(f => f.counters())
+      .find(undeclaredCounter(i))
+      .map(warnUndeclaredCounter("constrained"))
+      .getOrElse(Valid)
+  }
+
   // FIXME warn about empty groups!
   /**
    * Ensure that each automata has unique counter values.
@@ -46,7 +70,11 @@ trait InputValidating {
   }
 
   private def rules: Seq[Instance => ValidationResult] =
-    Seq(noOverlappingCounters)
+    Seq(
+      onlyDeclaredCountersIncremented,
+      onlyDeclaredCountersUsedInConstraints,
+      noOverlappingCounters
+    )
 
   @tailrec
   private def applyRules(

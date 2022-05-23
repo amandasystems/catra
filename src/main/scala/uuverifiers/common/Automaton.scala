@@ -23,6 +23,8 @@ trait Automaton
     with Graphable[State, SymbolicLabel]
     with GraphvizDumper {
 
+  def name: String = s"a${hashCode()}"
+
   /**
    * Iterate over automaton states
    */
@@ -95,15 +97,15 @@ trait Automaton
     val builder = new StringBuilder("digraph Automaton {")
     builder ++= "rankdir = LR;\n"
     builder ++= "initial [shape=plaintext,label=\"\"];\n"
-    builder ++= s"initial -> ${initialState.toPretty()};\n" // Add an incoming edge to the initial state
+    builder ++= s"initial -> ${initialState.toDotLabel()};\n" // Add an incoming edge to the initial state
 
     states.foreach { s =>
       val shape = if (isAccept(s)) "doublecircle" else "circle"
       val quotedState = quote(stateAnnotator(s))
-      builder ++= s"${s.toPretty()} [shape=${shape},label=${quotedState}];\n"
+      builder ++= s"${s.toDotLabel()} [shape=${shape},label=${quotedState}];\n"
       transitionsFrom(s).foreach { t =>
         val quotedLabel = quote(transitionAnnotator(t))
-        builder ++= s"${t.from().toPretty()} -> ${t.to().toPretty()} [label=${quotedLabel}]\n"
+        builder ++= s"${t.from().toDotLabel()} -> ${t.to().toDotLabel()} [label=${quotedLabel}]\n"
       }
     }
 
@@ -512,6 +514,7 @@ trait Automaton
     **/
   def productWith(that: Automaton): Automaton = {
     val productBuilder = AutomatonBuilder()
+    productBuilder nameIs s"${this.name}×${that.name}"
     val knownProductStates = mutable.HashSet[ProductState]()
     val statesToVisit = mutable.Queue[ProductState]()
 

@@ -37,8 +37,12 @@ sealed case class CommandLineOptions(
     trace: Boolean,
     printDecisions: Boolean,
     runMode: RunMode,
-    backend: BackendSelection
+    backend: BackendSelection,
+    checkTermSat: Boolean,
+    checkIntermediateSat: Boolean,
+    eliminateQuantifiers: Boolean
 ) {
+
   def getBackend(): Backend = backend match {
     case ChoosePrincess => new PrincessBackend(this)
     case ChooseNuxmv    => new NUXMVBackend(this)
@@ -87,6 +91,9 @@ object CommandLineOptions {
   private var dumpSMTDir: Option[File] = None
   private var dumpGraphvizDir: Option[File] = None
   private var backend: BackendSelection = ChoosePrincess
+  private var noCheckTermSat = true
+  private var noCheckIntermediateSat = true
+  private var noEliminateQuantifiers = true
 
   private val usage =
     s"""
@@ -108,6 +115,28 @@ object CommandLineOptions {
                              Default: ${backend}.
       --dump-graphviz <directory> -- dump automata encountered while solving
                             into this directory. Default is disabled.
+
+    For specific back-ends:
+
+      Verma:
+      --no-check-term-sat -- Check first if the terms of the product alone are
+                        unsatisfiable. This corresponds to over-approximating the
+                        Parikh image to the conjunction of the images, but leaves
+                        the produced clauses in the solver, allowing it to detect
+                        clashes with intermittent products. Penalises satisfiable
+                        instances. Default: $noCheckTermSat. Quantifier Elimination
+                        suggested.
+      --no-check-intermediate-sat -- Check if each intermediate product is
+                        satisifiable before continuing. Penalises satisifiable
+                        instances. Default: $noCheckIntermediateSat. Quantifier
+                        elimination suggested.
+      --no-eliminate-quantifiers -- Perform quantifier elimination before adding
+                        the clauses representing the Parikh image to Princess.
+                        This takes time, in particular for large clauses, and
+                        penalises satisfiable instances. Default: $noEliminateQuantifiers
+      Note: for maximally lazy computation (and to maximally prioritise satisifiable
+                        instances), set all these to false.
+
     Environment variables:
       CATRA_TRACE -- if set to "true", enable very very verbose logging 🐌
   """
@@ -162,42 +191,42 @@ object CommandLineOptions {
       case Nil                       =>
       case "--" :: tail              => parseFilesAndFlags(tail)
       case "--help" :: _ | "-h" :: _ => throw new Exception(usage)
-      case "--print-decisions" :: tail => {
+      case "--print-decisions" :: tail =>
         printDecisions = true
         parseFilesAndFlags(tail)
-      }
-
-      case "--trace" :: tail => {
+      case "--trace" :: tail =>
         trace = true
         parseFilesAndFlags(tail)
-      }
-      case "--timeout" :: milliseconds :: tail => {
+      case "--timeout" :: milliseconds :: tail =>
         timeout_ms = Some(milliseconds.toLong)
         parseFilesAndFlags(tail)
-      }
-      case "--dump-smt" :: directory :: tail => {
+      case "--dump-smt" :: directory :: tail =>
         dumpSMTDir = Some(new File(directory))
         parseFilesAndFlags(tail)
-      }
-      case "--dump-graphviz" :: directory :: tail => {
+      case "--dump-graphviz" :: directory :: tail =>
         dumpGraphvizDir = Some(new File(directory))
         parseFilesAndFlags(tail)
-      }
-
-      case "--backend" :: "princess" :: tail => {
+      case "--no-check-term-sat" :: tail =>
+        noCheckTermSat = false
         parseFilesAndFlags(tail)
-      }
-      case "--backend" :: "nuxmv" :: tail => {
+      case "--no-check-intermediate-sat" :: tail =>
+        noCheckIntermediateSat = false
+        parseFilesAndFlags(tail)
+      case "--no-eliminate-quantifiers" :: tail =>
+        noEliminateQuantifiers = false
+        parseFilesAndFlags(tail)
+      case "--backend" :: "princess" :: tail =>
+        parseFilesAndFlags(tail)
+      case "--backend" :: "nuxmv" :: tail =>
         backend = ChooseNuxmv
         parseFilesAndFlags(tail)
-      }
-      case "--backend" :: "verma" :: tail => {
+      case "--backend" :: "verma" :: tail =>
         backend = ChooseVerma
         parseFilesAndFlags(tail)
-      }
-      case "--backend" :: other :: _ => {
+      case "--backend" :: other :: _ =>
         throw new IllegalArgumentException(s"Unknown backend: ${other}!")
-      }
+      case option :: _ if (option.matches("--.*")) =>
+        throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail => {
         inputFiles ++= expandFileNameOrDirectoryOrGlob(other)
         parseFilesAndFlags(tail)
@@ -230,7 +259,10 @@ object CommandLineOptions {
       dumpSMTDir = dumpSMTDir,
       dumpGraphvizDir = dumpGraphvizDir,
       runMode = runMode,
-      backend = backend
+      backend = backend,
+      checkTermSat = !noCheckTermSat,
+      checkIntermediateSat = !noCheckIntermediateSat,
+      eliminateQuantifiers = !noEliminateQuantifiers
     )
   }
 }

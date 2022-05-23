@@ -16,6 +16,7 @@ sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
     value
   override def negate(): Constant = Constant(value * -1)
+  override def counters(): Set[Counter] = Set.empty
 }
 
 sealed case class Counter(name: String) extends Term {
@@ -27,6 +28,8 @@ sealed case class Counter(name: String) extends Term {
     counterConstants(this)
   override def negate(): CounterWithCoefficient =
     CounterWithCoefficient(-1, this)
+
+  override def counters(): Set[Counter] = Set(this)
 }
 
 sealed abstract class Atom extends Formula {
@@ -56,6 +59,8 @@ sealed case class Inequality(
       case NotEquals          => left =/= right
     }
   }
+
+  override def counters() = lhs.counters() union rhs.counters()
 }
 
 sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
@@ -63,11 +68,13 @@ sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula = IBoolLit(isTrue)
+  override def counters(): Set[Counter] = Set.empty
 }
 
 sealed trait Term {
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm
   def negate(): Term
+  def counters(): Set[Counter]
 }
 sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
     extends Term {
@@ -76,6 +83,7 @@ sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
   override def negate(): Term =
     if (coefficient == -1) counter
     else CounterWithCoefficient(coefficient * -1, counter)
+  override def counters(): Set[Counter] = Set(counter)
 }
 
 sealed case class Sum(terms: Seq[Term]) extends Term {
@@ -84,7 +92,7 @@ sealed case class Sum(terms: Seq[Term]) extends Term {
   ): ITerm = terms.map(_.toPrincess(counterConstants)).reduce(_ +++ _)
 
   def negate(): Sum = Sum(terms.map(_.negate()))
-
+  override def counters(): Set[Counter] = terms.flatMap(_.counters()).toSet
 }
 
 sealed trait InequalitySymbol
@@ -98,6 +106,7 @@ case object NotEquals extends InequalitySymbol
 sealed trait Formula extends DocumentFragment {
   def negated(): Formula
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
+  def counters(): Set[Counter]
 }
 
 sealed case class And(left: Formula, right: Formula) extends Formula {
@@ -106,7 +115,7 @@ sealed case class And(left: Formula, right: Formula) extends Formula {
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula =
     left.toPrincess(counterConstants) &&& right.toPrincess(counterConstants)
-
+  override def counters() = left.counters() union right.counters()
 }
 sealed case class Or(left: Formula, right: Formula) extends Formula {
   override def negated() = And(left.negated(), right.negated())
@@ -114,6 +123,7 @@ sealed case class Or(left: Formula, right: Formula) extends Formula {
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula =
     left.toPrincess(counterConstants) ||| right.toPrincess(counterConstants)
+  override def counters() = left.counters() union right.counters()
 }
 
 sealed trait AutomatonFragment
@@ -140,8 +150,9 @@ class InputFileParser extends Tracing {
 
   private val interner = new Interner()
 
-  def automatonFromFragments(fragments: Seq[AutomatonFragment]): Automaton = {
+  def automatonFromFragments(name: String, fragments: Seq[AutomatonFragment]): Automaton = {
     val builder = AutomatonBuilder()
+    builder nameIs name
 
     interner.freshNamespace()
 
@@ -304,14 +315,11 @@ class InputFileParser extends Tracing {
       }
 
   def constraintDefinition[_ : P]: P[Formula] = P("constraint" ~/ formula)
-  def automatonBody[_ : P]: P[Automaton] =
-    P("{" ~ (init | accepting | transition).rep ~ "}")
-      .map(automatonFromFragments(_))
 
   def automatonDefinition[_ : P]: P[Automaton] =
-    P("automaton" ~/ identifier ~ automatonBody).map {
-      case (_, automaton) => automaton // FIXME use the name, somehow!
-    }
+    P(
+      "automaton" ~/ identifier ~ "{" ~ (init | accepting | transition).rep ~ "}"
+    ).map { case (name, fragments) => automatonFromFragments(name, fragments) }
 
   /**
    * An identifer is any combination of letters and numbers, starting with a

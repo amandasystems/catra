@@ -3,4 +3,4 @@
 JVM_OPTS=-Xmx6g
 CATRA_VERSION=0.1.0-SNAPSHOT 
 
-java ${JVM_OPTS} -jar target/scala-2.13/catra-assembly-${CATRA_VERSION}.jar $@ 
+java ${JVM_OPTS} -jar target/scala-2.13/uuverifiers/catra-assembly-${CATRA_VERSION}.jar $@ 

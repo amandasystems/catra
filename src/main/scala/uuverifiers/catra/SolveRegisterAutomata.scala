@@ -83,19 +83,12 @@ object SolveRegisterAutomata extends App with Tracing {
       arguments: CommandLineOptions
   ): Try[Result] = {
     arguments.dumpGraphvizDir.foreach { dir =>
-      instance.automataProducts.zipWithIndex.foreach {
-        case (group, groupIdx) =>
-          group.zipWithIndex.foreach {
-            case (automaton, autIdx) =>
-              automaton.dumpDotFile(
-                dir,
-                s"input-automaton-$groupIdx-$autIdx.dot"
-              )
-            // TODO also annotate the automata with their counters, use real
-            // state names!
-          }
+      instance.automataProducts.flatten.foreach { automaton =>
+        automaton.dumpDotFile(dir, s"${automaton.name}.dot")
+      // TODO also annotate the automata with their counters, use real state names!
       }
     }
+
     arguments.runMode match {
       case FindImage    => arguments.getBackend().findImage(instance)
       case SolveSatisfy => arguments.getBackend().solveSatisfy(instance)

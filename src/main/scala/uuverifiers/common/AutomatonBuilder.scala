@@ -10,6 +10,7 @@ class AutomatonBuilder extends Tracing {
   private var _accepting = Set[State]()
   private var forwardReachable = Set[State]()
   private var backwardReachable = Set[State]()
+  private var name: Option[String] = None
 
   /**
    * Transitively set s and any state reachable when starting in s as reachable.
@@ -92,6 +93,11 @@ class AutomatonBuilder extends Tracing {
 
       backwardReachable
     }
+
+  def nameIs(n: String): AutomatonBuilder = {
+    this.name = Some(n)
+    this
+  }
 
   def containsState(s: State): Boolean = _autStates contains s
 
@@ -176,7 +182,7 @@ class AutomatonBuilder extends Tracing {
         .mapValues(ts => ts.filter(backwardReachable contains _.to()))
         .toMap
 
-    new Aut(_initial.get, _accepting, reachableTransitions, _autStates)
+    new Aut(_initial.get, _accepting, reachableTransitions, _autStates, name)
   }
 }
 
@@ -184,12 +190,14 @@ sealed private class Aut(
     initial: State,
     accepting: Set[State],
     _transitions: Map[State, Set[Transition]],
-    override val states: Set[State]
+    override val states: Set[State],
+    _name: Option[String]
 ) extends Automaton {
   override def transitionsFrom(from: State): Seq[Transition] =
     _transitions.getOrElse(from, Seq()).toSeq
   override val initialState: State = initial
   override def isAccept(s: State): Boolean = accepting contains s
+  override def name(): String = _name.getOrElse(super.name)
 }
 
 object AutomatonBuilder {
