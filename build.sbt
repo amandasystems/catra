@@ -15,6 +15,10 @@ ThisBuild / scalacOptions ++= Seq(
   "-opt-inline-from:**",
   "-opt:l:method",
   "-opt:l:inline",
+  "-opt:unreachable-code",
+  "-opt:copy-propagation",
+  "-opt:redundant-casts",
+  "-opt:box-unbox",
   "-Ywarn-dead-code",
   "-Ywarn-unused"
 )

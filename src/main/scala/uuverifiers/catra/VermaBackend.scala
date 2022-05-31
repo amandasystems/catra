@@ -51,6 +51,29 @@ class VermaBackend(override val arguments: CommandLineOptions)
     System.err.println(msg)
   }
 
+  @tailrec
+  final private def incrementallyMaterialiseProducts(
+      p: SimpleAPI,
+      counterToSolverConstant: Map[Counter, ConstantTerm],
+      satStatus: SimpleAPI.ProverStatus.Value,
+      productsLeft: Seq[Seq[Automaton]]
+  ): Unit = (productsLeft, satStatus) match {
+    case (_, ProverStatus.Unsat) => ()
+    case (Seq(), _)              => ()
+    case (terms +: remainingProducts, _) =>
+      incrementallyComputeProduct(
+        p,
+        counterToSolverConstant,
+        ProductQueue(terms)
+      )
+      incrementallyMaterialiseProducts(
+        p,
+        counterToSolverConstant,
+        p.checkSat(block = true),
+        remainingProducts
+      )
+  }
+
   override def prepareSolver(
       p: SimpleAPI,
       instance: Instance
@@ -73,21 +96,17 @@ class VermaBackend(override val arguments: CommandLineOptions)
       instance.automataProducts.flatten
     } else Seq()
 
-    val termsAreSat = checkTermsCoherent(
+    incrementallyMaterialiseProducts(
       p,
       counterToSolverConstant,
-      termsToCheckSat
+      satStatus = checkTermsCoherent(
+        p,
+        counterToSolverConstant,
+        termsToCheckSat
+      ),
+      instance.automataProducts
     )
-    if (termsAreSat != ProverStatus.Unsat) {
-      instance.automataProducts.foreach(
-        terms =>
-          incrementallyComputeProduct(
-            p,
-            counterToSolverConstant,
-            ProductQueue(terms)
-          )
-      )
-    }
+
     counterToSolverConstant
   }
 

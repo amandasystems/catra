@@ -22,6 +22,11 @@ sealed case class IntState(id: Int) extends State with Ordered[IntState] {
   override def toPretty(): String = s"s$id"
 }
 
+sealed class StringState(label: String) extends State {
+  override def toPretty(): String = label
+  override def toDotLabel(): String = label
+}
+
 object IntState {
   def apply(range: Range): IndexedSeq[IntState] = range.map(IntState(_))
   def apply(ids: Int*): Seq[IntState] = ids.map(IntState(_))

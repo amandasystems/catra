@@ -3,15 +3,15 @@ package uuverifiers.common
 import uuverifiers.catra.Counter
 
 sealed trait Transition {
-  def isSelfLoop(): Boolean = from == to
+  def isSelfLoop(): Boolean = from() == to()
   def intersect[T <: Transition](that: T): Option[ProductTransition]
   def from(): State
   def to(): State
   def label(): SymbolicLabel
-  def affectsCounters(): Set[Counter] = ???
-  def increments(_c: Counter): Option[Int] = ???
-  def isProductOf(_that: Transition): Boolean = ???
-  def originTransitions(): Option[(Transition, Transition)] = ???
+  def affectsCounters(): Set[Counter]
+  def increments(_c: Counter): Option[Int]
+  def isProductOf(_that: Transition): Boolean
+  def originTransitions(): Option[(Transition, Transition)]
 
   /**
    * Add this set of counter increments to this transition, making it a
@@ -32,13 +32,19 @@ sealed class SymbolicTransition(
       that: T
   ): Option[ProductTransition] = {
     val newTransition = new ProductTransition(this, that)
-    if (!newTransition.label.isEmpty)
+    if (!newTransition.label().isEmpty())
       Some(newTransition)
     else None
   }
+
+  override def affectsCounters(): Set[Counter] = ???
   override def from(): State = _from
   override def to(): State = _to
   override def label(): SymbolicLabel = _label
+  override def toString(): String = s"${from()} =${label()}=> ${to()}"
+  override def increments(_c: Counter): Option[Int] = ???
+  override def isProductOf(_that: Transition): Boolean = ???
+  override def originTransitions(): Option[(Transition, Transition)] = ???
 }
 object Transition {
   def unapply(t: Transition): Some[(State, SymbolicLabel, State)] =
@@ -91,4 +97,6 @@ sealed class ProductTransition(
     case i @ Some(_) => i
     case None        => right increments c
   }
+
+  override def toString(): String = left.toString() + "&&" + right.toString()
 }

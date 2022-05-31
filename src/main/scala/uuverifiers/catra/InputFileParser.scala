@@ -2,15 +2,16 @@ package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import ap.parser.{IBoolLit, IFormula, ITerm, ITimes}
-
 import uuverifiers.common.{
   Automaton,
   AutomatonBuilder,
   Counting,
-  IntState,
+  StringState,
   SymbolicLabel,
   Tracing
 }
+
+import scala.collection.mutable
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -60,7 +61,7 @@ sealed case class Inequality(
     }
   }
 
-  override def counters() = lhs.counters() union rhs.counters()
+  override def counters(): Set[Counter] = lhs.counters() union rhs.counters()
 }
 
 sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
@@ -110,20 +111,20 @@ sealed trait Formula extends DocumentFragment {
 }
 
 sealed case class And(left: Formula, right: Formula) extends Formula {
-  override def negated() = Or(left.negated(), right.negated())
+  override def negated(): Or = Or(left.negated(), right.negated())
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula =
     left.toPrincess(counterConstants) &&& right.toPrincess(counterConstants)
-  override def counters() = left.counters() union right.counters()
+  override def counters(): Set[Counter] = left.counters() union right.counters()
 }
 sealed case class Or(left: Formula, right: Formula) extends Formula {
-  override def negated() = And(left.negated(), right.negated())
+  override def negated(): And = And(left.negated(), right.negated())
   override def toPrincess(
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula =
     left.toPrincess(counterConstants) ||| right.toPrincess(counterConstants)
-  override def counters() = left.counters() union right.counters()
+  override def counters(): Set[Counter] = left.counters() union right.counters()
 }
 
 sealed trait AutomatonFragment
@@ -148,33 +149,32 @@ class InputFileParser extends Tracing {
   import fastparse._
   import JavaWhitespace._
 
-  private val interner = new Interner()
-
-  def automatonFromFragments(name: String, fragments: Seq[AutomatonFragment]): Automaton = {
+  def automatonFromFragments(
+      name: String,
+      fragments: Seq[AutomatonFragment]
+  ): Automaton = {
     val builder = AutomatonBuilder()
     builder nameIs name
 
-    interner.freshNamespace()
+    val nameToState = new mutable.HashMap[String, StringState]()
+
+    def stateWith(name: String) =
+      nameToState.getOrElseUpdate(name, new StringState(name))
 
     for (fragment <- fragments) {
       fragment match {
-        case AcceptingStates(names) => {
-          val nameIds = names.map(interner.getOrUpdate(_)).map(IntState(_))
-          builder.addStates(nameIds)
-          nameIds.foreach(builder.setAccepting(_))
-        }
-        case InitialState(name) => {
-          builder.addStates(Seq(IntState(interner.getOrUpdate(name))))
-          builder.setInitial(IntState(interner.getOrUpdate(name)))
-        }
-        case Transition(from, to, label, counterIncrements) => {
-          val fromIdx = IntState(interner.getOrUpdate(from))
-          val toIdx = IntState(interner.getOrUpdate(to))
-          builder.addStates(Seq(fromIdx, toIdx))
+        case AcceptingStates(names) =>
+          val nameStates = names.map(stateWith)
+          builder.addStates(nameStates)
+          nameStates.foreach(builder.setAccepting(_))
+        case InitialState(name) =>
+          builder.addState(stateWith(name))
+          builder.setInitial(stateWith(name))
+        case Transition(from, to, label, counterIncrements) =>
+          builder.addStates(Seq(stateWith(from), stateWith(to)))
           builder.addTransition(
-            Counting(fromIdx, label, counterIncrements, toIdx)
+            Counting(stateWith(from), label, counterIncrements, stateWith(to))
           )
-        }
       }
     }
     builder.getAutomaton()
@@ -189,9 +189,8 @@ class InputFileParser extends Tracing {
       for (fragment <- fragments) {
         fragment match {
           case AutomatonGroup(a) if a.isEmpty => ()
-          case AutomatonGroup(group) => {
+          case AutomatonGroup(group) =>
             groupedAutomata = groupedAutomata.appended(group)
-          }
           case cs: CounterDefinition => counters ++= cs.counters
           case f: Formula            => constraints ::= f
         }
@@ -360,27 +359,5 @@ object InputFileParser {
     ap.util.Timeout.withTimeoutMillis(10000) {
       fastparse.parse(s, p.parser(_))
     } { fastparse.parse("parsing timeout", p.parser(_)) }
-  }
-}
-
-class Interner {
-  var currentIndex = 0
-  var nameToStateIdx: Map[String, Int] = Map()
-  var namespaceOffset = 0
-
-  def freshNamespace() = {
-    namespaceOffset += 1
-  }
-
-  def getOrUpdate(name: String): Int = {
-    val expandedName = s"${namespaceOffset}.${name}"
-    nameToStateIdx.get(expandedName) match {
-      case Some(index) => index
-      case None => {
-        nameToStateIdx += (expandedName -> currentIndex)
-        currentIndex += 1
-        currentIndex - 1
-      }
-    }
   }
 }
