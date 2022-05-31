@@ -3,7 +3,8 @@ package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import uuverifiers.common.Tracing
-import scala.util.{Success, Try}
+
+import scala.util.{Failure, Success, Try}
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
 
@@ -37,23 +38,31 @@ trait PrincessBasedBackend extends Backend with Tracing {
         SimpleAPI.withProver(dumpSMT = true, dumpDirectory = dumpDir)(f)
     }
 
-  override def findImage(instance: Instance) = withProver { p =>
-    val counterToSolverConstant = prepareSolver(p, instance)
-    p.makeExistentialRaw(counterToSolverConstant.values)
-    p.setMostGeneralConstraints(true)
-    // TODO handle responses here
-    println(s"Solver status: ${p.checkSat(true)}")
-    val parikhImage: IFormula = (~p.getMinimisedConstraint).notSimplify
-    // TODO: translate to our representation
-    println(s"Got Parikh image: ${parikhImage}")
-    Success(Unsat) // FIXME: this is a mock value!
+  override def findImage(instance: Instance): Try[ImageResult] = withProver {
+    p =>
+      val counterToSolverConstant = prepareSolver(p, instance)
+      p.makeExistentialRaw(counterToSolverConstant.values)
+      p.setMostGeneralConstraints(true)
+      p.checkSat(block = true) match {
+        case ProverStatus.Sat =>
+          val parikhImage: IFormula = (~p.getMinimisedConstraint).notSimplify
+          Success(new ImageResult {
+            override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
+            override val name: String = s"non-empty image $parikhImage" // FIXME
+          })
+        case ProverStatus.Unsat       => Success(Unsat)
+        case ProverStatus.OutOfMemory => Success(OutOfMemory)
+        case otherStatus =>
+          Failure(new Exception(s"unexpected solver status: $otherStatus"))
+      }
+
   }
 
   private def checkSolutions(p: SimpleAPI, instance: Instance)(
       counterToSolverConstant: Map[Counter, ConstantTerm]
   ): SatisfactionResult = {
     trace("final sat status")(p.checkSat(block = true)) match {
-      case ProverStatus.Sat | ProverStatus.Valid => {
+      case ProverStatus.Sat | ProverStatus.Valid =>
         Sat(
           instance.counters
             .map(
@@ -61,11 +70,10 @@ trait PrincessBasedBackend extends Backend with Tracing {
             )
             .toMap
         )
-      }
       case ProverStatus.Unsat       => Unsat
       case ProverStatus.OutOfMemory => OutOfMemory
       case otherStatus =>
-        throw new Exception(s"unexpected solver status: ${otherStatus}")
+        throw new Exception(s"unexpected solver status: $otherStatus")
     }
   }
 
