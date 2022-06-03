@@ -5,6 +5,8 @@ sealed abstract class SymbolicLabel
     extends Product
     with Serializable
     with Ordered[SymbolicLabel] {
+  def toDotDescription(): String = toString()
+
   def iterate(): Iterator[Char]
   def subtract(that: SymbolicLabel): SymbolicLabel
   def intersect(that: SymbolicLabel): SymbolicLabel

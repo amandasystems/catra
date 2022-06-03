@@ -83,8 +83,8 @@ trait Automaton
 
   def toDot() =
     toDot(
-      transitionAnnotator = _.label().toString(),
-      stateAnnotator = _.toPretty()
+      transitionAnnotator = _.toDotDescription(),
+      stateAnnotator = _.toDotDescription()
     )
 
   def toDot(
@@ -97,15 +97,15 @@ trait Automaton
     val builder = new StringBuilder("digraph Automaton {")
     builder ++= "rankdir = LR;\n"
     builder ++= "initial [shape=plaintext,label=\"\"];\n"
-    builder ++= s"initial -> ${initialState.toDotLabel()};\n" // Add an incoming edge to the initial state
+    builder ++= s"initial -> ${initialState.toDotIdentifier()};\n" // Add an incoming edge to the initial state
 
     states.foreach { s =>
       val shape = if (isAccept(s)) "doublecircle" else "circle"
       val quotedState = quote(stateAnnotator(s))
-      builder ++= s"${s.toDotLabel()} [shape=${shape},label=${quotedState}];\n"
+      builder ++= s"${s.toDotIdentifier()} [shape=${shape},label=${quotedState}];\n"
       transitionsFrom(s).foreach { t =>
         val quotedLabel = quote(transitionAnnotator(t))
-        builder ++= s"${t.from().toDotLabel()} -> ${t.to().toDotLabel()} [label=${quotedLabel}]\n"
+        builder ++= s"${t.from().toDotIdentifier()} -> ${t.to().toDotIdentifier()} [label=${quotedLabel}]\n"
       }
     }
 
@@ -208,8 +208,8 @@ trait Automaton
     )
     val M = N + zVars.size
     val finalVars =
-      (for ((state, num) <- (stateSeq filter (isAccept _)).zipWithIndex)
-        yield (state2Index(state) -> v(num + M))).toMap
+      (for ((state, num) <- (stateSeq filter isAccept _).zipWithIndex)
+        yield state2Index(state) -> v(num + M)).toMap
 
     val bFormula =
       trace("bridging formula")(
@@ -222,7 +222,7 @@ trait Automaton
 
     // equations relating the production counters
     val prodEqs =
-      (for (state <- 0 until stateSeq.size) yield {
+      (for (state <- stateSeq.indices) yield {
         LinearCombination(
           (for (t <- finalVars get state) yield (IdealInt.ONE, t)) ++
             (if (state == initialStateInd)
@@ -252,15 +252,15 @@ trait Automaton
     val prodImps =
       trace("production implications")(
         (for ((Transition(_, _, to), prodVar) <- transitions.iterator zip prodVars.iterator)
-          yield ((prodVar === 0) | (zVars(state2Index(to)) > 0))).toList
+          yield (prodVar === 0) | (zVars(state2Index(to)) > 0)).toList
       )
 
     // connective
     val zImps =
-      trace("z-implications")((for (state <- 0 until stateSeq.size) yield {
+      trace("z-implications")((for (state <- stateSeq.indices) yield {
         disjFor(
           Iterator(zVars(state) === 0) ++
-            (for (t <- finalVars get state) yield (t === 1)) ++
+            (for (t <- finalVars get state) yield t === 1) ++
             (for ((Transition(from, _, to), prodVar) <- transitions.iterator zip prodVars.iterator;
                   if state2Index(from) == state;
                   toInd = state2Index(to))

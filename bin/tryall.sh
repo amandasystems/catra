@@ -1,6 +1,6 @@
 #!/bin/sh
 
-timeout=120000
+timeout=2000
 echo "++++++ Running all solvers +++++++"
 for backend in princess nuxmv verma;
 do

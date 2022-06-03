@@ -3,6 +3,7 @@ package uuverifiers.common
 import uuverifiers.catra.Counter
 
 sealed trait Transition {
+  def toDotDescription(): String
   def isSelfLoop(): Boolean = from() == to()
   def intersect[T <: Transition](that: T): Option[ProductTransition]
   def from(): State
@@ -41,6 +42,7 @@ sealed class SymbolicTransition(
   override def from(): State = _from
   override def to(): State = _to
   override def label(): SymbolicLabel = _label
+  override def toDotDescription(): String = label().toDotDescription()
   override def toString(): String = s"${from()} =${label()}=> ${to()}"
   override def increments(_c: Counter): Option[Int] = ???
   override def isProductOf(_that: Transition): Boolean = ???
@@ -61,6 +63,8 @@ sealed case class Counting(
     ) {
   override def affectsCounters(): Set[Counter] = counterIncrements.keySet
   override def increments(c: Counter): Option[Int] = counterIncrements.get(c)
+  private def fmtCounters(): String = counterIncrements.map{case (c, i) => s"$c += $i"} mkString ", "
+  override def toDotDescription(): String = s"${super.toDotDescription()} / ${fmtCounters()}"
 }
 
 object Counting {
@@ -85,6 +89,7 @@ sealed class ProductTransition(
       _to = left.to().intersect(right.to())
     ) {
 
+  override def toDotDescription(): String = s"${left.toDotDescription()} && ${right.toDotDescription()}"
   override def isProductOf(transition: Transition): Boolean =
     left == transition || right == transition
   override def originTransitions(): Option[(Transition, Transition)] =
