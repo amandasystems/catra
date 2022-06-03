@@ -25,13 +25,19 @@ sealed abstract class SymbolicLabel
 }
 
 object SymbolicLabel {
-  // TODO do something better; only escape characters that are unprintable
+  private def isPrintable(c: Char): Boolean = {
+    val block = Character.UnicodeBlock.of(c)
+    val notSpecial = (!Character.isISOControl(c)) && block != null && (block ne Character.UnicodeBlock.SPECIALS)
+    notSpecial && !c.isWhitespace
+  }
+
   private def formatChar(c: Char): String =
-    if (c.isLetterOrDigit) c.toString() else c.toInt.toString()
+    if (isPrintable(c)) c.toString() else c.toInt.toString()
   def apply() = NoChar
   def apply(c: Char) = SingleChar(c)
   def apply(fromInclusive: Char, toInclusive: Char) =
     (fromInclusive, toInclusive) match {
+      case (Char.MinValue, Char.MaxValue)    => AnyChar
       case _ if fromInclusive > toInclusive  => NoChar
       case _ if fromInclusive == toInclusive => SingleChar(fromInclusive)
       case _                                 => CharRange(fromInclusive, toInclusive)

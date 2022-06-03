@@ -63,7 +63,7 @@ sealed case class Counting(
     ) {
   override def affectsCounters(): Set[Counter] = counterIncrements.keySet
   override def increments(c: Counter): Option[Int] = counterIncrements.get(c)
-  private def fmtCounters(): String = counterIncrements.map{case (c, i) => s"$c += $i"} mkString ", "
+  private def fmtCounters(): String = counterIncrements.map{case (c, i) => s"${c.name} += $i"} mkString ", "
   override def toDotDescription(): String = s"${super.toDotDescription()} / ${fmtCounters()}"
 }
 
