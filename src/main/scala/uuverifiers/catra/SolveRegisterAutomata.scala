@@ -85,7 +85,6 @@ object SolveRegisterAutomata extends App with Tracing {
     arguments.dumpGraphvizDir.foreach { dir =>
       instance.automataProducts.flatten.foreach { automaton =>
         automaton.dumpDotFile(dir, s"${automaton.name}.dot")
-      // TODO also annotate the automata with their counters, use real state names!
       }
     }
 

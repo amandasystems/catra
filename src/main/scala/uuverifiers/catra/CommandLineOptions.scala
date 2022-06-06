@@ -257,7 +257,7 @@ object CommandLineOptions {
     parseMode(args.toList)
 
     CommandLineOptions(
-      inputFiles = inputFiles,
+      inputFiles = util.Random.shuffle(inputFiles),
       timeout_ms = timeout_ms,
       trace = trace,
       printDecisions = printDecisions,
