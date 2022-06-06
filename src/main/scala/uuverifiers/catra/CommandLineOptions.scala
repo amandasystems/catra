@@ -158,9 +158,7 @@ object CommandLineOptions {
             attrs: BasicFileAttributes
         ): FileVisitResult = {
           if (pathMatcher.matches(file)) {
-            matchingFiles = matchingFiles appended file
-              .toAbsolutePath()
-              .toString()
+            matchingFiles = matchingFiles appended relativeToHere(file.toFile)
           }
           CONTINUE
         }
@@ -173,15 +171,21 @@ object CommandLineOptions {
     matchingFiles
   }
 
+  private def relativeToHere(f: File): String = {
+    val here = Paths.get(new File(".").getCanonicalPath())
+    (here relativize Paths.get(f.getCanonicalPath())).toString
+  }
+
   private def expandFileNameOrDirectoryOrGlob(
       filePattern: String
   ): Seq[String] = {
     val expandedHomePath =
       Paths.get(filePattern.replaceFirst("^~", System.getProperty("user.home")))
 
+
     expandedHomePath.toFile() match {
       case f if f.isDirectory() => enumerateDirectory(expandedHomePath)
-      case f if f.exists()      => Seq(expandedHomePath.toString())
+      case f if f.exists()      => Seq(relativeToHere(f))
       case f =>
         Console.err.println(s"W: file $f does not exist; skipping!")
         Seq()

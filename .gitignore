@@ -10,3 +10,5 @@
 *.log
 /.bsp
 /.idea
+/eqs
+/graphs
