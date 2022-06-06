@@ -4,7 +4,7 @@ import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 
 import scala.util.{Failure, Success}
-import uuverifiers.common.{Counting, State, SymbolicLabel, Tracing}
+import uuverifiers.common.{State, SymbolicLabel, Tracing}
 
 import java.io.{
   BufferedReader,
@@ -31,7 +31,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
   val baseCommand = Array("nuxmv", "-int")
   val Unreachable = """^-- invariant block .* is true$""".r
   val Reachable = """^-- invariant block .* is false$""".r
-  val CounterValue = """^    counter_(\d+) = (\d+)$""".r
+  val CounterValue = """^ {4}counter_(\d+) = (\d+)$""".r
 
   val nuxmvCmd = arguments.timeout_ms match {
     case Some(timeout_ms) =>
@@ -55,7 +55,6 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
   val automataCounters: Seq[Seq[Seq[Counter]]] =
     for (auts <- automataProducts) yield for (a <- auts) yield {
       a.counters()
-        .toSet
         .toIndexedSeq
         .sortBy((c: Counter) => c.name)
     }
@@ -223,7 +222,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
       Console.withOut(out) {
         printNUXMVModule()
       }
-      out.close
+      out.close()
 
       val process = Runtime.getRuntime.exec(nuxmvCmd)
       val stdin = process.getOutputStream
@@ -235,7 +234,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
 
       def sendCommand(cmd: String): Unit = {
         stdinWriter.println(trace("nuxmv <<")(cmd))
-        stdinWriter.flush
+        stdinWriter.flush()
       }
 
       def readLine: String = stdoutReader.readLine
@@ -257,7 +256,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
         )
         while (cont) {
           cont = trace("nuxmv >>")(readLine) match {
-            case null => {
+            case null =>
               // The process has closed the stream. Wait for it to finish, but
               // don't wait for too long and kill it if it's too slow.
               val didExit = process.waitFor(1, TimeUnit.SECONDS)
@@ -266,34 +265,29 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
                 process.destroyForcibly().waitFor()
               }
               false // We're done!
-            }
-            case Unreachable() => {
+            case Unreachable() =>
               result = Success(Unsat)
               false // There's nothing more to parse.
-            }
             // TODO: parse the model
-            case Reachable() => {
+            case Reachable() =>
               result = Success(Sat(Map.empty))
               true // Capture the model assignment
-            }
-            case CounterValue(counter, value) => {
+            case CounterValue(counter, value) =>
               counterAssignments(counter.toInt) = new BigInteger(value)
               true
-            }
             case _ => true
           }
         }
         result match {
-          case Success(Sat(_)) => {
+          case Success(Sat(_)) =>
             Success(Sat(counters.zip(counterAssignments).toMap))
-          }
           case other => other
         }
       }
 
-      stdinWriter.close
-      stdoutReader.close
-      stderr.close
+      stdinWriter.close()
+      stdoutReader.close()
+      stderr.close()
 
       if (!trace("nuxmv still running?")(process.isAlive())) {
         // 124 is the exit with timeout code for timeout
