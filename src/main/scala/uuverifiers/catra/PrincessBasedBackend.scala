@@ -81,8 +81,12 @@ trait PrincessBasedBackend extends Backend with Tracing {
     trace("solveSatisfy result") {
       withProver { p =>
         arguments.runWithTimeout(p) {
-          val counterToConstants = prepareSolver(p, instance)
-          checkSolutions(p, instance)(counterToConstants)
+          try {
+            val counterToConstants = prepareSolver(p, instance)
+            checkSolutions(p, instance)(counterToConstants)
+          } catch {
+            case _: OutOfMemoryError => OutOfMemory
+          }
         }
       }
     }
