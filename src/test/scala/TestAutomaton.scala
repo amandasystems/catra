@@ -20,7 +20,7 @@ class TestAutomaton extends AnyFunSuite {
     }
   }
 
-  test("Verma Parikh image computation (empty automaton)") {
+  test("Baseline Parikh image computation (empty automaton)") {
     import ap.terfor.{Formula, TerForConvenience, Term}
     import TerForConvenience._
 
@@ -40,7 +40,7 @@ class TestAutomaton extends AnyFunSuite {
     }
   }
 
-  test("Verma Parikh image computation (trivial)") {
+  test("Baseline Parikh image computation (trivial)") {
     import ap.terfor.{Formula, TerForConvenience, Term}
     import TerForConvenience._
 
@@ -63,7 +63,7 @@ class TestAutomaton extends AnyFunSuite {
     }
   }
 
-  test("Verma Parikh image computation (fourStatePerTransitionWithLoop)") {
+  test("Baseline Parikh image computation (fourStatePerTransitionWithLoop)") {
     import ap.terfor.{Formula, TerForConvenience, Term}
     import TerForConvenience._
 

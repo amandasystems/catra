@@ -5,7 +5,7 @@ import pathlib
 import re
 import subprocess
 
-VERIFY_WITH_BACKEND = "princess"
+VERIFY_WITH_BACKEND = "lazy"
 LINE_RE = r"^==== (?P<instance>.*?): sat run: [0-9\.]+s parse: .*====$\n(?P<registers>(.+ = \d+$\n)+)"
 SAT_UNSAT_RE = re.compile(
     r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[0-9\.]+)s parse: .*===="

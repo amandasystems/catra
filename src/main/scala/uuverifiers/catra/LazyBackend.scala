@@ -6,7 +6,7 @@ import uuverifiers.common.Automaton
 import uuverifiers.parikh_theory.Context
 import ap.proof.theoryPlugins.Plugin
 
-class PrincessBackend(override val arguments: CommandLineOptions)
+class LazyBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
 
   private def traceDecision(

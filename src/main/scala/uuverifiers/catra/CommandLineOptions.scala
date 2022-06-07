@@ -16,15 +16,24 @@ import scala.util.Failure
 
 sealed trait BackendSelection
 
-case object ChoosePrincess extends BackendSelection {
-  override def toString: String = "princess"
+object BackendSelection {
+  def apply(name: String) =
+    Seq(ChooseLazy, ChooseNuxmv, ChooseBaseline)
+      .find(_.toString() == name)
+      .getOrElse {
+        throw new IllegalArgumentException(s"Unknown backend: $name!")
+      }
+}
+
+case object ChooseLazy extends BackendSelection {
+  override def toString: String = "lazy"
 }
 case object ChooseNuxmv extends BackendSelection {
   override def toString: String = "nuxmv"
 }
 
-case object ChooseVerma extends BackendSelection {
-  override def toString: String = "verma"
+case object ChooseBaseline extends BackendSelection {
+  override def toString: String = "baseline"
 }
 
 sealed trait RunMode
@@ -47,12 +56,14 @@ sealed case class CommandLineOptions(
 ) {
 
   def getBackend(): Backend = backend match {
-    case ChoosePrincess => new PrincessBackend(this)
+    case ChooseLazy     => new LazyBackend(this)
     case ChooseNuxmv    => new NUXMVBackend(this)
-    case ChooseVerma    => new VermaBackend(this)
+    case ChooseBaseline => new BaselineBackend(this)
   }
 
-  def runWithTimeout(p: SimpleAPI)(block: => SatisfactionResult): Try[SatisfactionResult] =
+  def runWithTimeout(
+      p: SimpleAPI
+  )(block: => SatisfactionResult): Try[SatisfactionResult] =
     try {
       timeout_ms match {
         case Some(timeout_ms) =>
@@ -90,7 +101,7 @@ object CommandLineOptions {
   private var inputFiles: Seq[String] = Seq()
   private var dumpSMTDir: Option[File] = None
   private var dumpGraphvizDir: Option[File] = None
-  private var backend: BackendSelection = ChoosePrincess
+  private var backend: BackendSelection = ChooseLazy
   private var noCheckTermSat = false
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
@@ -103,7 +114,7 @@ object CommandLineOptions {
     Available subcommands:
       solve-satisfy -- look for a satisfying solution
       find-image -- generate the full Parikh image in Presburger format
-    
+
     Available options (🐌 = likely to negatively impact performance):
       --trace -- generate a trace of the computation into trace.tex,
                   plus various .dot files. (default = $trace) 🐌
@@ -112,14 +123,14 @@ object CommandLineOptions {
       --dump-smt <directory> -- dump SMT commands into this directory
                                  (default = $dumpSMTDir) 🐌
       --backend <backend> -- choose which back-end to use.
-                             Available options are: nuxmv, princess, verma.
+                             Available options are: nuxmv, lazy, baseline.
                              Default: $backend.
       --dump-graphviz <directory> -- dump automata encountered while solving
                             into this directory. Default is disabled.
 
     For specific back-ends:
 
-      Verma:
+      Baseline:
       --dump-equations <directory> -- dump the flow equations of each consecutive
                         product (and all terms) as LaTeX equations into this directory.
       --no-check-term-sat -- Check first if the terms of the product alone are
@@ -136,7 +147,8 @@ object CommandLineOptions {
       --no-eliminate-quantifiers -- Perform quantifier elimination before adding
                         the clauses representing the Parikh image to Princess.
                         This takes time, in particular for large clauses, and
-                        penalises satisfiable instances. Default: $noEliminateQuantifiers
+                        penalises satisfiable instances. On the other hand it
+                        accelerates incremental querying. Default: $noEliminateQuantifiers
       Note: for maximally lazy computation (and to maximally prioritise satisifiable
                         instances), set all these to false.
 
@@ -182,7 +194,6 @@ object CommandLineOptions {
     val expandedHomePath =
       Paths.get(filePattern.replaceFirst("^~", System.getProperty("user.home")))
 
-
     expandedHomePath.toFile() match {
       case f if f.isDirectory() => enumerateDirectory(expandedHomePath)
       case f if f.exists()      => Seq(relativeToHere(f))
@@ -222,19 +233,12 @@ object CommandLineOptions {
       case "--no-eliminate-quantifiers" :: tail =>
         noEliminateQuantifiers = true
         parseFilesAndFlags(tail)
-      case "--backend" :: "princess" :: tail =>
-        parseFilesAndFlags(tail)
-      case "--backend" :: "nuxmv" :: tail =>
-        backend = ChooseNuxmv
-        parseFilesAndFlags(tail)
-      case "--backend" :: "verma" :: tail =>
-        backend = ChooseVerma
+      case "--backend" :: someBackendName :: tail =>
+        backend = BackendSelection(someBackendName)
         parseFilesAndFlags(tail)
       case "--dump-equations" :: directory :: tail =>
         dumpEquationDir = Some(new File(directory))
         parseFilesAndFlags(tail)
-      case "--backend" :: other :: _ =>
-        throw new IllegalArgumentException(s"Unknown backend: $other!")
       case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail =>

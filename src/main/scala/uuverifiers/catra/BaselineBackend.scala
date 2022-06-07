@@ -31,7 +31,7 @@ private object ProductQueue {
     } else None
   }
 }
-class VermaBackend(override val arguments: CommandLineOptions)
+class BaselineBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
 
   def handleDumpingGraphviz(a: Automaton): Unit =

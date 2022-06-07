@@ -39,18 +39,8 @@ trace.pdf: trace.tex ${DEPS} ${all_automata}
 
 .PHONY: experiments
 experiments:
-	./bin/catra solve-satisfy --backend nuxmv \
-				--timeout ${TIMEOUT_MS} \
-				> ${current_version}-nuxmv.log \
-				basket
-	./bin/catra solve-satisfy --timeout ${TIMEOUT_MS} \
-				> ${current_version}-catra.log \
-				basket
-	./bin/catra solve-satisfy --backend verma \
-				--timeout ${TIMEOUT_MS} \
-				> ${current_version}-verma.log \
-				basket
-
+	sbt assembly
+	./bin/experiments.sh --timeout ${TIMEOUT_MS} basket
 
 
 .PHONY: smoke-test
