@@ -53,7 +53,7 @@ for instance, results in instance_to_results.items():
     print(
         "\t\t".join(
             [
-                str(Path(instance).relative_to(os.getcwd())),
+                instance,
                 *[fmt_result(results[solver]) for solver in file_names],
             ]
         )
