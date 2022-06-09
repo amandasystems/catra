@@ -73,7 +73,7 @@ object SolveRegisterAutomata extends App with Tracing {
         )
         result.printRepresentation()
       case Failure(reason) =>
-        println(s"==== $instanceFile error: ${reason.getMessage} ===")
+        println(s"==== $instanceFile error: ${reason.getMessage} ====")
         reason.printStackTrace()
     }
   }

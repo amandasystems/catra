@@ -3,6 +3,7 @@ import math
 import sys
 import re
 from collections import Counter, defaultdict
+from typing import Dict
 
 LINE_RE = re.compile(
     r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[0-9\.]+)s parse: .*====$"
@@ -13,7 +14,7 @@ THRESHOLD_PERCENTAGE = 5.0
 file_names = sys.argv[1:]
 
 
-def parse_file(file_name) -> dict[str, tuple[str, float]]:
+def parse_file(file_name) -> Dict[str, tuple[str, float]]:
     results = dict()
     with open(file_name) as f:
         for line in f:
