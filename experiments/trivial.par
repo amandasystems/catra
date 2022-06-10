@@ -1,8 +1,8 @@
 counter int R1;
 synchronised {
-automaton value_0 {
-  init s0;
-  s0 -> s1 [32, 32] { R1 += 1 };
-  accepting s1;
-};
+  automaton value_0 {
+    init s0;
+    s0 -> s1 [32, 32] { R1 += 1 };
+    accepting s1;
+  };
 };

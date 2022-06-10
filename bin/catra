@@ -2,6 +2,6 @@
 
 JVM_OPTS=-Xmx15g
 CATRA_VERSION=0.1.0-SNAPSHOT
-SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}"; )" &> /dev/null && pwd 2> /dev/null; )";
+SCRIPT_DIR=$(dirname "$0")
 
 java ${JVM_OPTS} -jar ${SCRIPT_DIR}/../target/scala-2.13/uuverifiers/catra-assembly-${CATRA_VERSION}.jar $@ 
