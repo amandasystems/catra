@@ -10,7 +10,8 @@ import uuverifiers.catra.Counter
 
 class RegisterCounting(
     automata: Seq[Automaton],
-    actionHooks: Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq()
+    actionHooks: Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq(),
+    override val materialisationThreshold: Int = 5
 ) extends ParikhTheory {
   private val counters =
     automata

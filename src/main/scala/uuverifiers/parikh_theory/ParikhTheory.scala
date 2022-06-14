@@ -38,6 +38,13 @@ trait ParikhTheory
   val auts: IndexedSeq[Automaton]
 
   /**
+   * The number of unknown transitions for which to trigger materialising a product.
+   * 0 is maximally lazy and only triggers product materialisation when the status of
+   * all transitions is known.
+   */
+  val materialisationThreshold: Int = 20
+
+  /**
    * This method provides the "modulo" aspect by performing the translation from
    * a transition (usually really the transition's label) to a commutative
    * monoid (M).
@@ -128,7 +135,9 @@ trait ParikhTheory
       transitionAndTerms: IndexedSeq[(Transition, LinearCombination)]
   )(implicit order: TermOrder): Seq[Formula] = {
     val transitionMaskInstances =
-      transitionAndTerms.unzip._2.zipWithIndex
+      transitionAndTerms
+        .map(_._2)
+        .zipWithIndex
         .map {
           case (transitionTerm, transitionIdx) =>
             transitionMaskPredicate(
@@ -159,7 +168,7 @@ trait ParikhTheory
     trace(s"allowsMonoidValues($monoidValues)") {
       assert(
         monoidValues.length == this.monoidDimension,
-        s"got ${monoidValues.length} monoid values, monoid dimension is ${monoidDimension}"
+        s"got ${monoidValues.length} monoid values, monoid dimension is $monoidDimension"
       )
 
       trace(s"nr of automata: ${auts.size}")("")
@@ -178,7 +187,7 @@ trait ParikhTheory
       val shiftAwayFromQuantifiers =
         VariableShiftSubst.upShifter[Term](varFactory.variableCount(), order)
       val shiftedMonoidValues
-          : Seq[LinearCombination] = (monoidValues map shiftAwayFromQuantifiers) map (l _)
+          : Seq[LinearCombination] = (monoidValues map shiftAwayFromQuantifiers) map l _
 
       val clauses =
         auts.zipWithIndex.flatMap {
