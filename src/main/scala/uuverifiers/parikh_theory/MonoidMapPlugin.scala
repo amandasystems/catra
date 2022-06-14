@@ -1,13 +1,16 @@
 package uuverifiers.parikh_theory
-import ap.proof.theoryPlugins.Plugin
-import ap.terfor.preds.Atom
+import ap.parser.IExpression.Predicate
 import ap.proof.goal.Goal
+import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
-import scala.collection.mutable.ArrayBuffer
+import ap.terfor.TermOrder
 import ap.terfor.conjunctions.Conjunction
+import ap.terfor.preds.Atom
 import uuverifiers.common._
-import VariousHelpers.simplifyUnlessTimeout
+import uuverifiers.parikh_theory.VariousHelpers.simplifyUnlessTimeout
+
 import java.io.File
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -29,9 +32,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   }
 
   // A cache for materialised automata. The first ones are the same as auts.
-  val materialisedAutomata = ArrayBuffer[Automaton](theoryInstance.auts: _*)
+  val materialisedAutomata: ArrayBuffer[Automaton] = ArrayBuffer(
+    theoryInstance.auts: _*
+  )
 
-  override val procedurePredicate = theoryInstance.monoidMapPredicate
+  override val procedurePredicate: Predicate = theoryInstance.monoidMapPredicate
 
   private val stats = new Statistics()
 
@@ -104,65 +109,50 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
   }
 
+  private def chooseAutomataForMaterialisation(
+      context: Context
+  ): Option[(Int, Int)] = {
+    val rand =
+      ap.parameters.Param.RANDOM_DATA_SOURCE(context.goal.settings)
+
+    def aboveThreshold(auts: Seq[Int]): Boolean =
+      context.nrUnknownTransitions(auts.head) > theoryInstance.materialisationThreshold
+    def chooseRandomly[A](xs: Seq[A]): A = xs(rand nextInt xs.size)
+
+    val automataByNrUnknowns =
+      context.activeAutomata.toSeq.sortBy(context.nrUnknownTransitions)
+
+    automataByNrUnknowns match {
+      case Nil                          => None
+      case auts if aboveThreshold(auts) => None
+      case _ +: Nil                     => None
+      case fst +: rest                  => Some((fst, chooseRandomly(rest)))
+    }
+  }
+
   private def handleMaterialise(context: Context): Seq[Plugin.Action] =
     trace("handleMaterialise") {
-      val knownConnectedAutomataNrs: Seq[Int] =
-        trace("knownConnectedAutomataNrs")(
-          context.activeAutomata
-            .diff(context.automataWithConnectedPredicate)
-            .toSeq
-        )
-
-      val rand =
-        ap.parameters.Param.RANDOM_DATA_SOURCE(context.goal.settings)
-
-      knownConnectedAutomataNrs match {
-        case Seq() => Seq()
-        case Seq(fst) => {
-          val otherAutomata = context.activeAutomata.toSeq filterNot (_ == fst)
-          if (otherAutomata.isEmpty) {
-            Seq()
-          } else {
-            // TOOD: what is better, pick the second automaton randomly,
-            // or take the smallest one?
-
-            val snd = otherAutomata(rand nextInt otherAutomata.size)
-//          val otherSorted =
-//            otherAutomata.sortBy(context.filteredAutomaton(_).states.size)
-//          val snd =
-//            otherSorted.head
-            materialiseProduct(fst, snd, context)
-          }
-        }
-        case Seq(left, right) =>
-          materialiseProduct(left, right, context)
-        case nrs => {
-          val buf = nrs.toBuffer
-          rand.shuffle(buf)
-          val sort = buf.toSeq.take(2).sorted
-          materialiseProduct(sort(0), sort(1), context)
-        }
-      }
-
+      chooseAutomataForMaterialisation(context)
+        .map { case (left, right) => materialiseProduct(left, right, context) }
+        .getOrElse(Seq())
     }
 
   private def handleConnectedInstances(context: Context) =
     context.connectedInstances
       .flatMap(handleConnectedInstance(_, context))
 
-  // TODO make this a PredicateHandlingProcedure?
   private def handleConnectedInstance(
       connectedInstance: Atom,
       context: Context
   ): Seq[Plugin.Action] =
-    trace(s"handleConnectedInstance ${connectedInstance}") {
+    trace(s"handleConnectedInstance $connectedInstance") {
 
       val autId = autNr(connectedInstance)
       val myTransitionMasks = context.autTransitionMasks(autId)
       val aut = materialisedAutomata(autId)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
 
-      implicit val order = context.goal.order
+      implicit val order: TermOrder = context.goal.order
 
       // TODO compute a cut to find which dead transitions contribute to the conflict!
 
@@ -253,12 +243,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       leftId: Int,
       rightId: Int,
       context: Context
-  ) = trace(s"materialise ${leftId}x${rightId}") {
+  ) = trace(s"materialise ${leftId}x$rightId") {
     stats.increment("materialiseProduct")
     val left = context.filteredAutomaton(leftId)
     val right = context.filteredAutomaton(rightId)
     trace(
-      s"materialising product of ${left} and ${right}"
+      s"materialising product of $left and $right"
     )("")
 
     val product = left.productWith(right)
@@ -321,14 +311,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       product: Automaton,
       context: Context
   ) = {
-    import ap.basetypes.IdealInt.ZERO
 
-    implicit val order = context.goal.order
+    implicit val order: TermOrder = context.goal.order
     val varFactory = new FreshVariables(0)
     val transitionToTermSeq = trace("product transitionToTerm")(
       materialisedAutomata(productNr).transitions
         .map(t => (t, varFactory.nextVariable()))
-        .toIndexedSeq
     )
 
     val transitionToTerm = transitionToTermSeq.toMap
@@ -406,7 +394,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
   }
 
-  def dumpGraphs(directory: File) = {
+  def dumpGraphs(directory: File): Unit = {
     materialisedAutomata.zipWithIndex.foreach {
       case (a, i) =>
         // TODO extract transition labels and annotate the graph with them

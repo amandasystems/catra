@@ -26,7 +26,7 @@ class LazyBackend(override val arguments: CommandLineOptions)
 
     import instance._
 
-    def buildTheory(automataGroup: Seq[Automaton]) = {
+    def buildTheory(automataGroup: Seq[Automaton]): RegisterCounting = {
       val dumpHook: Seq[
         (Context, String, Seq[Plugin.Action]) => Unit
       ] = arguments.dumpGraphvizDir.toSeq.map(
@@ -45,12 +45,14 @@ class LazyBackend(override val arguments: CommandLineOptions)
       val theory = if (arguments.trace) {
         new RegisterCounting(
           automataGroup,
-          hooks
+          hooks,
+          arguments.nrUnknownToMaterialiseProduct
         ) with TracingComputation
       } else {
         new RegisterCounting(
           automataGroup,
-          hooks
+          hooks,
+          arguments.nrUnknownToMaterialiseProduct
         )
       }
 

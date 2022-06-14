@@ -20,6 +20,12 @@ sealed case class Context(
     theoryInstance: ParikhTheory
 ) extends Tracing {
 
+
+  def nrUnknownTransitions(aut: Int): Int =
+    materialisedAutomata(aut).transitions.count(t => transitionStatus(aut)(t) == TransitionSelected.Unknown)
+
+  def nrUniqueTerms(aut: Int): Int = autTransitionTermsUnordered(aut).toSet.size
+
   private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
   import transitionExtractor.{
     transitionStatusFromTerm,

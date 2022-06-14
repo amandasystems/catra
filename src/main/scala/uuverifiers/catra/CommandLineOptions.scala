@@ -17,7 +17,7 @@ import scala.util.Failure
 sealed trait BackendSelection
 
 object BackendSelection {
-  def apply(name: String) =
+  def apply(name: String): BackendSelection =
     Seq(ChooseLazy, ChooseNuxmv, ChooseBaseline)
       .find(_.toString() == name)
       .getOrElse {
@@ -52,7 +52,8 @@ sealed case class CommandLineOptions(
     checkTermSat: Boolean,
     checkIntermediateSat: Boolean,
     eliminateQuantifiers: Boolean,
-    dumpEquationDir: Option[File]
+    dumpEquationDir: Option[File],
+    nrUnknownToMaterialiseProduct: Int
 ) {
 
   def getBackend(): Backend = backend match {
@@ -106,6 +107,7 @@ object CommandLineOptions {
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
+  private var nrUnknownToStartMaterialiseProduct = 10
 
   private val usage =
     s"""
@@ -151,6 +153,13 @@ object CommandLineOptions {
                         accelerates incremental querying. Default: $noEliminateQuantifiers
       Note: for maximally lazy computation (and to maximally prioritise satisifiable
                         instances), set all these to false.
+                        
+      Lazy
+      --nr-unknown-to-start-materialise -- Start materialising products when the most
+         well-known automaton has this many unknown transitions.
+         0 means be as lazy as possible. For more eagerness, set a ludicrously large number.
+                        Default: $nrUnknownToStartMaterialiseProduct.
+         
 
     Environment variables:
       CATRA_TRACE -- if set to "true", enable very very verbose logging 🐌
@@ -233,6 +242,9 @@ object CommandLineOptions {
       case "--no-eliminate-quantifiers" :: tail =>
         noEliminateQuantifiers = true
         parseFilesAndFlags(tail)
+      case "--nr-unknown-to-start-materialise" :: someNr :: tail =>
+        nrUnknownToStartMaterialiseProduct = someNr.toInt
+        parseFilesAndFlags(tail)
       case "--backend" :: someBackendName :: tail =>
         backend = BackendSelection(someBackendName)
         parseFilesAndFlags(tail)
@@ -276,7 +288,8 @@ object CommandLineOptions {
       checkTermSat = !noCheckTermSat,
       checkIntermediateSat = !noCheckIntermediateSat,
       eliminateQuantifiers = !noEliminateQuantifiers,
-      dumpEquationDir = dumpEquationDir
+      dumpEquationDir = dumpEquationDir,
+      nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct
     )
   }
 }
