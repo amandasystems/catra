@@ -20,9 +20,14 @@ sealed case class Context(
     theoryInstance: ParikhTheory
 ) extends Tracing {
 
+  private val rand = ap.parameters.Param.RANDOM_DATA_SOURCE(goal.settings)
+
+  def chooseRandomly[A](xs: Seq[A]): Option[A] =
+    if (xs.isEmpty) None else Some(xs(rand nextInt xs.size))
 
   def nrUnknownTransitions(aut: Int): Int =
-    materialisedAutomata(aut).transitions.count(t => transitionStatus(aut)(t) == TransitionSelected.Unknown)
+    materialisedAutomata(aut).transitions
+      .count(t => transitionStatus(aut)(t) == TransitionSelected.Unknown)
 
   def nrUniqueTerms(aut: Int): Int = autTransitionTermsUnordered(aut).toSet.size
 
@@ -66,27 +71,27 @@ sealed case class Context(
   private val predicateInstances =
     goalAssociatedPredicateInstances(goal, instanceTerm)(_)
 
-  lazy val connectedInstances =
+  lazy val connectedInstances: Seq[Atom] =
     trace("connectedInstances")(predicateInstances(Connected))
 
-  lazy val automataWithConnectedPredicate = SortedSet(
+  lazy val automataWithConnectedPredicate: SortedSet[Int] = SortedSet(
     connectedInstances.map(autNr): _*
   )
 
-  lazy val transitionMasks =
-    trace("transitionMasks")(predicateInstances(TransitionMask))
-
-  lazy val unusedInstances =
+  lazy val unusedInstances: Seq[Atom] =
     trace("unusedInstances")(predicateInstances(Unused))
 
-  lazy val activeAutomata =
+  lazy val transitionMasks: Seq[Atom] =
+    trace("transitionMasks")(predicateInstances(TransitionMask))
+
+  lazy val activeAutomata: SortedSet[Int] =
     trace("activeAutomata")(SortedSet(unusedInstances.map(autNr): _*))
 
   // FIXME memoise
-  def transitionStatus(autId: Int)(transition: Transition) =
+  def transitionStatus(autId: Int)(transition: Transition): TransitionSelected =
     transitionStatusFromTerm(goal, l(autTransitionTerm(autId)(transition)))
 
-  def getOrUpdateTransitionTermMap(autId: Int) = {
+  def getOrUpdateTransitionTermMap(autId: Int): Map[Transition, Term] = {
     val autMap: Map[Transition, Term] =
       transitionTermCache.getOrElseUpdate(
         autId,
@@ -102,18 +107,18 @@ sealed case class Context(
   def autTransitionTerm(autId: Int)(transition: Transition): Term =
     getOrUpdateTransitionTermMap(autId)(transition)
 
-  def autTransitionTermsUnordered(autId: Int) =
+  def autTransitionTermsUnordered(autId: Int): Iterable[Term] =
     getOrUpdateTransitionTermMap(autId).values
 
   // FIXME memoise
-  def autTransitionMasks(autId: Int) = {
+  def autTransitionMasks(autId: Int): Seq[Atom] = {
     transitionMasks
       .filter(autNr(_) == autId)
       .sortBy(transitionNr)
   }
 
   // FIXME excellent candidate for memoisation!
-  def filteredAutomaton(autId: Int) =
+  def filteredAutomaton(autId: Int): Automaton =
     materialisedAutomata(autId).filterTransitions(
       t =>
         !termMeansDefinitelyAbsent(
@@ -122,18 +127,19 @@ sealed case class Context(
         )
     )
 
-  val monoidValues = monoidMapPredicateAtom.tail
+  val monoidValues: IndexedSeq[LinearCombination] = monoidMapPredicateAtom.tail
 
   def dumpGraphs(
       directory: File,
       fileNamePrefix: String = s"${theoryInstance.filePrefix}"
-  ) = {
+  ): Seq[String] = {
     materialisedAutomata.zipWithIndex.map {
       case (a, i) =>
         new GraphvizDumper {
           // NOTE: this is a brittle mapping since it will break silently if the
           // order in ParikhTheory.automataClauses changes...
-          val transitionToIdx = a.transitions.zipWithIndex.toMap
+          private val transitionToIdx: Map[Transition, Int] =
+            a.transitions.zipWithIndex.toMap
 
           private def markTransitionTerms(t: Transition) = {
             // This is necessary because we might be called after all
@@ -144,7 +150,7 @@ sealed case class Context(
             s"${t.label()}: ${transitionToIdx(t)}/$term"
           }
 
-          def toDot() = a.toDot(
+          def toDot(): String = a.toDot(
             transitionAnnotator = markTransitionTerms _,
             stateAnnotator = _.toString()
           )

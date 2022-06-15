@@ -112,12 +112,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   private def chooseAutomataForMaterialisation(
       context: Context
   ): Option[(Int, Int)] = {
-    val rand =
-      ap.parameters.Param.RANDOM_DATA_SOURCE(context.goal.settings)
-
     def aboveThreshold(auts: Seq[Int]): Boolean =
       context.nrUnknownTransitions(auts.head) > theoryInstance.materialisationThreshold
-    def chooseRandomly[A](xs: Seq[A]): A = xs(rand nextInt xs.size)
 
     val automataByNrUnknowns =
       context.activeAutomata.toSeq.sortBy(context.nrUnknownTransitions)
@@ -125,8 +121,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     automataByNrUnknowns match {
       case Nil                          => None
       case auts if aboveThreshold(auts) => None
-      case _ +: Nil                     => None
-      case fst +: rest                  => Some((fst, chooseRandomly(rest)))
+      case fst +: rest                  => context.chooseRandomly(rest).map(snd => (fst, snd))
     }
   }
 
