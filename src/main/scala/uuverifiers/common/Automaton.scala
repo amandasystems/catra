@@ -20,7 +20,7 @@ object NrTransitionsOrdering extends Ordering[Automaton] {
  */
 trait Automaton
     extends Tracing
-    with Graphable[State, SymbolicLabel]
+    with Graphable[State, Transition]
     with GraphvizDumper {
 
   def name: String = s"a${hashCode()}"
@@ -36,10 +36,8 @@ trait Automaton
   def transitionsFrom(from: State): Seq[Transition]
 
   // Adapt to graph notation.
-  override def outgoingEdges(from: State): Seq[(State, SymbolicLabel, State)] =
-    transitionsFrom(from).map {
-      case Transition(from, label, to) => (from, label, to)
-    }
+  override def outgoingEdges(from: State): Seq[(State, Transition, State)] =
+    transitionsFrom(from).map(t => (t.from(), t, t.to()))
 
   /**
    * The unique initial state
@@ -81,7 +79,7 @@ trait Automaton
     (min to max).iterator
   }
 
-  def toDot() =
+  def toDot(): String =
     toDot(
       transitionAnnotator = _.toDotDescription(),
       stateAnnotator = _.toDotDescription()
@@ -94,7 +92,7 @@ trait Automaton
 
     def quote(s: String) = "\"" + s + "\""
 
-    val builder = new StringBuilder("digraph Automaton {")
+    val builder = new mutable.StringBuilder("digraph Automaton {")
     builder ++= "rankdir = LR;\n"
     builder ++= "initial [shape=plaintext,label=\"\"];\n"
     builder ++= s"initial -> ${initialState.toDotIdentifier()};\n" // Add an incoming edge to the initial state
@@ -119,7 +117,7 @@ trait Automaton
    *
    * @return
    */
-  def transitionsBreadthFirst() =
+  def transitionsBreadthFirst(): Iterator[Transition] =
     this.startBFSFrom(initialState).flatMap(transitionsFrom)
 
   def fmtState(s: State): String = {
@@ -453,11 +451,9 @@ trait Automaton
     (for (s1 <- states.iterator; t <- transitionsFrom(s1))
       yield t).toIndexedSeq
 
-  override def allNodes() = states.toSeq
-  override def edges() =
-    transitions.map {
-      case Transition(from, label, to) => (from, label, to)
-    }.toSeq
+  override def allNodes(): Seq[State] = states.toSeq
+  override def edges(): IndexedSeq[(State, Transition, State)] =
+    transitions.map(t => (t.from(), t, t.to()))
   override def subgraph(selectedNodes: Set[State]): Automaton = {
     val builder = AutomatonBuilder()
     val statesToKeep = states.filter(selectedNodes.contains)
@@ -469,15 +465,16 @@ trait Automaton
     builder.getAutomaton()
   }
 
-  override def dropEdges(edgesToDrop: Set[(State, SymbolicLabel, State)]) =
-    filterTransitions(t => !edgesToDrop.contains((t.from(), t.label(), t.to())))
+  override def dropEdges(
+      edgesToDrop: Set[(State, Transition, State)]
+  ): Automaton =
+    filterTransitions(t => !edgesToDrop.contains((t.from(), t, t.to())))
 
-  override def addEdges(edgesToAdd: Iterable[(State, SymbolicLabel, State)]) = {
+  override def addEdges(
+      edgesToAdd: Iterable[(State, Transition, State)]
+  ): Automaton = {
     val builder = AutomatonBuilder(this)
-    edgesToAdd.foreach {
-      case (from, label, to) =>
-        builder.addTransition(new SymbolicTransition(from, label, to))
-    }
+    edgesToAdd.foreach(e => builder.addTransition(e._2))
     builder.getAutomaton()
   }
 
