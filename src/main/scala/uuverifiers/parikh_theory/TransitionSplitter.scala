@@ -17,29 +17,44 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
   private val transitionPredicate = theoryInstance.transitionMaskPredicate
   override val procedurePredicate: Predicate = transitionPredicate
 
-  private def unmaterialisedUnconnectedAutomata(context: Context) =
-    context.activeAutomata
-      .intersect(context.automataWithConnectedPredicate)
-      .toSeq
+  private def unmaterialisedUnconnectedAutomata(
+      context: Context
+  ): Iterable[Int] =
+    context
+      .shuffle(
+        context.activeAutomata
+          .intersect(context.automataWithConnectedPredicate)
+      )
 
-  private def selectAutomatonToSplit(context: Context): Option[Int] =
-    (context chooseRandomly unmaterialisedUnconnectedAutomata(context)).orElse(
-      context chooseRandomly context.automataWithConnectedPredicate.toSeq
-    )
+  private def automataToSplit(context: Context): Iterable[Int] =
+    unmaterialisedUnconnectedAutomata(context) concat context
+      .shuffle(
+        context.automataWithConnectedPredicate diff context.activeAutomata
+      )
 
-  def splitOnRandomUnknown(context: Context, automatonId: Int): Option[Term] =
-    context.chooseRandomly(
-      materialisedAutomata(automatonId).transitions
-        .filter(context.transitionStatus(automatonId)(_).isUnknown)
-        .map(context.autTransitionTerm(automatonId))
-    )
-
-  private def selectTransitionTermToSplit(
+  def splitOnRandomUnknown(
       context: Context,
-      automatonId: Int
+      auts: Iterable[Int]
+  ): Option[Term] = {
+    auts
+      .map(
+        aId =>
+          materialisedAutomata(aId).transitions
+            .filter(context.transitionStatus(aId)(_).isUnknown)
+            .map(context.autTransitionTerm(aId))
+      )
+      .find(_.nonEmpty)
+      .flatMap(someTerms => context.chooseRandomly(someTerms))
+  }
+
+  private def trySplittingComponent(
+      context: Context,
+      auts: Iterable[Int]
   ): Option[Term] =
-    splitToCutComponent(context, automatonId) orElse
-      splitOnRandomUnknown(context, automatonId)
+    auts
+      .map(splitToCutComponent(context, _))
+      .find(_.isDefined)
+      .flatten
 
   private def splitToCutComponent(
       context: Context,
@@ -47,24 +62,22 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
   ): Option[Term] = trace("splitToCutComponent") {
     val thisAutomaton = materialisedAutomata(automatonId)
 
-    context.chooseRandomly(
-      context
-        .chooseRandomly(
-          thisAutomaton
-            .stronglyConnectedComponents()
-            .toSeq // Impossible to cut a component containing the initial state
-            .filterNot(scc => scc contains thisAutomaton.initialState)
-        )
-        .map { randomSCC =>
-          thisAutomaton
-            .minCut(thisAutomaton.initialState, randomSCC.toSeq.head)
-            .map(_._2)
-            .filter(context.transitionStatus(automatonId)(_).isUnknown)
-            .toSeq // Keep duplicate terms, if any!
-            .map(context.autTransitionTerm(automatonId))
-        }
-        .getOrElse(Seq.empty)
-    )
+    context
+      .shuffle(
+        thisAutomaton
+          .stronglyConnectedComponents()
+          .filterNot(scc => scc contains thisAutomaton.initialState)
+      )
+      .map { scc =>
+        thisAutomaton
+          .minCut(thisAutomaton.initialState, scc.toSeq.head)
+          .map(_._2)
+          .filter(context.transitionStatus(automatonId)(_).isUnknown)
+          .toSeq // Keep duplicate terms, if any!
+          .map(context.autTransitionTerm(automatonId))
+      }
+      .find(_.nonEmpty)
+      .flatMap(someTerms => context.chooseRandomly(someTerms))
   }
 
   override def handlePredicateInstance(
@@ -81,8 +94,8 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
         theoryInstance
       )
 
-    val split = selectAutomatonToSplit(context)
-      .flatMap(aId => selectTransitionTermToSplit(context, aId))
+    val split = trySplittingComponent(context, automataToSplit(context))
+      .orElse(splitOnRandomUnknown(context, automataToSplit(context)))
       .map(t => Seq(transitionToSplit(t)))
       .getOrElse(Seq())
 

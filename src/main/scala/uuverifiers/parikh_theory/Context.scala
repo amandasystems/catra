@@ -22,6 +22,12 @@ sealed case class Context(
 
   private val rand = ap.parameters.Param.RANDOM_DATA_SOURCE(goal.settings)
 
+  def shuffle[A](xs: Iterable[A]): Iterable[A] = {
+    val buf = xs.toBuffer
+    rand.shuffle(buf)
+    buf
+  }
+
   def chooseRandomly[A](xs: Seq[A]): Option[A] =
     if (xs.isEmpty) None else Some(xs(rand nextInt xs.size))
 
