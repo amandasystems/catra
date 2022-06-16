@@ -289,6 +289,7 @@ class InputFileParser extends Tracing {
               SymbolicLabel(lower.toChar, upper.toChar)
           }
             | constant.map(c => SymbolicLabel.SingleChar(c.toChar))
+            | "any".!.map(_ => SymbolicLabel.AnyChar)
         )
         ~
           "]"
