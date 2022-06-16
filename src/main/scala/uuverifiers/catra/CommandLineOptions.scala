@@ -107,7 +107,7 @@ object CommandLineOptions {
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
-  private var nrUnknownToStartMaterialiseProduct = 10
+  private var nrUnknownToStartMaterialiseProduct = 0
 
   private val usage =
     s"""

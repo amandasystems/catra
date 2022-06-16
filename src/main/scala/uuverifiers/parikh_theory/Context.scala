@@ -2,7 +2,9 @@ package uuverifiers.parikh_theory
 import ap.terfor.preds.Atom
 import ap.terfor.{Term, TermOrder}
 import ap.proof.goal.Goal
+import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
+import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 
 import scala.collection.{SortedSet, mutable}
@@ -20,6 +22,18 @@ sealed case class Context(
     theoryInstance: ParikhTheory
 ) extends Tracing {
 
+  /** True if the sum of terms is known to be positive (in our case: that
+   *  at least one is positive since all terms are at non-negative)
+   **/
+  def knownPositive(terms: Set[Term]): Boolean =
+    goal.reduceWithFacts
+      .lowerBound(lcSum(terms.map(l))(goal.order))
+      .exists(_ > 0)
+
+  /** True if autId has no Connected predicate, false otherwise **/
+  def isConnected(autId: Int): Boolean =
+    !(automataWithConnectedPredicate contains autId)
+
   private val rand = ap.parameters.Param.RANDOM_DATA_SOURCE(goal.settings)
 
   def shuffle[A](xs: Iterable[A]): Iterable[A] = {
@@ -27,6 +41,13 @@ sealed case class Context(
     rand.shuffle(buf)
     buf
   }
+
+  def binarySplit(proposition: Conjunction): Plugin.AxiomSplit =
+    Plugin.AxiomSplit(
+      Seq(),
+      Seq((conj(proposition), Nil), (conj(proposition.negate), Nil)),
+      theoryInstance
+    )
 
   def chooseRandomly[A](xs: Seq[A]): Option[A] =
     if (xs.isEmpty) None else Some(xs(rand nextInt xs.size))
