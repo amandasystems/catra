@@ -63,8 +63,17 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
     def separatingCut(
         scc: Set[State]
     ): Iterable[LinearCombination] = {
-      val transitionsToSever = thisAutomaton
-        .minCut(thisAutomaton.initialState, scc.toSeq.head)
+      val transitionsToSever = scc
+        .find(thisAutomaton.initialState != _)
+        .map(
+          sccRepresentative =>
+            thisAutomaton
+              .minCut(
+                thisAutomaton.initialState,
+                sccRepresentative
+              )
+        )
+        .getOrElse(Set.empty) // The SCC is just the initial state
         .map(_._2)
         .map(context.autTransitionTerm(automatonId))
 
@@ -77,7 +86,6 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
       .shuffle(
         thisAutomaton
           .stronglyConnectedComponents()
-          .filterNot(scc => scc contains thisAutomaton.initialState)
       )
       .map(separatingCut)
       .find(cut => cut.nonEmpty)
