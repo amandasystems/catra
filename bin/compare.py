@@ -8,8 +8,8 @@ from typing import Dict
 LINE_RE = re.compile(
     r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[0-9\.]+)s parse: .*====$"
 )
-THRESHOLD_SECONDS = 2.0
-THRESHOLD_PERCENTAGE = 5.0
+THRESHOLD_SECONDS = 15.0
+THRESHOLD_PERCENTAGE = 50.0
 
 file_names = sys.argv[1:]
 
