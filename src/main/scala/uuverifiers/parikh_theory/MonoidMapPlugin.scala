@@ -233,16 +233,41 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
         else {
 
+          val acts =
+            if (ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)) {
+
+              // FIXME limit to deadTransitions transitionMask:s that actually
+              // contribute to the conflict
+
+              for (trans <- unreachableTransitions.toSeq;
+                   term = transitionToTerm(trans);
+                   constr = (term === 0);
+                   if !constr.isTrue;
+                   relTransitions = {
+                     for (a <- myTransitionMasks;
+                          if a.last.isZero || a.last == term)
+                     yield a
+                   };
+                   assumptions = relTransitions :+ connectedInstance) yield {
+                Plugin.AddAxiom(assumptions, constr, theoryInstance)
+              }
+
+            } else {
+
+              Seq(
+                Plugin.AddAxiom(
+                  myTransitionMasks :+ connectedInstance,
+                  unreachableConstraints,
+                  theoryInstance
+                )
+              )
+
+            }
+
           theoryInstance.runHooks(
             context,
             "Propagate-Connected",
-            actions = Seq(
-              Plugin.AddAxiom(
-                myTransitionMasks :+ connectedInstance, // FIXME limit to deadTransitions transitionMask:s
-                unreachableConstraints,
-                theoryInstance
-              )
-            )
+            actions = acts
           )
         }
       }
@@ -283,12 +308,22 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     // TODO figure out how to generate a nice blocking clause to replace FALSE
     val productClauses = if (trace("product is empty")(product.isEmpty)) {
+      val leftMasks =
+        for (a <- context.autTransitionMasks(leftId); if a.last.isZero)
+        yield a
+      val rightMasks =
+        for (a <- context.autTransitionMasks(rightId); if a.last.isZero)
+        yield a
+
+      val assumptions =
+        if (leftMasks.isEmpty || rightMasks.isEmpty)
+          leftMasks ++ rightMasks ++ List(context.monoidMapPredicateAtom)
+        else
+          leftMasks ++ rightMasks
+
       Seq(
         Plugin.AddAxiom(
-          unusedInstances ++ context.autTransitionMasks(leftId) ++ context
-            .autTransitionMasks(
-              rightId
-            ) :+ context.monoidMapPredicateAtom,
+          assumptions,
           Conjunction.FALSE,
           theoryInstance
         )
@@ -385,6 +420,22 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
     val simplifiedEquations = simplifyUnlessTimeout(order, equations)
 
+    val assumptions =
+      context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
+              rightNr
+            ) :+ context.monoidMapPredicateAtom
+
+    // work-around: adding a conjunction of literals (non-quantified)
+    // sometimes seems to cause an exception. this must be a bug in
+    // princess, to be fixed
+    val matActions =
+      if (simplifiedEquations.quans.isEmpty)
+        (for (lit <- simplifiedEquations.iterator) yield {
+           Plugin.AddAxiom(assumptions, lit, theoryInstance)
+         }).toList
+      else
+        List(Plugin.AddAxiom(assumptions, simplifiedEquations, theoryInstance))
+
     Seq(
       Plugin.RemoveFacts(
         conj(
@@ -394,15 +445,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             context.autTransitionMasks(leftNr) ++
             context.autTransitionMasks(rightNr)
         )
-      ),
-      Plugin.AddAxiom(
-        context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
-          rightNr
-        ) :+ context.monoidMapPredicateAtom,
-        simplifiedEquations,
-        theoryInstance
-      )
-    )
+      )) ++ matActions
 
   }
 

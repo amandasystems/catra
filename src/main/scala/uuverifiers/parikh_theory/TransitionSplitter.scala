@@ -35,10 +35,11 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
         }
     }
 
+    // TODO: need a proper cut here
     def transitionToSplit(tTerm: LinearCombination) =
       Plugin.AxiomSplit(
-        Seq(),
-        Seq(tTerm <= 0, tTerm > 0).map(ineq => (conj(ineq), Seq())),
+        Seq(conj(tTerm >= 0)),
+        Seq(tTerm === 0, tTerm > 0).map(ineq => (conj(ineq), Seq())),
         theoryInstance
       )
 

@@ -26,6 +26,8 @@ class LazyBackend(override val arguments: CommandLineOptions)
 
     import instance._
 
+    p.setConstructProofs(false) // set to true
+
     def buildTheory(automataGroup: Seq[Automaton]) = {
       val dumpHook: Seq[
         (Context, String, Seq[Plugin.Action]) => Unit
