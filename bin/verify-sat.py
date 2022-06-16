@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 import fileinput
-import os
 import pathlib
 import re
 import subprocess
 
-VERIFY_WITH_BACKEND = "lazy"
+VERIFY_WITH_BACKEND = "nuxmv"
 LINE_RE = r"^==== (?P<instance>.*?): sat run: [0-9\.]+s parse: .*====$\n(?P<registers>(.+ = \d+$\n)+)"
 SAT_UNSAT_RE = re.compile(
-    r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[0-9\.]+)s parse: .*===="
+    r"^==== (?P<file_name>.*?): (?P<sat_status>sat|unsat|timeout.*ms) run: (?P<runtime>[\d.]+)s parse: .*===="
 )
 TARGET_DIR = pathlib.Path("verification")
 TIMEOUT_S = 60
@@ -24,7 +23,7 @@ def verifier_from_witness(instance_file, assignments):
 
 
 def dump_verifier(source, derived_from):
-    target_file = TARGET_DIR / derived_from.relative_to(os.getcwd())
+    target_file = TARGET_DIR / derived_from
     target_file.parent.mkdir(parents=True, exist_ok=True)
     with target_file.open("w") as fp:
         fp.writelines(source)
@@ -80,13 +79,12 @@ for match in matches:
 for instance_file, witness in instances.items():
     outcome = second_opinion_agrees(instance_file, witness)
     if outcome == "agree":
-        print(f"Verified {instance_file}")
+        print(f"I: {VERIFY_WITH_BACKEND} agrees for {instance_file}")
     elif outcome == "unknown":
-        print(f"W: {VERIFY_WITH_BACKEND} timed out verifying {instance_file}")
+        print(f"W: {VERIFY_WITH_BACKEND} timed out checking {instance_file}")
     else:
-        print(outcome)
         print(
-            f"E: {VERIFY_WITH_BACKEND} disagrees with assignment for {instance_file}:"
+            f"E: {VERIFY_WITH_BACKEND} disagrees for {instance_file}:"
         )
         for lhs, rhs in witness.items():
             print(f"{lhs} = {rhs}")
