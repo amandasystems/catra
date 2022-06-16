@@ -1,0 +1,31 @@
+counter int l_a, l_b, l_c, r_c;
+
+synchronised {
+automaton aca_or_bc {
+  init start;
+
+  start -> sawA [97] { l_a += 1 };
+  start -> sawB [98] { l_b += 1 };
+
+  sawB -> start  [98] { l_b += 1 };
+  sawB -> final [99] { l_c += 1 };
+
+  sawA -> sawA [99] { l_c += 1 };
+  sawA -> final [97] { l_a += 1 };
+
+  accepting final;
+};
+
+automaton something_c_something {
+    init start;
+
+    start -> start [any] ;
+    start -> final [99] { r_c += 1 };
+
+    final -> final [any];
+
+    accepting final;
+};
+};
+
+constraint l_a > l_c;
