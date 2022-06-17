@@ -117,13 +117,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val automataByNrUnknowns =
       context.activeAutomata.toSeq
-        .sortBy(a => (!context.isConnected(a), context.nrUnknownTransitions(a)))
+        .sortBy(a => context.nrUnknownTransitions(a))
 
     automataByNrUnknowns match {
-      case Nil => None
-      case auts if aboveThreshold(auts) && !context.isConnected(auts.head) =>
-        None
-      case fst +: rest => context.chooseRandomly(rest).map(snd => (fst, snd))
+      case Nil                          => None
+      case auts if aboveThreshold(auts) => None
+      case fst +: rest                  => context.chooseRandomly(rest).map(snd => (fst, snd))
     }
   }
 
