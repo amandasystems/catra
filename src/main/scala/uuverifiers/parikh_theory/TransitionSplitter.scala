@@ -98,25 +98,11 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
 
     val context = Context(goal, predicateAtom, theoryInstance)
 
-<<<<<<< HEAD
-    def transitionToSplit(tTerm: Term) =
-      Plugin.AxiomSplit(
-        Seq(conj(tTerm >= 0)),
-        Seq(tTerm === 0, tTerm > 0).map(ineq => (conj(ineq), Seq())),
-        theoryInstance
-      )
-
-    val split = trySplittingComponent(context, automataToSplit(context))
-      .orElse(splitOnRandomUnknown(context, automataToSplit(context)))
-      .map(t => Seq(transitionToSplit(t)))
-      .getOrElse(Seq())
-=======
     val split =
       trySplittingComponent(context, automataToSplit(context))
         .orElse(splitOnRandomUnknown(context, automataToSplit(context)))
         .map(Seq(_))
         .getOrElse(Seq())
->>>>>>> 492b803 (FINALLY the new advanced splitting tm works)
 
     theoryInstance.runHooks(
       context,
