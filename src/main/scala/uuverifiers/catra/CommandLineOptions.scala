@@ -53,7 +53,8 @@ sealed case class CommandLineOptions(
     checkIntermediateSat: Boolean,
     eliminateQuantifiers: Boolean,
     dumpEquationDir: Option[File],
-    nrUnknownToMaterialiseProduct: Int
+    nrUnknownToMaterialiseProduct: Int,
+    enableClauseLearning: Boolean
 ) {
 
   def getBackend(): Backend = backend match {
@@ -108,6 +109,7 @@ object CommandLineOptions {
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
   private var nrUnknownToStartMaterialiseProduct = 0
+  private var enableClauseLearning: Boolean = false
 
   private val usage =
     s"""
@@ -159,6 +161,7 @@ object CommandLineOptions {
          well-known automaton has this many unknown transitions.
          0 means be as lazy as possible. For more eagerness, set a ludicrously large number.
                         Default: $nrUnknownToStartMaterialiseProduct.
+      --enable-clause-learning -- What it says on the tin. Default: $enableClauseLearning.
          
 
     Environment variables:
@@ -239,6 +242,9 @@ object CommandLineOptions {
       case "--no-check-intermediate-sat" :: tail =>
         noCheckIntermediateSat = true
         parseFilesAndFlags(tail)
+      case "--enable-clause-learning" :: tail =>
+        enableClauseLearning = true
+        parseFilesAndFlags(tail)
       case "--no-eliminate-quantifiers" :: tail =>
         noEliminateQuantifiers = true
         parseFilesAndFlags(tail)
@@ -289,7 +295,8 @@ object CommandLineOptions {
       checkIntermediateSat = !noCheckIntermediateSat,
       eliminateQuantifiers = !noEliminateQuantifiers,
       dumpEquationDir = dumpEquationDir,
-      nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct
+      nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct,
+      enableClauseLearning = enableClauseLearning
     )
   }
 }

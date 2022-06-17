@@ -26,7 +26,7 @@ class LazyBackend(override val arguments: CommandLineOptions)
 
     import instance._
 
-    p.setConstructProofs(false) // set to true
+    p.setConstructProofs(arguments.enableClauseLearning)
 
     def buildTheory(automataGroup: Seq[Automaton]): RegisterCounting = {
       val dumpHook: Seq[
