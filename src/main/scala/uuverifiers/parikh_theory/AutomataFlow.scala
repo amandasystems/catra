@@ -69,7 +69,7 @@ class AutomataFlow(private val aut: Automaton)(
   def monoidValuesReachable(
       monoidVars: Seq[LinearCombination],
       transitionAndVar: IndexedSeq[(Transition, LinearCombination)],
-      toMonoid: (Transition) => Seq[Option[LinearCombination]]
+      toMonoid: Transition => Seq[Option[LinearCombination]]
   ): Formula = {
     trace("Monoid equations") {
       // This is just a starting vector of the same dimension as the monoid
