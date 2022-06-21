@@ -29,7 +29,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
   def splitOnRandomUnknown(
       context: Context,
       auts: Iterable[Int]
-  ): Option[Plugin.AxiomSplit] = {
+  ): Option[Plugin.Action] = {
     implicit val order: TermOrder = context.goal.order
     auts
       .map(
@@ -48,7 +48,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
   private def trySplittingComponent(
       context: Context,
       auts: Iterable[Int]
-  ): Option[Plugin.AxiomSplit] =
+  ): Option[Plugin.Action] =
     auts
       .map(splitToCutComponent(context, _))
       .find(_.isDefined)
@@ -57,7 +57,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory)
   private def splitToCutComponent(
       context: Context,
       automatonId: Int
-  ): Option[Plugin.AxiomSplit] = trace("splitToCutComponent") {
+  ): Option[Plugin.Action] = trace("splitToCutComponent") {
     val thisAutomaton = context.filteredAutomaton(automatonId)
 
     def separatingCut(

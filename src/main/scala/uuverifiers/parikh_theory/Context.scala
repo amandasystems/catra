@@ -42,12 +42,8 @@ sealed case class Context(
     buf
   }
 
-  def binarySplit(proposition: Conjunction): Plugin.AxiomSplit =
-    Plugin.AxiomSplit(
-      Seq(),
-      Seq((conj(proposition), Nil), (conj(proposition.negate), Nil)),
-      theoryInstance
-    )
+  def binarySplit(proposition: Conjunction): Plugin.Action =
+    Plugin.CutSplit(conj(proposition), List(), List())
 
   def chooseRandomly[A](xs: Seq[A]): Option[A] =
     if (xs.isEmpty) None else Some(xs(rand nextInt xs.size))

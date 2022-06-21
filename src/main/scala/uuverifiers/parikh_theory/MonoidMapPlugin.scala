@@ -294,18 +294,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     // TODO figure out how to generate a nice blocking clause to replace FALSE
     val productClauses = if (trace("product is empty")(product.isEmpty)) {
-      val leftMasks =
-        for (a <- context.autTransitionMasks(leftId); if a.last.isZero)
-        yield a
-      val rightMasks =
-        for (a <- context.autTransitionMasks(rightId); if a.last.isZero)
-        yield a
+
+      def extractAssumptions(id : Int) = {
+        val masks =
+          for (a <- context.autTransitionMasks(id); if a.last.isZero)
+          yield a
+        if (masks.isEmpty)
+          List(context.autTransitionMasks(id).head)
+        else
+          masks
+      }
 
       val assumptions =
-        if (leftMasks.isEmpty || rightMasks.isEmpty)
-          leftMasks ++ rightMasks ++ List(context.monoidMapPredicateAtom)
-        else
-          leftMasks ++ rightMasks
+        extractAssumptions(leftId) ++ extractAssumptions(rightId)
 
       Seq(
         Plugin.AddAxiom(
