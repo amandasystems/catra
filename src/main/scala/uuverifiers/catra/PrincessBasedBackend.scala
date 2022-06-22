@@ -80,25 +80,21 @@ trait PrincessBasedBackend extends Backend with Tracing {
     else
       p.checkSat(block = true)
 
-  private def checkSatWithRestarts(p: SimpleAPI): ProverStatus.Value = {
-    var iteration = 0
-    while (true) {
-      iteration = iteration + 1
-      val TO: Long = luby(iteration) * RESTART_TO_FACTOR
+  @tailrec
+  private def checkSatWithRestarts(
+      p: SimpleAPI,
+      iteration: Int = 1
+  ): ProverStatus.Value = {
+    val timeout: Long = luby(iteration) * RESTART_TO_FACTOR
+    ap.util.Timeout.check
+    p.checkSat(block = false)
 
-      ap.util.Timeout.check
-
-//      println("Checking ... " + TO)
-
-      p.checkSat(block = false)
-      p.getStatus(TO) match {
-        case ProverStatus.Running =>
-          p.stop(block = true)
-        case r =>
-          return r
-      }
+    p.getStatus(timeout) match {
+      case ProverStatus.Running =>
+        p.stop(block = true)
+        checkSatWithRestarts(p, iteration = iteration + 1)
+      case r => r
     }
-    ProverStatus.Running
   }
 
   private def checkSolutions(p: SimpleAPI, instance: Instance)(
