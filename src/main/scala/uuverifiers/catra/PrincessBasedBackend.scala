@@ -8,6 +8,8 @@ import scala.util.{Failure, Success, Try}
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
 
+import scala.annotation.tailrec
+
 /**
  * A helper to construct backends that perform some kind of setup on the
  * Princess theorem prover and then calls the standard check-SAT features.
@@ -15,7 +17,9 @@ import ap.parser.IFormula
 trait PrincessBasedBackend extends Backend with Tracing {
 
   val arguments: CommandLineOptions
-  var USE_RESTARTS = arguments.enableRestarts
+
+  // TODO maybe expose this as an option?
+  private val RESTART_TO_FACTOR = 500L
 
   import arguments._
 
@@ -59,8 +63,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   }
 
-  private val TO_FACTOR = 500L
-
+  @tailrec
   private def luby(i: Int): Int = {
     if ((i & (i + 1)) == 0) {
       (i + 1) / 2
@@ -72,7 +75,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
   }
 
   private def checkSat(p: SimpleAPI): ProverStatus.Value =
-    if (USE_RESTARTS)
+    if (arguments.enableRestarts && arguments.backend == ChooseLazy)
       checkSatWithRestarts(p)
     else
       p.checkSat(block = true)
@@ -81,7 +84,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     var iteration = 0
     while (true) {
       iteration = iteration + 1
-      val TO = (luby(iteration) * TO_FACTOR).toLong
+      val TO: Long = luby(iteration) * RESTART_TO_FACTOR
 
       ap.util.Timeout.check
 
