@@ -14,9 +14,8 @@ import ap.parser.IFormula
  */
 trait PrincessBasedBackend extends Backend with Tracing {
 
-  var USE_RESTARTS = true
-
   val arguments: CommandLineOptions
+  var USE_RESTARTS = arguments.enableRestarts
 
   import arguments._
 
@@ -62,24 +61,23 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   private val TO_FACTOR = 500L
 
-  private def luby(i : Int) : Int = {
-    if ((i & (i+1)) == 0) {
-      (i+1) / 2
+  private def luby(i: Int): Int = {
+    if ((i & (i + 1)) == 0) {
+      (i + 1) / 2
     } else {
       var x = 1
-      while (i > 2*x-1)
-        x = x * 2
+      while (i > 2 * x - 1) x = x * 2
       luby(i - x + 1)
     }
   }
 
-  private def checkSat(p : SimpleAPI) : ProverStatus.Value =
+  private def checkSat(p: SimpleAPI): ProverStatus.Value =
     if (USE_RESTARTS)
       checkSatWithRestarts(p)
     else
       p.checkSat(block = true)
 
-  private def checkSatWithRestarts(p : SimpleAPI) : ProverStatus.Value = {
+  private def checkSatWithRestarts(p: SimpleAPI): ProverStatus.Value = {
     var iteration = 0
     while (true) {
       iteration = iteration + 1

@@ -54,7 +54,8 @@ sealed case class CommandLineOptions(
     eliminateQuantifiers: Boolean,
     dumpEquationDir: Option[File],
     nrUnknownToMaterialiseProduct: Int,
-    enableClauseLearning: Boolean
+    enableClauseLearning: Boolean,
+    enableRestarts: Boolean
 ) {
 
   def getBackend(): Backend = backend match {
@@ -110,6 +111,7 @@ object CommandLineOptions {
   private var dumpEquationDir: Option[File] = None
   private var nrUnknownToStartMaterialiseProduct = 0
   private var enableClauseLearning: Boolean = false
+  private var enableRestarts = true
 
   private val usage =
     s"""
@@ -162,6 +164,7 @@ object CommandLineOptions {
          0 means be as lazy as possible. For more eagerness, set a ludicrously large number.
                         Default: $nrUnknownToStartMaterialiseProduct.
       --enable-clause-learning -- What it says on the tin. Default: $enableClauseLearning.
+      --disable-restarts -- disable periodical restarts.
          
 
     Environment variables:
@@ -245,6 +248,9 @@ object CommandLineOptions {
       case "--enable-clause-learning" :: tail =>
         enableClauseLearning = true
         parseFilesAndFlags(tail)
+      case "--disable-restarts" :: tail =>
+        enableRestarts = true
+        parseFilesAndFlags(tail)
       case "--no-eliminate-quantifiers" :: tail =>
         noEliminateQuantifiers = true
         parseFilesAndFlags(tail)
@@ -296,7 +302,8 @@ object CommandLineOptions {
       eliminateQuantifiers = !noEliminateQuantifiers,
       dumpEquationDir = dumpEquationDir,
       nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct,
-      enableClauseLearning = enableClauseLearning
+      enableClauseLearning = enableClauseLearning,
+      enableRestarts = enableRestarts
     )
   }
 }
