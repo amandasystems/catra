@@ -1,2 +1,2 @@
 clean:
-	${RM} *.log
+	${RM} trivial-*.log
