@@ -92,9 +92,8 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
       p.checkSat(block = false)
       p.getStatus(TO) match {
-        case ProverStatus.Running => {
+        case ProverStatus.Running =>
           p.stop(block = true)
-        }
         case r =>
           return r
       }
