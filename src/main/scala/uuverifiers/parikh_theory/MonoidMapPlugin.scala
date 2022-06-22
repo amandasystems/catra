@@ -300,7 +300,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           for (a <- context.autTransitionMasks(id); if a.last.isZero)
           yield a
         if (masks.isEmpty)
-          List(context.autTransitionMasks(id).head)
+          context.autTransitionMasks(id) take 1
         else
           masks
       }
