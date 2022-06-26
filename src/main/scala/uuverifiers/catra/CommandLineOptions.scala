@@ -249,7 +249,7 @@ object CommandLineOptions {
         enableClauseLearning = true
         parseFilesAndFlags(tail)
       case "--disable-restarts" :: tail =>
-        enableRestarts = true
+        enableRestarts = false
         parseFilesAndFlags(tail)
       case "--no-eliminate-quantifiers" :: tail =>
         noEliminateQuantifiers = true

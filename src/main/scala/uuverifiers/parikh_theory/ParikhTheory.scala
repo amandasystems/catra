@@ -86,12 +86,16 @@ trait ParikhTheory
   val unusedPredicate =
     new Predicate(s"Unused_${this.hashCode}", 2)
 
+  val addedSplitter =
+    new Predicate(s"Splitter_Added_${this.hashCode}", 0)
+
   override lazy val predicates =
     Seq(
       monoidMapPredicate,
       transitionMaskPredicate,
       connectedPredicate,
-      unusedPredicate
+      unusedPredicate,
+      addedSplitter
     )
 
   lazy val monoidMapPlugin = new MonoidMapPlugin(this)

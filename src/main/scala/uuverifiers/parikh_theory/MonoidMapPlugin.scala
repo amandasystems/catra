@@ -6,6 +6,7 @@ import ap.terfor.TerForConvenience._
 import ap.terfor.TermOrder
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.preds.Atom
+import ap.parameters.Param
 import uuverifiers.common._
 import uuverifiers.parikh_theory.VariousHelpers.simplifyUnlessTimeout
 
@@ -55,10 +56,16 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val context = Context(goal, predicateAtom, theoryInstance)
       stats.increment("handlePredicateInstance")
 
+      if (Param.MODEL_GENERATION(context.goal.settings)) {
+//        println("model generation, doing nothing")
+//        println(goal.facts)
+        return List()
+      }
+
       handleMonoidMapSubsumption(context) elseDo
-        handleConnectedInstances(context) elseDo
-        handleMaterialise(context) elseDo
-        handleSplitting(context)
+      handleConnectedInstances(context) elseDo
+      TransitionSplitter.spawnSplitters(goal, theoryInstance) elseDo
+      handleMaterialise(context)
     }
 
   private def handleMonoidMapSubsumption(
@@ -99,6 +106,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
     }
 
+/*
   private def handleSplitting(context: Context) = trace("handleSplitting") {
     stats.increment("handleSplitting")
 
@@ -108,6 +116,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       case _ => Seq() // Only split when we have to!
     }
   }
+ */
 
   private def chooseAutomataForMaterialisation(
       context: Context
@@ -316,6 +325,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         )
       )
     } else {
+      TransitionSplitter.spawnSplitter(context.theoryInstance,
+                                       context.monoidMapPredicateAtom(0),
+                                       newAutomataNr) ++
       formulaForNewAutomaton(
         newAutomataNr,
         leftId,
