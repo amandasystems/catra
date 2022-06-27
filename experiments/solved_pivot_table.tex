@@ -1,0 +1,17 @@
+\begin{tabular}{llrrr}
+\toprule
+ & backend & baseline & lazy & nuxmv \\
+kind & status &  &  &  \\
+\midrule
+\multirow[c]{5}{*}{Status.SAT} & Status.SAT & 1 & 57 & 291 \\
+ & Status.UNSAT & 0 & 0 & 0 \\
+ & Status.TIMEOUT & 0 & 0 & 0 \\
+ & Status.MEMORY_OUT & 1 & 0 & 0 \\
+ & Status.ERROR & 0 & 0 & 0 \\
+\multirow[c]{5}{*}{Status.UNSAT} & Status.SAT & 0 & 0 & 0 \\
+ & Status.UNSAT & 306 & 350 & 449 \\
+ & Status.TIMEOUT & 0 & 0 & 0 \\
+ & Status.MEMORY_OUT & 1 & 0 & 0 \\
+ & Status.ERROR & 1 & 0 & 0 \\
+\bottomrule
+\end{tabular}
