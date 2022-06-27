@@ -1,11 +1,11 @@
 package uuverifiers.common
 
 import collection.mutable.ArrayBuffer
-import scala.collection.mutable
+import scala.collection.{SortedSet, mutable}
 
 class AutomatonBuilder extends Tracing {
-  private var _autStates = Set[State]()
-  private var _outgoingTransitions = Map[State, Set[Transition]]()
+  private var _autStates = SortedSet[State]()
+  private var _outgoingTransitions = Map[State, SortedSet[Transition]]()
   private var _initial: Option[State] = None
   private var _accepting = Set[State]()
   private var forwardReachable = Set[State]()
@@ -151,7 +151,7 @@ class AutomatonBuilder extends Tracing {
       assert((_autStates contains t.from()) && (_autStates contains t.to()))
 
       _outgoingTransitions = _outgoingTransitions.updatedWith(t.from()) {
-        case None                   => Some(Set(t))
+        case None                   => Some(SortedSet(t))
         case Some(previousOutgoing) => Some(previousOutgoing + t)
       }
 
@@ -189,8 +189,8 @@ class AutomatonBuilder extends Tracing {
 sealed private class Aut(
     initial: State,
     accepting: Set[State],
-    _transitions: Map[State, Set[Transition]],
-    override val states: Set[State],
+    _transitions: Map[State, SortedSet[Transition]],
+    override val states: SortedSet[State],
     _name: Option[String]
 ) extends Automaton {
   override def transitionsFrom(from: State): Seq[Transition] =

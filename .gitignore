@@ -7,8 +7,15 @@
 /project/target
 .DS_Store
 /project/.bloop/
-*.log
 /.bsp
 /.idea
 /eqs
 /graphs
+experiments/.venv
+experiments/.ipynb_checkpoints
+experiments/*.pdf
+experiments/trivial-*.log
+/verification
+/eqs
+/graphs
+/parikh-plus

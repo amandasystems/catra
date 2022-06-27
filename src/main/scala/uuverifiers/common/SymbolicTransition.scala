@@ -2,7 +2,9 @@ package uuverifiers.common
 
 import uuverifiers.catra.Counter
 
-sealed trait Transition {
+trait NotAProduct {}
+
+sealed trait Transition extends Ordered[Transition] {
   def toDotDescription(): String
   def isSelfLoop(): Boolean = from() == to()
   def intersect[T <: Transition](that: T): Option[ProductTransition]
@@ -37,16 +39,21 @@ sealed class SymbolicTransition(
       Some(newTransition)
     else None
   }
-
-  override def affectsCounters(): Set[Counter] = ???
+  override def affectsCounters(): Set[Counter] =
+    throw new RuntimeException("This automaton has no counters!")
   override def from(): State = _from
   override def to(): State = _to
   override def label(): SymbolicLabel = _label
   override def toDotDescription(): String = label().toDotDescription()
   override def toString(): String = s"${from()} =${label()}=> ${to()}"
-  override def increments(_c: Counter): Option[Int] = ???
-  override def isProductOf(_that: Transition): Boolean = ???
-  override def originTransitions(): Option[(Transition, Transition)] = ???
+  override def increments(_c: Counter): Option[Int] =
+    throw new RuntimeException("This automaton has no counters!")
+  override def isProductOf(_that: Transition): Boolean =
+    throw new RuntimeException("This automaton is not a product!")
+  override def originTransitions(): Option[(Transition, Transition)] =
+    throw new RuntimeException("This automaton is not a product!")
+  override def compare(that: Transition): Int =
+    this.toString() compare that.toString()
 }
 object Transition {
   def unapply(t: Transition): Some[(State, SymbolicLabel, State)] =
@@ -63,8 +70,12 @@ sealed case class Counting(
     ) {
   override def affectsCounters(): Set[Counter] = counterIncrements.keySet
   override def increments(c: Counter): Option[Int] = counterIncrements.get(c)
-  private def fmtCounters(): String = counterIncrements.map{case (c, i) => s"${c.name} += $i"} mkString ", "
-  override def toDotDescription(): String = s"${super.toDotDescription()} / ${fmtCounters()}"
+  private def fmtCounters(): String =
+    counterIncrements.map { case (c, i) => s"${c.name} += $i" } mkString ", "
+  override def toDotDescription(): String =
+    s"${super.toDotDescription()} / ${fmtCounters()}"
+  override def toString(): String =
+    s"${from()} ${label()} / ${fmtCounters()} ${to()}"
 }
 
 object Counting {
@@ -89,7 +100,8 @@ sealed class ProductTransition(
       _to = left.to().intersect(right.to())
     ) {
 
-  override def toDotDescription(): String = s"${left.toDotDescription()} && ${right.toDotDescription()}"
+  override def toDotDescription(): String =
+    s"${left.toDotDescription()} && ${right.toDotDescription()}"
   override def isProductOf(transition: Transition): Boolean =
     left == transition || right == transition
   override def originTransitions(): Option[(Transition, Transition)] =
@@ -103,5 +115,5 @@ sealed class ProductTransition(
     case None        => right increments c
   }
 
-  override def toString(): String = left.toString() + "&&" + right.toString()
+  override def toString(): String = s"$left&&$right"
 }
