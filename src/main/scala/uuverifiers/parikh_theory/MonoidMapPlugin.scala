@@ -121,17 +121,18 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   private def chooseAutomataForMaterialisation(
       context: Context
   ): Option[(Int, Int)] = {
-    def aboveThreshold(auts: Seq[Int]): Boolean =
-      context.nrUnknownTransitions(auts.head) > theoryInstance.materialisationThreshold
+    val consideredAutomata =
+      for (a <- context.activeAutomata.toSeq;
+           if (context.isConnected(a) ||
+                 context.nrUnknownTransitions(a) <= theoryInstance.materialisationThreshold))
+      yield a
 
-    val automataByNrUnknowns =
-      context.activeAutomata.toSeq
-        .sortBy(a => context.nrUnknownTransitions(a))
+    val consideredAutomataSorted =
+      consideredAutomata.sortBy(a => context.autTransitionTermsUnordered(a).size)
 
-    automataByNrUnknowns match {
-      case Nil                          => None
-      case auts if aboveThreshold(auts) => None
-      case fst +: rest                  => context.chooseRandomly(rest).map(snd => (fst, snd))
+    consideredAutomataSorted match {
+      case Seq(fst, snd, _*)            => Some((fst, snd))
+      case _                            => None
     }
   }
 

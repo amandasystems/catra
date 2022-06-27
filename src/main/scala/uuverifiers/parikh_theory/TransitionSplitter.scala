@@ -81,7 +81,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
       )
       .find(_.nonEmpty)
       .flatMap(someTerms => context.chooseRandomly(someTerms))
-      .map(tTerm => context.binarySplit(tTerm === 0))
+      .map(tTerm => context.binarySplit(tTerm <= 0))
   }
 
   private def trySplittingComponent(
@@ -144,15 +144,17 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
 
         val context = Context(goal, a, theoryInstance)
 
-/*        val split =
+        val split =
           trySplittingComponent(context, List(autNr))
             .orElse(splitOnRandomUnknown(context, List(autNr)))
             .map(Seq(_))
-            .getOrElse(Seq()) */
+            .getOrElse(Seq())
+/*
         val split =
           splitOnRandomUnknown(context, List(autNr))
             .map(Seq(_))
             .getOrElse(Seq())
+ */
 
 /*
         val nrUnknown =
@@ -163,6 +165,9 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
  */
 
 //println(nrUnknown)
+//println("#transition terms: " + goal.facts.predConj.positiveLitsWithPred(theoryInstance.transitionMaskPredicate).size)
+//println("#open transition terms: " + (for (a <- goal.facts.predConj.positiveLitsWithPred(theoryInstance.transitionMaskPredicate); if !a.last.isConstant) yield a).size)
+//println("#automata: " + context.activeAutomata.size)
 //println(split)
 
         theoryInstance.runHooks(
