@@ -33,7 +33,9 @@ class LazyBackend(override val arguments: CommandLineOptions)
         (Context, String, Seq[Plugin.Action]) => Unit
       ] = arguments.dumpGraphvizDir.toSeq.map(
         directory =>
-          (context: Context, _: Any, _: Any) => context.dumpGraphs(directory)
+          (context: Context, event: String, _: Any) =>
+            if (event == "MaterialiseProduct")
+              context.dumpGraphs(directory)
       )
 
       val decisionTraceHook = if (arguments.printDecisions) {

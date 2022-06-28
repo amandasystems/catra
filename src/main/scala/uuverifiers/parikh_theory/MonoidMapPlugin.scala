@@ -281,8 +281,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       leftId: Int,
       rightId: Int,
       context: Context
-  ): Int = trace("getOrComputeProduct") {
-    val signature = trace("Product signature")(
+  ): Int = trace(s"getOrComputeProduct ${leftId}x$rightId") {
+    val signature = trace(s"${leftId}x$rightId signature")(
       (
         context.deselectedTransitionSignature(leftId),
         context.deselectedTransitionSignature(rightId),
@@ -296,9 +296,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       materialisedAutomata.size
     )
     if (productId == materialisedAutomata.size) {
-      val product = context
-        .filteredAutomaton(leftId) productWith context
-        .filteredAutomaton(rightId)
+      val product = trace(s"Computed new product from ${leftId}x$rightId")(
+        context
+          .filteredAutomaton(leftId) productWith context
+          .filteredAutomaton(rightId)
+      )
       materialisedAutomata += product
     }
 
@@ -313,12 +315,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ) = trace(s"materialise ${leftId}x$rightId") {
     stats.increment("materialiseProduct")
-    trace(
-      s"materialising product of $leftId and $rightId"
-    )("")
-
     val productNr = getOrComputeProduct(leftId, rightId, context)
-    val product = materialisedAutomata(productNr)
 
     def concernsOneOfTheTerms(p: Atom): Boolean = {
       autNr(p) match {
@@ -332,37 +329,39 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       unusedInstances.map(Plugin.RemoveFacts(_))
     )
 
-    val productClauses = if (trace("product is empty")(product.isEmpty)) {
+    val productClauses =
+      if (trace(s"$leftId}x$rightId is empty")(
+            materialisedAutomata(productNr).isEmpty
+          )) {
 
-      def extractAssumptions(id: Int) =
-        for (a <- context.autTransitionMasks(id); if a.last.isZero)
-          yield a
+        def extractAssumptions(id: Int) =
+          for (a <- context.autTransitionMasks(id); if a.last.isZero)
+            yield a
 
-      val assumptions =
-        extractAssumptions(leftId) ++ extractAssumptions(rightId) ++ unusedInstances
+        val assumptions =
+          extractAssumptions(leftId) ++ extractAssumptions(rightId) ++ unusedInstances
 
-      Seq(
-        Plugin.AddAxiom(
-          assumptions,
-          Conjunction.FALSE,
-          theoryInstance
+        Seq(
+          Plugin.AddAxiom(
+            assumptions,
+            Conjunction.FALSE,
+            theoryInstance
+          )
         )
-      )
-    } else {
-      TransitionSplitter.spawnSplitter(
-        context.theoryInstance,
-        context.monoidMapPredicateAtom(0),
-        productNr
-      ) ++
-        formulaForNewAutomaton(
-          productNr,
-          leftId,
-          rightId,
-          product,
-          context
-        )
+      } else {
+        TransitionSplitter.spawnSplitter(
+          context.theoryInstance,
+          context.monoidMapPredicateAtom(0),
+          productNr
+        ) ++
+          formulaForNewAutomaton(
+            productNr,
+            leftId,
+            rightId,
+            context
+          )
 
-    }
+      }
 
     val actions = removeUnusedPredicates ++ productClauses
 
@@ -378,21 +377,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       productNr: Int,
       leftNr: Int,
       rightNr: Int,
-      product: Automaton,
       context: Context
   ) = {
 
+    val product = materialisedAutomata(productNr)
     implicit val order: TermOrder = context.goal.order
     val varFactory = new FreshVariables(0)
     val transitionToTermSeq = trace("product transitionToTerm")(
-      materialisedAutomata(productNr).transitions
+      product.transitions
         .map(t => (t, varFactory.nextVariable()))
     )
 
     val transitionToTerm = transitionToTermSeq.toMap
 
     val newClauses = theoryInstance.automataClauses(
-      materialisedAutomata(productNr),
+      product,
       context.instanceTerm,
       productNr,
       transitionToTermSeq

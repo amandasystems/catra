@@ -109,8 +109,8 @@ object CommandLineOptions {
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
-  private var nrUnknownToStartMaterialiseProduct = 0
-  private var enableClauseLearning: Boolean = false
+  private var nrUnknownToStartMaterialiseProduct = 2
+  private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
 
   private val usage =
@@ -163,8 +163,8 @@ object CommandLineOptions {
          well-known automaton has this many unknown transitions.
          0 means be as lazy as possible. For more eagerness, set a ludicrously large number.
                         Default: $nrUnknownToStartMaterialiseProduct.
-      --enable-clause-learning -- What it says on the tin. Default: $enableClauseLearning.
-      --disable-restarts -- disable periodical restarts.
+      --no-clause-learning -- What it says on the tin.
+      --no-restarts -- disable periodical restarts. Experimentally better for SAT.
          
 
     Environment variables:
@@ -245,10 +245,10 @@ object CommandLineOptions {
       case "--no-check-intermediate-sat" :: tail =>
         noCheckIntermediateSat = true
         parseFilesAndFlags(tail)
-      case "--enable-clause-learning" :: tail =>
-        enableClauseLearning = true
+      case "--no-clause-learning" :: tail =>
+        enableClauseLearning = false
         parseFilesAndFlags(tail)
-      case "--disable-restarts" :: tail =>
+      case "--no-restarts" :: tail =>
         enableRestarts = false
         parseFilesAndFlags(tail)
       case "--no-eliminate-quantifiers" :: tail =>
