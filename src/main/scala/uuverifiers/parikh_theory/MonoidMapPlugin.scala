@@ -167,8 +167,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       implicit val order: TermOrder = context.goal.order
 
-      // TODO compute a cut to find which dead transitions contribute to the conflict!
-
       val deadTransitions = trace("deadTransitions") {
         aut.transitions
           .filter(
@@ -190,20 +188,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val knownUnreachableStates = trace("knownUnreachableStates") {
         aut.states filterNot reachableStates
       }
-
-      /*
-      val filteredGraph = aut.dropEdges(deadTransitions)
-
-      val knownUnreachableStates = trace("knownUnreachableStates") {
-        filteredGraph.unreachableFrom(aut.initialState)
-      }
-
-      val unknownEdges = trace("unknownEdges")(
-        context.autTransitionTermsUnordered(autId) filter (
-            t => transitionStatusFromTerm(context.goal, t).isUnknown
-        )
-      )
-       */
 
       val definitelyReached =
         aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
@@ -239,21 +223,25 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           val acts =
             if (ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)) {
 
-              // FIXME limit to deadTransitions transitionMask:s that actually
-              // contribute to the conflict
-
               for (trans <- unreachableTransitions.toSeq;
                    term = transitionToTerm(trans);
                    constr = term === 0
                    if !constr.isTrue;
-                   relTransitions = {
-                     for (a <- myTransitionMasks
-                          if a.last.isZero || a.last == term)
-                       yield a
-                   };
-                   assumptions = relTransitions :+ connectedInstance) yield {
-                Plugin.AddAxiom(assumptions, constr, theoryInstance)
-              }
+
+                   separatingCut = aut
+                     .minCut(aut.initialState, trans.from())
+                     .flatMap(
+                       fromTransitionTo =>
+                         myTransitionMasks.find(
+                           m => m.last == transitionToTerm(fromTransitionTo._2)
+                         )
+                     )
+                     .toSeq;
+
+                   assumptions = separatingCut :+ connectedInstance)
+                yield {
+                  Plugin.AddAxiom(assumptions, constr, theoryInstance)
+                }
 
             } else {
 

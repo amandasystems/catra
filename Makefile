@@ -40,7 +40,8 @@ trace.pdf: trace.tex ${DEPS} ${all_automata}
 .PHONY: experiments
 experiments:
 	sbt assembly
-	./bin/experiments.sh --timeout ${TIMEOUT_MS} basket
+	./bin/catra solve-satisfy \
+		--timeout ${TIMEOUT_MS} basket > ${current_version}-lazy.log
 
 
 .PHONY: smoke-test
