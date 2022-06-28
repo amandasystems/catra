@@ -12,7 +12,7 @@ run_solver() {
 export -f run_solver
 
 echo "${CURRENT_VERSION}: Executing ${PARALLEL_JOBS} experiments in parallel"
-parallel -j ${PARALLEL_JOBS} run_solver ::: lazy "lazy --enable-clause-learning"
+parallel -j ${PARALLEL_JOBS} run_solver ::: lazy "lazy --no-clause-learning"
 #for backend in lazy nuxmv baseline;
 #do
 #  echo running on $backend
