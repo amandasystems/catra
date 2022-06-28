@@ -11,6 +11,7 @@ import uuverifiers.common._
 import uuverifiers.parikh_theory.VariousHelpers.simplifyUnlessTimeout
 
 import java.io.File
+import scala.collection.BitSet
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -63,9 +64,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
 
       handleMonoidMapSubsumption(context) elseDo
-      handleConnectedInstances(context) elseDo
-      TransitionSplitter.spawnSplitters(goal, theoryInstance) elseDo
-      handleMaterialise(context)
+        handleConnectedInstances(context) elseDo
+        TransitionSplitter.spawnSplitters(goal, theoryInstance) elseDo
+        handleMaterialise(context)
     }
 
   private def handleMonoidMapSubsumption(
@@ -106,7 +107,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
     }
 
-/*
+  /*
   private def handleSplitting(context: Context) = trace("handleSplitting") {
     stats.increment("handleSplitting")
 
@@ -116,7 +117,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       case _ => Seq() // Only split when we have to!
     }
   }
- */
+   */
 
   private def chooseAutomataForMaterialisation(
       context: Context
@@ -124,15 +125,17 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val consideredAutomata =
       for (a <- context.activeAutomata.toSeq;
            if (context.isConnected(a) ||
-                 context.nrUnknownTransitions(a) <= theoryInstance.materialisationThreshold))
-      yield a
+             context.nrUnknownTransitions(a) <= theoryInstance.materialisationThreshold))
+        yield a
 
     val consideredAutomataSorted =
-      consideredAutomata.sortBy(a => context.autTransitionTermsUnordered(a).size)
+      consideredAutomata.sortBy(
+        a => context.autTransitionTermsUnordered(a).size
+      )
 
     consideredAutomataSorted match {
-      case Seq(fst, snd, _*)            => Some((fst, snd))
-      case _                            => None
+      case Seq(fst, snd, _*) => Some((fst, snd))
+      case _                 => None
     }
   }
 
@@ -242,7 +245,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
                    relTransitions = {
                      for (a <- myTransitionMasks;
                           if a.last.isZero || a.last == term)
-                     yield a
+                       yield a
                    };
                    assumptions = relTransitions :+ connectedInstance) yield {
                 Plugin.AddAxiom(assumptions, constr, theoryInstance)
@@ -270,6 +273,17 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       unreachableActions ++ subsumeActions
     }
 
+  def getOrUpdateAutId(
+      leftZeroIdxs: BitSet,
+      rightZeroIdxs: BitSet,
+      leftId: Int,
+      rightId: Int,
+      product: Automaton
+  ): Int = {
+    materialisedAutomata += product
+    materialisedAutomata.size - 1
+  }
+
   private def materialiseProduct(
       leftId: Int,
       rightId: Int,
@@ -282,12 +296,16 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       s"materialising product of $left and $right"
     )("")
 
-    val product = left.productWith(right)
-
-    // TODO  keep track of automata we have already seen (mapping from
-    // transitions set to zero, incoming IDs -> id)
-    val newAutomataNr = trace("newAutomataNr")(materialisedAutomata.size)
-    materialisedAutomata += product
+    val product = left productWith right
+    val newAutomataNr = trace("newAutomataNr") {
+      getOrUpdateAutId(
+        context.deselectedTransitionSignature(leftId),
+        context.deselectedTransitionSignature(rightId),
+        leftId,
+        rightId,
+        product
+      )
+    }
 
     def concernsOneOfTheTerms(p: Atom): Boolean = {
       autNr(p) match {
@@ -296,27 +314,19 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
     }
 
-    // TODO filter by the zero-transitions
     val unusedInstances = context.unusedInstances.filter(concernsOneOfTheTerms)
     val removeUnusedPredicates = trace("removeUnusedPredicates")(
       unusedInstances.map(Plugin.RemoveFacts(_))
     )
 
-    // TODO figure out how to generate a nice blocking clause to replace FALSE
     val productClauses = if (trace("product is empty")(product.isEmpty)) {
 
-      def extractAssumptions(id : Int) = {
-        val masks =
-          for (a <- context.autTransitionMasks(id); if a.last.isZero)
+      def extractAssumptions(id: Int) =
+        for (a <- context.autTransitionMasks(id); if a.last.isZero)
           yield a
-        if (masks.isEmpty)
-          context.autTransitionMasks(id) take 1
-        else
-          masks
-      }
 
       val assumptions =
-        extractAssumptions(leftId) ++ extractAssumptions(rightId)
+        extractAssumptions(leftId) ++ extractAssumptions(rightId) ++ unusedInstances
 
       Seq(
         Plugin.AddAxiom(
@@ -326,16 +336,18 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         )
       )
     } else {
-      TransitionSplitter.spawnSplitter(context.theoryInstance,
-                                       context.monoidMapPredicateAtom(0),
-                                       newAutomataNr) ++
-      formulaForNewAutomaton(
-        newAutomataNr,
-        leftId,
-        rightId,
-        product,
-        context
-      )
+      TransitionSplitter.spawnSplitter(
+        context.theoryInstance,
+        context.monoidMapPredicateAtom(0),
+        newAutomataNr
+      ) ++
+        formulaForNewAutomaton(
+          newAutomataNr,
+          leftId,
+          rightId,
+          product,
+          context
+        )
 
     }
 
@@ -420,8 +432,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val assumptions =
       context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
-              rightNr
-            ) :+ context.monoidMapPredicateAtom
+        rightNr
+      ) :+ context.monoidMapPredicateAtom
 
     // work-around: adding a conjunction of literals (non-quantified)
     // sometimes seems to cause an exception. this must be a bug in
@@ -429,8 +441,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val matActions =
       if (simplifiedEquations.quans.isEmpty)
         (for (lit <- simplifiedEquations.iterator) yield {
-           Plugin.AddAxiom(assumptions, lit, theoryInstance)
-         }).toList
+          Plugin.AddAxiom(assumptions, lit, theoryInstance)
+        }).toList
       else
         List(Plugin.AddAxiom(assumptions, simplifiedEquations, theoryInstance))
 
@@ -443,7 +455,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             context.autTransitionMasks(leftNr) ++
             context.autTransitionMasks(rightNr)
         )
-      )) ++ matActions
+      )
+    ) ++ matActions
 
   }
 

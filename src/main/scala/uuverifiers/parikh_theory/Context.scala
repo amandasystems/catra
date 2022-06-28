@@ -7,7 +7,7 @@ import ap.terfor.TerForConvenience._
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 
-import scala.collection.{SortedSet, mutable}
+import scala.collection.{BitSet, SortedSet, mutable}
 import uuverifiers.common._
 
 import java.io.File
@@ -21,6 +21,17 @@ sealed case class Context(
     monoidMapPredicateAtom: Atom,
     theoryInstance: ParikhTheory
 ) extends Tracing {
+  def deselectedTransitionSignature(autId: Int): BitSet = {
+    val definitelyDeselected =
+      mutable.BitSet(materialisedAutomata(autId).transitions.size)
+
+    materialisedAutomata(autId).transitions.zipWithIndex
+      .filter(tAndId => transitionStatus(autId)(tAndId._1).definitelyAbsent)
+      .map(_._2)
+      .foreach(tId => definitelyDeselected += tId)
+
+    definitelyDeselected.toImmutable
+  }
 
   /** True if the sum of terms is known to be positive (in our case: that
    *  at least one is positive since all terms are at non-negative)
