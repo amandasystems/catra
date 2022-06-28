@@ -227,18 +227,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
                    term = transitionToTerm(trans);
                    constr = term === 0
                    if !constr.isTrue;
-
                    separatingCut = aut
                      .minCut(aut.initialState, trans.from())
-                     .flatMap(
-                       fromTransitionTo =>
-                         myTransitionMasks.find(
-                           m => m.last == transitionToTerm(fromTransitionTo._2)
-                         )
-                     )
+                     .map(_._2);
+                   cutMasks = separatingCut
+                     .map(context.autTransitionMask(autId))
                      .toSeq;
-
-                   assumptions = separatingCut :+ connectedInstance)
+                   cutIsZero = cutMasks.map(_.last).reduce(_ + _) <= 0;
+                   assumptions = if (cutIsZero.isTrue) // Forwards-unreachable
+                     cutMasks :+ connectedInstance :+ cutIsZero
+                   else // Backwards-unreachable: fall back
+                     {
+                       for (a <- myTransitionMasks
+                            if a.last.isZero || a.last == term)
+                         yield a
+                     } :+ connectedInstance)
                 yield {
                   Plugin.AddAxiom(assumptions, constr, theoryInstance)
                 }

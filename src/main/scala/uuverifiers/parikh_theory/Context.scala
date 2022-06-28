@@ -21,6 +21,12 @@ sealed case class Context(
     monoidMapPredicateAtom: Atom,
     theoryInstance: ParikhTheory
 ) extends Tracing {
+
+  def autTransitionMask(autId: Int)(transition: Transition): Atom =
+    autTransitionMasks(autId)(
+      materialisedAutomata(autId).transitions.indexOf(transition)
+    )
+
   def deselectedTransitionSignature(autId: Int): BitSet = {
     val definitelyDeselected =
       mutable.BitSet(materialisedAutomata(autId).transitions.size)
