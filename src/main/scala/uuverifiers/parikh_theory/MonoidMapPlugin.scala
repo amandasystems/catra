@@ -1,4 +1,5 @@
 package uuverifiers.parikh_theory
+import ap.parameters.Param
 import ap.parser.IExpression.Predicate
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
@@ -6,13 +7,12 @@ import ap.terfor.TerForConvenience._
 import ap.terfor.TermOrder
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.preds.Atom
-import ap.parameters.Param
 import uuverifiers.common._
 import uuverifiers.parikh_theory.VariousHelpers.simplifyUnlessTimeout
 
 import java.io.File
-import scala.collection.BitSet
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.{BitSet, mutable}
 
 /**
  * A theory plugin that will handle the connectedness of a given automaton,
@@ -37,6 +37,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   val materialisedAutomata: ArrayBuffer[Automaton] = ArrayBuffer(
     theoryInstance.auts: _*
   )
+
+  // bitvector for selected left bitvector for selected right, left id, right id
+  private val productFingerprintToId =
+    mutable.HashMap[(BitSet, BitSet, Int, Int), Int]()
 
   override val procedurePredicate: Predicate = theoryInstance.monoidMapPredicate
 
@@ -123,9 +127,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ): Option[(Int, Int)] = {
     val consideredAutomata =
-      for (a <- context.activeAutomata.toSeq;
-           if (context.isConnected(a) ||
-             context.nrUnknownTransitions(a) <= theoryInstance.materialisationThreshold))
+      for (a <- context.activeAutomata.toSeq
+           if context.isConnected(a) ||
+             context.nrUnknownTransitions(a) <= theoryInstance.materialisationThreshold)
         yield a
 
     val consideredAutomataSorted =
@@ -240,10 +244,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
               for (trans <- unreachableTransitions.toSeq;
                    term = transitionToTerm(trans);
-                   constr = (term === 0);
+                   constr = term === 0
                    if !constr.isTrue;
                    relTransitions = {
-                     for (a <- myTransitionMasks;
+                     for (a <- myTransitionMasks
                           if a.last.isZero || a.last == term)
                        yield a
                    };
@@ -273,15 +277,34 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       unreachableActions ++ subsumeActions
     }
 
-  def getOrUpdateAutId(
-      leftZeroIdxs: BitSet,
-      rightZeroIdxs: BitSet,
+  def getOrComputeProduct(
       leftId: Int,
       rightId: Int,
-      product: Automaton
-  ): Int = {
-    materialisedAutomata += product
-    materialisedAutomata.size - 1
+      context: Context
+  ): Int = trace("getOrComputeProduct") {
+    val signature = trace("Product signature")(
+      (
+        context.deselectedTransitionSignature(leftId),
+        context.deselectedTransitionSignature(rightId),
+        leftId,
+        rightId
+      )
+    )
+
+    val productId = productFingerprintToId.getOrElseUpdate(
+      signature,
+      materialisedAutomata.size
+    )
+    if (productId == materialisedAutomata.size) {
+      val product = context
+        .filteredAutomaton(leftId) productWith context
+        .filteredAutomaton(rightId)
+      materialisedAutomata += product
+    }
+
+    // Note: we cannot filter the product since it came from a different
+    // branch and does not yet have TransitionMasks here!
+    productId
   }
 
   private def materialiseProduct(
@@ -290,22 +313,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ) = trace(s"materialise ${leftId}x$rightId") {
     stats.increment("materialiseProduct")
-    val left = context.filteredAutomaton(leftId)
-    val right = context.filteredAutomaton(rightId)
     trace(
-      s"materialising product of $left and $right"
+      s"materialising product of $leftId and $rightId"
     )("")
 
-    val product = left productWith right
-    val newAutomataNr = trace("newAutomataNr") {
-      getOrUpdateAutId(
-        context.deselectedTransitionSignature(leftId),
-        context.deselectedTransitionSignature(rightId),
-        leftId,
-        rightId,
-        product
-      )
-    }
+    val productNr = getOrComputeProduct(leftId, rightId, context)
+    val product = materialisedAutomata(productNr)
 
     def concernsOneOfTheTerms(p: Atom): Boolean = {
       autNr(p) match {
@@ -339,10 +352,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       TransitionSplitter.spawnSplitter(
         context.theoryInstance,
         context.monoidMapPredicateAtom(0),
-        newAutomataNr
+        productNr
       ) ++
         formulaForNewAutomaton(
-          newAutomataNr,
+          productNr,
           leftId,
           rightId,
           product,
