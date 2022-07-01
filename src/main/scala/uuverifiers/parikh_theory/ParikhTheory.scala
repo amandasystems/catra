@@ -8,7 +8,7 @@ import ap.terfor.substitutions.VariableShiftSubst
 import ap.theories._
 import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._
-import uuverifiers.common.{Automaton, Tracing, Transition}
+import uuverifiers.common.{Automaton, State, Tracing, Transition}
 import VariousHelpers.simplifyUnlessTimeout
 
 import java.io.File
@@ -136,6 +136,7 @@ trait ParikhTheory
       automaton: Automaton,
       instanceTerm: LinearCombination,
       automataNr: Int,
+      finalTerms: Map[State, Term],
       transitionAndTerms: IndexedSeq[(Transition, LinearCombination)]
   )(implicit order: TermOrder): Seq[Formula] = {
     val transitionMaskInstances =
@@ -152,7 +153,7 @@ trait ParikhTheory
     val isUnusedInProduct = unusedPredicate(Seq(instanceTerm, l(automataNr)))
     val isConnected = connectedPredicate(Seq(instanceTerm, l(automataNr)))
     val preservesFlow =
-      AutomataFlow(automaton).flowEquations(transitionAndTerms)
+      AutomataFlow(automaton).flowEquations(finalTerms, transitionAndTerms)
 
     isUnusedInProduct +: isConnected +: preservesFlow +: transitionMaskInstances
 
@@ -187,6 +188,15 @@ trait ParikhTheory
           _.transitions.map(t => (t, varFactory.nextVariable())).toIndexedSeq
         )
 
+      val autFinalTerms: IndexedSeq[Map[State, LinearCombination]] =
+        auts.map(
+          a =>
+            a.states
+              .filter(a.isAccept)
+              .map(s => (s, varFactory.nextVariable()))
+              .toMap
+        )
+
       // need to prevent variable capture by the quantifiers added below
       val shiftAwayFromQuantifiers =
         VariableShiftSubst.upShifter[Term](varFactory.variableCount(), order)
@@ -200,6 +210,7 @@ trait ParikhTheory
               a,
               instanceTerm,
               i,
+              autFinalTerms(i),
               autTransitionTerms(i)
             ) :+ AutomataFlow(a).monoidValuesReachable(
               shiftedMonoidValues,

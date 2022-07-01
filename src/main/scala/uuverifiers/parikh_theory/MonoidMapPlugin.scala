@@ -380,11 +380,16 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     )
 
     val transitionToTerm = transitionToTermSeq.toMap
+    val finalTerms = product.states
+      .filter(product.isAccept)
+      .map(s => (s, varFactory.nextVariable()))
+      .toMap
 
     val newClauses = theoryInstance.automataClauses(
       product,
       context.instanceTerm,
       productNr,
+      finalTerms,
       transitionToTermSeq
     )
 

@@ -8,6 +8,8 @@ import ap.basetypes.IdealInt.{MINUS_ONE, ONE, ZERO}
 import ap.terfor.TerForConvenience._
 import uuverifiers.common.{Automaton, State, Tracing, Transition}
 
+import scala.collection.immutable.Map
+
 /**
  *  A class to generate flow-balancing constraints for an automaton, modulo an
  *  arbitrary mapping for edges.
@@ -25,8 +27,11 @@ class AutomataFlow(private val aut: Automaton)(
   ) = {
     val (state, _) = stateTerms.head
     val initialFlow = l(if (state == aut.initialState) ONE else ZERO)
-    (state, sum(stateTerms.unzip._2 ++ List((ONE, initialFlow))))
+    (state, sum(stateTerms.map(_._2) ++ List((ONE, initialFlow))))
   }
+
+  def flowSink(finalStateVars: Map[State, Term])(state: State): Term =
+    if (aut isAccept state) finalStateVars(state) else 0
 
   /**
    * Compute the balancing constraints for the state flow stating that for each
@@ -34,6 +39,7 @@ class AutomataFlow(private val aut: Automaton)(
    * defined by the mapping from transition to variable.
    */
   private def asManyIncomingAsOutgoing(
+      finalStateVars: Map[State, Term],
       transitionAndVar: Seq[(Transition, LinearCombination)]
   ): ArithConj = {
     trace("Flow equations") {
@@ -51,8 +57,8 @@ class AutomataFlow(private val aut: Automaton)(
           .values
           .map(asStateFlowSum)
           .map {
-            case (state, flowSum) =>
-              if (aut isAccept state) flowSum >= 0 else flowSum === 0
+            case (state, flowSum) => flowSum === flowSink(finalStateVars)(state)
+
           }
       )
     }
@@ -108,12 +114,14 @@ class AutomataFlow(private val aut: Automaton)(
 
   // TODO implement an IFormula version of this as well
   def flowEquations(
+      finalStateVars: Map[State, Term],
       transitionAndVar: IndexedSeq[(Transition, LinearCombination)]
   ): Conjunction = {
     trace("flowEquations")(
       conj(
-        allNonnegative(transitionAndVar.unzip._2),
-        asManyIncomingAsOutgoing(transitionAndVar)
+        allNonnegative(transitionAndVar.map(_._2)),
+        finalStateVars.values.reduce(_ + _) === 1,
+        asManyIncomingAsOutgoing(finalStateVars, transitionAndVar)
       )
     )
   }
