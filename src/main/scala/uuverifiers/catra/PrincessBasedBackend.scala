@@ -2,11 +2,14 @@ package uuverifiers.catra
 
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
+import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import uuverifiers.common.Tracing
 
 import scala.util.{Failure, Success, Try}
 import SimpleAPI.ProverStatus
 import ap.parser.IFormula
+
+import scala.collection.mutable.ArrayBuffer
 
 import scala.annotation.tailrec
 
@@ -36,6 +39,9 @@ trait PrincessBasedBackend extends Backend with Tracing {
       instance: Instance
   ): Map[Counter, ConstantTerm]
 
+  // hack to collect all formulas sent to the prover
+  val formulasInSolver = new ArrayBuffer[Conjunction]
+
   def withProver[T](f: SimpleAPI => T): T =
     dumpSMTDir match {
       case None => SimpleAPI.withProver(f)
@@ -44,8 +50,45 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
 
   override def findImage(instance: Instance): Try[ImageResult] = withProver {
-    p =>
+    p => { // TODO: set ap.util.Timeout to some proper value!
       val counterToSolverConstant = prepareSolver(p, instance)
+
+      ap.util.Debug.enableAllAssertions(false)
+
+      val completeFormula = Conjunction.conj(formulasInSolver, p.order)
+//      println(completeFormula)
+
+      val qeProver = new IterativeQuantifierElimProver(p.theories, p.order)
+      val reducer = ReduceWithConjunction(Conjunction.TRUE, p.order)
+
+      var disjuncts : List[Conjunction] = List()
+      var cont = true
+      while (cont) {
+        ap.util.Timeout.check
+
+        val formulaToSolve =
+          reducer(Conjunction.conj(completeFormula :: disjuncts, p.order))
+        val nextDisjunct = qeProver(!formulaToSolve)
+
+        println(nextDisjunct)
+
+        if (nextDisjunct.isTrue)
+          cont = false
+        else
+          disjuncts = nextDisjunct :: disjuncts
+      }
+
+      if (disjuncts.isEmpty) {
+        Success(Unsat)
+      } else {
+        val image = reducer(!Conjunction.conj(disjuncts, p.order))
+        Success(new ImageResult {
+          override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
+          override val name: String = "non-empty image " + p.pp(p.asIFormula(image))
+        })
+      }
+
+      /*
       p.makeExistentialRaw(counterToSolverConstant.values)
       p.setMostGeneralConstraints(true)
       p.checkSat(block = true) match {
@@ -60,6 +103,8 @@ trait PrincessBasedBackend extends Backend with Tracing {
         case otherStatus =>
           Failure(new Exception(s"unexpected solver status: $otherStatus"))
       }
+       */
+    }
 
   }
 

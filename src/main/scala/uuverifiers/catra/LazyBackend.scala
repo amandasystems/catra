@@ -76,14 +76,18 @@ class LazyBackend(override val arguments: CommandLineOptions)
 
     for (constraint <- constraints) {
       p.addAssertion(
-        trace("add constraint")(
-          constraint toPrincess counterToSolverConstant
-        )
+        trace("add constraint") {
+          val f = constraint toPrincess counterToSolverConstant
+          formulasInSolver += p.asConjunction(f)
+          f
+        }
       )
     }
 
     for (theory <- theories) {
-      p.addAssertion(theory allowsCounterValues counterToSolverConstant)
+      val f = theory allowsCounterValues counterToSolverConstant
+      p.addAssertion(f)
+      formulasInSolver += f
     }
 
     counterToSolverConstant
