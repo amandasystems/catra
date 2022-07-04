@@ -64,9 +64,9 @@ sealed case class CommandLineOptions(
     case ChooseBaseline => new BaselineBackend(this)
   }
 
-  def runWithTimeout(
+  def runWithTimeout[R <: Result](
       p: SimpleAPI
-  )(block: => SatisfactionResult): Try[SatisfactionResult] =
+  )(block: => R): Try[R] =
     try {
       timeout_ms match {
         case Some(timeout_ms) =>
@@ -74,7 +74,7 @@ sealed case class CommandLineOptions(
             ap.util.Timeout.withTimeoutMillis(timeout_ms) {
               Success(block)
             } {
-              Success(Timeout(timeout_ms))
+              Success(Timeout(timeout_ms).asInstanceOf[R])
             }
           }
         case None => Success(block)
@@ -82,10 +82,10 @@ sealed case class CommandLineOptions(
     } catch {
       case SimpleAPI.TimeoutException =>
         p.stop
-        Success(Timeout(timeout_ms.getOrElse(0)))
+        Success(Timeout(timeout_ms.getOrElse(0)).asInstanceOf[R])
       case ap.util.Timeout(_) =>
         p.stop
-        Success(Timeout(timeout_ms.getOrElse(0)))
+        Success(Timeout(timeout_ms.getOrElse(0)).asInstanceOf[R])
       case e: Throwable => Failure(e)
 
     }

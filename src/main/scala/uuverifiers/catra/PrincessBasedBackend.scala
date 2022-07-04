@@ -50,45 +50,49 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
 
   override def findImage(instance: Instance): Try[ImageResult] = withProver {
-    p => { // TODO: set ap.util.Timeout to some proper value!
-      val counterToSolverConstant = prepareSolver(p, instance)
+    p =>
+      arguments
+        .runWithTimeout(p) {
+          val counterToSolverConstant = prepareSolver(p, instance)
+          ap.util.Debug.enableAllAssertions(false)
 
-      ap.util.Debug.enableAllAssertions(false)
-
-      val completeFormula = Conjunction.conj(formulasInSolver, p.order)
+          val completeFormula = Conjunction.conj(formulasInSolver, p.order)
 //      println(completeFormula)
 
-      val qeProver = new IterativeQuantifierElimProver(p.theories, p.order)
-      val reducer = ReduceWithConjunction(Conjunction.TRUE, p.order)
+          val qeProver = new IterativeQuantifierElimProver(p.theories, p.order)
+          val reducer = ReduceWithConjunction(Conjunction.TRUE, p.order)
 
-      var disjuncts : List[Conjunction] = List()
-      var cont = true
-      while (cont) {
-        ap.util.Timeout.check
+          var disjuncts: List[Conjunction] = List()
+          var cont = true
+          while (cont) {
+            ap.util.Timeout.check
 
-        val formulaToSolve =
-          reducer(Conjunction.conj(completeFormula :: disjuncts, p.order))
-        val nextDisjunct = qeProver(!formulaToSolve)
+            val formulaToSolve =
+              reducer(Conjunction.conj(completeFormula :: disjuncts, p.order))
+            val nextDisjunct = qeProver(!formulaToSolve)
 
-        println(nextDisjunct)
+            println(nextDisjunct)
 
-        if (nextDisjunct.isTrue)
-          cont = false
-        else
-          disjuncts = nextDisjunct :: disjuncts
-      }
+            if (nextDisjunct.isTrue)
+              cont = false
+            else
+              disjuncts = nextDisjunct :: disjuncts
+          }
 
-      if (disjuncts.isEmpty) {
-        Success(Unsat)
-      } else {
-        val image = reducer(!Conjunction.conj(disjuncts, p.order))
-        Success(new ImageResult {
-          override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
-          override val name: String = "non-empty image " + p.pp(p.asIFormula(image))
-        })
-      }
+          if (disjuncts.isEmpty) {
+            Unsat
+          } else {
+            val image = reducer(!Conjunction.conj(disjuncts, p.order))
+            new ImageResult {
+              override val presburgerImage
+                  : Formula = TrueOrFalse(false) // FIXME
+              override val name: String = "non-empty image " + p.pp(
+                p.asIFormula(image)
+              )
+            }
+          }
 
-      /*
+          /*
       p.makeExistentialRaw(counterToSolverConstant.values)
       p.setMostGeneralConstraints(true)
       p.checkSat(block = true) match {
@@ -103,8 +107,8 @@ trait PrincessBasedBackend extends Backend with Tracing {
         case otherStatus =>
           Failure(new Exception(s"unexpected solver status: $otherStatus"))
       }
-       */
-    }
+         */
+        }
 
   }
 
