@@ -12,19 +12,22 @@ Vagrant.configure("2") do |config|
 
   # Create a private network, which allows host-only access to the machine
   # using a specific IP.
-  config.vm.network "private_network", ip: "192.168.33.10"
+  # config.vm.network "private_network", ip: "192.168.33.10"
 
   #
   config.vm.provider "virtualbox" do |vb|
       vb.memory = "4096" # You might want to increase this!
   end
 
+  config.vm.provision "file", source: "parikh-plus.zip", destination: "$HOME/parikh-plus.zip"
+
   config.vm.provision "shell", inline: <<-SHELL
      apt-get update
-     apt-get install -y python3 python3-venv default-jdk parallel
-     su vagrant --command python3 -m venv /home/vagrant/venv
-     su vagrant --command /home/vagrant/venv/bin/pip3 install -r experiments/requirements.txt
-     curl -fL https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz | gzip -d > cs && chmod +x cs && ./cs setup --yes
-     # curl -fL https://es-static.fbk.eu/tools/nuxmv/downloads/nuXmv-2.0.0-linux64.tar.gz | tar xvf -
+     apt-get install -y python3 python3-venv default-jdk parallel make
+     su vagrant --command="python3 -m venv /home/vagrant/venv"
+     su vagrant --command="/home/vagrant/venv/bin/pip3 install -r experiments/requirements.txt"
+     su vagrant --command="curl -fL https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-linux.gz | gzip -d > cs && chmod +x cs && ./cs setup --yes"
+     curl -fL https://es-static.fbk.eu/tools/nuxmv/downloads/nuXmv-2.0.0-linux64.tar.gz | tar xzf -
+     cp nuXmv-2.0.0-Linux/bin/nuXmv /usr/local/bin/nuxmv
   SHELL
 end
