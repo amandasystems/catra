@@ -58,6 +58,15 @@ sealed case class CommandLineOptions(
     enableRestarts: Boolean
 ) {
 
+  def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
+    dumpSMTDir match {
+      case None => SimpleAPI.withProver(p => runWithTimeout(p)(f(p)))
+      case Some(dumpDir) =>
+        SimpleAPI.withProver(dumpSMT = true, dumpDirectory = dumpDir)(
+          p => runWithTimeout(p)(f(p))
+        )
+    }
+
   def getBackend(): Backend = backend match {
     case ChooseLazy     => new LazyBackend(this)
     case ChooseNuxmv    => new NUXMVBackend(this)

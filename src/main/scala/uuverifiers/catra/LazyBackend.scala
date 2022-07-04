@@ -5,6 +5,9 @@ import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
 import uuverifiers.common.Automaton
 import uuverifiers.parikh_theory.Context
 import ap.proof.theoryPlugins.Plugin
+import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
+
+import scala.util.Try
 
 class LazyBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
@@ -18,6 +21,47 @@ class LazyBackend(override val arguments: CommandLineOptions)
       s"${event}. Taking actions: ${actions.mkString(",")}"
     )
   }
+
+  override def findImage(instance: Instance): Try[ImageResult] =
+    arguments.withProver { p =>
+      val counterToSolverConstant = prepareSolver(p, instance)
+      ap.util.Debug.enableAllAssertions(false)
+
+      val completeFormula = Conjunction.conj(formulasInSolver, p.order)
+      //      println(completeFormula)
+
+      val qeProver = new IterativeQuantifierElimProver(p.theories, p.order)
+      val reducer = ReduceWithConjunction(Conjunction.TRUE, p.order)
+
+      var disjuncts: List[Conjunction] = List()
+      var cont = true
+      while (cont) {
+        ap.util.Timeout.check
+
+        val formulaToSolve =
+          reducer(Conjunction.conj(completeFormula :: disjuncts, p.order))
+        val nextDisjunct = qeProver(!formulaToSolve)
+
+        println(nextDisjunct)
+
+        if (nextDisjunct.isTrue)
+          cont = false
+        else
+          disjuncts = nextDisjunct :: disjuncts
+      }
+
+      if (disjuncts.isEmpty) {
+        Unsat
+      } else {
+        val image = reducer(!Conjunction.conj(disjuncts, p.order))
+        new ImageResult {
+          override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
+          override val name: String = "non-empty image " + p.pp(
+            p.asIFormula(image)
+          )
+        }
+      }
+    }
 
   override def prepareSolver(
       p: SimpleAPI,

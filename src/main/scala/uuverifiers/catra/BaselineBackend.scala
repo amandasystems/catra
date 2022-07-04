@@ -1,16 +1,17 @@
 package uuverifiers.catra
 
-import uuverifiers.common.{Automaton, NrTransitionsOrdering}
 import ap.SimpleAPI
-import SimpleAPI.ProverStatus
+import ap.SimpleAPI.ProverStatus
 import ap.basetypes.LeftistHeap
 import ap.parser.IFormula
 import ap.terfor.{ConstantTerm, TermOrder}
 import uuverifiers.common.Tex.formulaToTex
+import uuverifiers.common.{Automaton, NrTransitionsOrdering}
 import uuverifiers.parikh_theory.VariousHelpers.transitionsIncrementRegisters
 
 import java.io.{BufferedWriter, File, FileWriter}
 import scala.annotation.tailrec
+import scala.util.Try
 
 private class ProductQueue(private val queue: LeftistHeap[Automaton, _]) {
   def enqueue(a: Automaton): ProductQueue = new ProductQueue(queue + a)
@@ -33,6 +34,26 @@ private object ProductQueue {
 }
 class BaselineBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
+
+  override def findImage(instance: Instance): Try[ImageResult] =
+    arguments.withProver { p =>
+      ap.util.Debug.enableAllAssertions(false)
+      val counterToSolverConstant = prepareSolver(p, instance)
+      p.makeExistentialRaw(counterToSolverConstant.values)
+      p.setMostGeneralConstraints(true)
+      p.checkSat(block = true) match {
+        case ProverStatus.Sat =>
+          val parikhImage: IFormula = (~p.getMinimisedConstraint).notSimplify
+          new ImageResult {
+            override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
+            override val name: String = s"non-empty image $parikhImage" // FIXME
+          }
+        case ProverStatus.Unsat       => Unsat
+        case ProverStatus.OutOfMemory => OutOfMemory
+        case otherStatus =>
+          throw new Exception(s"unexpected solver status: $otherStatus")
+      }
+    }
 
   def handleDumpingGraphviz(a: Automaton): Unit =
     arguments.dumpGraphvizDir.foreach(

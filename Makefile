@@ -1,30 +1,12 @@
-DEPS=$(latexmk -deps main.tex)
-dotfiles = $(wildcard *.dot)
-all_automata = $(patsubst %.dot,%.pdf,${dotfiles})
 current_version = $(shell git rev-parse --short HEAD)
 TIMEOUT_MS = 30000
-EXPERIMENT_DIR = ../parikh-plus
-#NR_EXPERIMENTS = 60
+EXPERIMENT_DIR = parikh-plus
 
-all: ${all_automata} montage.png
-
-montage.png: ${all_automata}
-	magick montage -tile x2 \
-								-label %t \
-								-border 2 \
-								-bordercolor black \
-								-geometry +4+4 \
-								${all_automata} $@
-
-
-%.pdf: %.dot
-	dot -Tpdf -o $@ $<
-
-# -Earrowsize=0.5 -Efontsize=9.0
+.PHONY: all
+all: experiments
 
 clean:
-	${RM} ${all_automata}
-	latexmk -c
+	sbt clean
 
 veryclean:
 	${MAKE} clean
@@ -34,14 +16,10 @@ veryclean:
 	${RM} trace-*
 
 
-trace.pdf: trace.tex ${DEPS} ${all_automata}
-	latexmk -pdf $<
-
 .PHONY: experiments
 experiments:
 	sbt assembly
-	./bin/catra solve-satisfy \
-		--timeout ${TIMEOUT_MS} basket > ${current_version}-lazy.log
+	./bin/experiments.sh --timeout ${TIMEOUT_MS} basket
 
 
 .PHONY: smoke-test

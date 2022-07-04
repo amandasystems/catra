@@ -24,8 +24,6 @@ trait PrincessBasedBackend extends Backend with Tracing {
   // TODO maybe expose this as an option?
   private val RESTART_TO_FACTOR = 500L
 
-  import arguments._
-
   /**
    * Essentially performs all the logic common to both modes of operation.
    *
@@ -41,76 +39,6 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   // hack to collect all formulas sent to the prover
   val formulasInSolver = new ArrayBuffer[Conjunction]
-
-  def withProver[T](f: SimpleAPI => T): T =
-    dumpSMTDir match {
-      case None => SimpleAPI.withProver(f)
-      case Some(dumpDir) =>
-        SimpleAPI.withProver(dumpSMT = true, dumpDirectory = dumpDir)(f)
-    }
-
-  override def findImage(instance: Instance): Try[ImageResult] = withProver {
-    p =>
-      arguments
-        .runWithTimeout(p) {
-          val counterToSolverConstant = prepareSolver(p, instance)
-          ap.util.Debug.enableAllAssertions(false)
-
-          val completeFormula = Conjunction.conj(formulasInSolver, p.order)
-//      println(completeFormula)
-
-          val qeProver = new IterativeQuantifierElimProver(p.theories, p.order)
-          val reducer = ReduceWithConjunction(Conjunction.TRUE, p.order)
-
-          var disjuncts: List[Conjunction] = List()
-          var cont = true
-          while (cont) {
-            ap.util.Timeout.check
-
-            val formulaToSolve =
-              reducer(Conjunction.conj(completeFormula :: disjuncts, p.order))
-            val nextDisjunct = qeProver(!formulaToSolve)
-
-            println(nextDisjunct)
-
-            if (nextDisjunct.isTrue)
-              cont = false
-            else
-              disjuncts = nextDisjunct :: disjuncts
-          }
-
-          if (disjuncts.isEmpty) {
-            Unsat
-          } else {
-            val image = reducer(!Conjunction.conj(disjuncts, p.order))
-            new ImageResult {
-              override val presburgerImage
-                  : Formula = TrueOrFalse(false) // FIXME
-              override val name: String = "non-empty image " + p.pp(
-                p.asIFormula(image)
-              )
-            }
-          }
-
-          /*
-      p.makeExistentialRaw(counterToSolverConstant.values)
-      p.setMostGeneralConstraints(true)
-      p.checkSat(block = true) match {
-        case ProverStatus.Sat =>
-          val parikhImage: IFormula = (~p.getMinimisedConstraint).notSimplify
-          Success(new ImageResult {
-            override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
-            override val name: String = s"non-empty image $parikhImage" // FIXME
-          })
-        case ProverStatus.Unsat       => Success(Unsat)
-        case ProverStatus.OutOfMemory => Success(OutOfMemory)
-        case otherStatus =>
-          Failure(new Exception(s"unexpected solver status: $otherStatus"))
-      }
-         */
-        }
-
-  }
 
   @tailrec
   private def luby(i: Int): Int = {
@@ -167,16 +95,14 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   override def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
     trace("solveSatisfy result") {
-      withProver { p =>
-        arguments.runWithTimeout(p) {
-          try {
-            val counterToConstants = prepareSolver(p, instance)
-            checkSolutions(p, instance)(counterToConstants)
-          } catch {
-            case _: OutOfMemoryError =>
-              p.stop
-              OutOfMemory
-          }
+      arguments.withProver { p =>
+        try {
+          val counterToConstants = prepareSolver(p, instance)
+          checkSolutions(p, instance)(counterToConstants)
+        } catch {
+          case _: OutOfMemoryError =>
+            p.stop
+            OutOfMemory
         }
       }
     }
