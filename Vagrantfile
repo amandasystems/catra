@@ -19,7 +19,6 @@ Vagrant.configure("2") do |config|
       vb.memory = "4096" # You might want to increase this!
   end
 
-  config.vm.provision "file", source: "parikh-plus.zip", destination: "$HOME/parikh-plus.zip"
 
   config.vm.provision "shell", inline: <<-SHELL
      apt-get update

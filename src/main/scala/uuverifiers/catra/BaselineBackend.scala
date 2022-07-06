@@ -1,9 +1,11 @@
 package uuverifiers.catra
 
-import ap.SimpleAPI
+import ap.{PresburgerTools, SimpleAPI}
 import ap.SimpleAPI.ProverStatus
 import ap.basetypes.LeftistHeap
 import ap.parser.IFormula
+import ap.terfor.TerForConvenience.conj
+import ap.terfor.conjunctions.Conjunction
 import ap.terfor.{ConstantTerm, TermOrder}
 import uuverifiers.common.Tex.formulaToTex
 import uuverifiers.common.{Automaton, NrTransitionsOrdering}
@@ -37,22 +39,45 @@ class BaselineBackend(override val arguments: CommandLineOptions)
 
   override def findImage(instance: Instance): Try[ImageResult] =
     arguments.withProver { p =>
-      ap.util.Debug.enableAllAssertions(false)
-      val counterToSolverConstant = prepareSolver(p, instance)
-      p.makeExistentialRaw(counterToSolverConstant.values)
-      p.setMostGeneralConstraints(true)
-      p.checkSat(block = true) match {
-        case ProverStatus.Sat =>
-          val parikhImage: IFormula = (~p.getMinimisedConstraint).notSimplify
-          new ImageResult {
-            override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
-            override val name: String = s"non-empty image $parikhImage" // FIXME
-          }
-        case ProverStatus.Unsat       => Unsat
-        case ProverStatus.OutOfMemory => OutOfMemory
-        case otherStatus =>
-          throw new Exception(s"unexpected solver status: $otherStatus")
-      }
+      val counterToSolverConstant =
+        trace("Counter -> solver constant")(
+          instance.counters.map(c => c -> c.toConstant(p)).toMap
+        )
+
+      implicit val order: TermOrder = p.order
+
+      val constraints = conj(
+        instance.constraints
+          .map(c => p.asConjunction(c.toPrincess(counterToSolverConstant)))
+      )
+
+      def parikhImage(group: Seq[Automaton]): Conjunction =
+        group
+          .reduceOption(_ productWith _)
+          .map(
+            product =>
+              product.parikhImage(
+                transitionsIncrementRegisters(product, counterToSolverConstant)(
+                  _
+                ),
+                quantElim = false
+              )
+          )
+          .getOrElse(Conjunction.TRUE)
+
+      val image =
+        p.asIFormula(
+          PresburgerTools.elimQuantifiersWithPreds(
+            conj(constraints +: instance.automataProducts.map(parikhImage))
+          )
+        )
+
+      if (image.isFalse) Unsat
+      else
+        new ImageResult {
+          override val presburgerImage: Formula = TrueOrFalse(false) // FIXME
+          override val name: String = s"non-empty image $image" // FIXME
+        }
     }
 
   def handleDumpingGraphviz(a: Automaton): Unit =

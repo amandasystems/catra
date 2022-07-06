@@ -12,7 +12,7 @@ if len(sys.argv) != 3:
 nr_chunks = int(sys.argv[1])
 target = Path(sys.argv[2])
 
-paths_to_split = [Path(filepath.strip()) for filepath in sys.stdin]
+paths_to_split = [Path(filepath.strip()) for filepath in sys.stdin if filepath.strip()]
 random.shuffle(paths_to_split)
 chunk_size = len(paths_to_split) // nr_chunks
 
