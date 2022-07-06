@@ -1,14 +1,12 @@
 package uuverifiers.parikh_theory
-import ap.terfor.{Formula, Term, TermOrder}
-import ap.terfor.conjunctions.Conjunction
-import ap.terfor.arithconj.ArithConj
-import ap.terfor.linearcombination.LinearCombination
 import ap.basetypes.IdealInt
 import ap.basetypes.IdealInt.{MINUS_ONE, ONE, ZERO}
 import ap.terfor.TerForConvenience._
+import ap.terfor.arithconj.ArithConj
+import ap.terfor.conjunctions.Conjunction
+import ap.terfor.linearcombination.LinearCombination
+import ap.terfor.{Formula, Term, TermOrder}
 import uuverifiers.common.{Automaton, State, Tracing, Transition}
-
-import scala.collection.immutable.Map
 
 /**
  *  A class to generate flow-balancing constraints for an automaton, modulo an
@@ -120,7 +118,9 @@ class AutomataFlow(private val aut: Automaton)(
     trace("flowEquations")(
       conj(
         allNonnegative(transitionAndVar.map(_._2)),
-        finalStateVars.values.reduce(_ + _) === 1,
+        allNonnegative(finalStateVars.values.toSeq),
+        finalStateVars.values
+          .foldRight(LinearCombination.ZERO)(_ + _) === 1,
         asManyIncomingAsOutgoing(finalStateVars, transitionAndVar)
       )
     )
