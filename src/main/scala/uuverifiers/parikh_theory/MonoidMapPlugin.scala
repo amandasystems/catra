@@ -235,7 +235,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
                      .toSeq;
                    cutIsZero = cutMasks.map(_.last).reduce(_ + _) <= 0;
                    assumptions = if (cutIsZero.isTrue) // Forwards-unreachable
-                     cutMasks :+ connectedInstance :+ cutIsZero
+                     cutMasks :+ connectedInstance :+ context.autTransitionMask(
+                       autId
+                     )(trans)
                    else // Backwards-unreachable: fall back
                      {
                        for (a <- myTransitionMasks
