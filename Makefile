@@ -19,8 +19,12 @@ veryclean:
 .PHONY: experiments
 experiments:
 	sbt assembly
-	./bin/experiments.sh --timeout ${TIMEOUT_MS} basket
-
+	parallel -j50\%  \
+	-X \
+	--eta --results "${current_version}/{#}/" \
+	java -Xmx8g \
+	-jar target/scala-2.13/uuverifiers/catra-assembly-0.1.0-SNAPSHOT.jar \
+	solve-satisfy --timeout ${TIMEOUT_MS} ::: basket/*.par
 
 .PHONY: smoke-test
 smoke-test:
