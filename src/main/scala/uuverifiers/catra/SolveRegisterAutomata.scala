@@ -96,9 +96,12 @@ object SolveRegisterAutomata extends App with Tracing {
 
   def runInstances(arguments: CommandLineOptions): Unit = {
     for (fileName <- arguments.inputFiles) {
-      val inputFileHandle = Source.fromFile(fileName)
-      val fileContents = inputFileHandle.mkString("")
-      inputFileHandle.close()
+      val fileContents = {
+        val inputFileHandle = Source.fromFile(fileName)
+        val results = inputFileHandle.mkString("")
+        inputFileHandle.close()
+        results
+      }
       val (parsed, parseTime) = measureTime(
         InputFileParser.parse(fileContents)
       )

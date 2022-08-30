@@ -4,11 +4,13 @@ import collection.mutable.ArrayBuffer
 import scala.collection.{SortedSet, mutable}
 
 class AutomatonBuilder extends Tracing {
-  private var _autStates = SortedSet[State]()
-  private var _outgoingTransitions = Map[State, SortedSet[Transition]]()
+  private val _autStates = mutable.HashSet[State]()
+  private val _outgoingTransitions =
+    mutable.HashMap[State, mutable.HashSet[Transition]]()
+  private val _allTransitions = mutable.HashSet[Transition]()
   private var _initial: Option[State] = None
   private var _accepting = Set[State]()
-  private var forwardReachable = Set[State]()
+  private var forwardReachable = mutable.HashSet[State]()
   private var backwardReachable = Set[State]()
   private var name: Option[String] = None
 
@@ -17,33 +19,31 @@ class AutomatonBuilder extends Tracing {
    *
    * @param s The state to set reachable
    */
-  private def setFwdReachable(s: State) =
-    trace(s"setting forward reachable $s") {
-      var todo = List(s)
+  private def setFwdReachable(s: State) = {
+    var todo = List(s)
 
-      def markReachable(s: State): Unit = {
-        forwardReachable += s
-      }
-      def enqueue(s: State): Unit = trace(s"adding $s to queue") {
-        todo = s :: todo
-      }
+    def markReachable(s: State): Unit = {
+      forwardReachable.add(s)
+    }
+    def enqueue(s: State): Unit =
+      todo = s :: todo
 
-      markReachable(s)
+    markReachable(s)
 
-      while (todo.nonEmpty) {
-        val current = todo.head
-        todo = todo.tail
+    while (todo.nonEmpty) {
+      val current = todo.head
+      todo = todo.tail
 
-        for (t <- _outgoingTransitions.getOrElse(current, Seq())) {
-          val targetSeenBefore = forwardReachable contains t.to()
-          if (!targetSeenBefore) {
-            enqueue(t.to())
-            markReachable(t.to())
-          }
+      for (t <- _outgoingTransitions.getOrElse(current, Seq())) {
+        val targetSeenBefore = forwardReachable contains t.to()
+        if (!targetSeenBefore) {
+          enqueue(t.to())
+          markReachable(t.to())
         }
       }
-      forwardReachable
     }
+    forwardReachable
+  }
 
   /**
    * Start a backwards reachability search here, populating
@@ -101,11 +101,7 @@ class AutomatonBuilder extends Tracing {
 
   def containsState(s: State): Boolean = _autStates contains s
 
-  def containsTransition(t: Transition): Boolean = {
-    _outgoingTransitions
-      .get(t.from())
-      .exists(outgoing => outgoing contains t)
-  }
+  def containsTransition(t: Transition): Boolean = _allTransitions contains t
 
   def addState(s: State): AutomatonBuilder = {
     _autStates += s
@@ -125,7 +121,7 @@ class AutomatonBuilder extends Tracing {
 
   def setInitial(newInitialState: State): AutomatonBuilder = {
     assertHasState(newInitialState)
-    forwardReachable = Set() // All states are now unreachable...
+    forwardReachable = mutable.HashSet() // All states are now unreachable...
     _initial = Some(newInitialState)
     setFwdReachable(newInitialState) //...until we recompute.
     this
@@ -134,7 +130,6 @@ class AutomatonBuilder extends Tracing {
   def setAccepting(acceptingStates: State*): AutomatonBuilder = {
     assert(acceptingStates forall (_autStates(_)))
     _accepting ++= acceptingStates
-    acceptingStates.foreach(s => startBwdReachability(s))
     this
   }
 
@@ -142,29 +137,22 @@ class AutomatonBuilder extends Tracing {
     assert(notAcceptingStates forall (_autStates(_)))
     backwardReachable = Set()
     _accepting --= notAcceptingStates
-    _accepting.foreach(s => startBwdReachability(s))
     this
   }
 
-  def addTransition(t: Transition): AutomatonBuilder =
-    trace(s"add transition $t") {
-      assert((_autStates contains t.from()) && (_autStates contains t.to()))
+  def addTransition(t: Transition): AutomatonBuilder = {
+    assert((_autStates contains t.from()) && (_autStates contains t.to()))
 
-      _outgoingTransitions = _outgoingTransitions.updatedWith(t.from()) {
-        case None                   => Some(SortedSet(t))
-        case Some(previousOutgoing) => Some(previousOutgoing + t)
-      }
+    _allTransitions.add(t)
 
-      if (forwardReachable contains t.from()) {
-        setFwdReachable(t.to())
-      }
+    _outgoingTransitions.getOrElseUpdate(t.from(), mutable.HashSet()).add(t)
 
-      if (backwardReachable contains t.to()) {
-        startBwdReachability(t.from())
-      }
-
-      this
+    if (forwardReachable contains t.from()) {
+      setFwdReachable(t.to())
     }
+
+    this
+  }
 
   def getAutomaton(): Automaton = {
     assert(_initial.isDefined, "Must have initial state!")
@@ -172,24 +160,33 @@ class AutomatonBuilder extends Tracing {
     if (!_accepting.exists(forwardReachable contains _))
       return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
 
+    // Compute backwards reachability (too expensive to do incrementally)
+    //_accepting.foreach(s => startBwdReachability(s))
+
     // Ignore transitions into and from dead states (unreachable, or where no
     // path leads on to an accepting state)
     val reachableTransitions =
       _outgoingTransitions.view
         .filterKeys(
-          s => (forwardReachable contains s) && (backwardReachable contains s)
+          s => (forwardReachable contains s) //&& (backwardReachable contains s)
         )
-        .mapValues(ts => ts.filter(backwardReachable contains _.to()))
+        //.mapValues(ts => ts.filter(backwardReachable contains _.to()))
         .toMap
 
-    new Aut(_initial.get, _accepting, reachableTransitions, _autStates, name)
+    new Aut(
+      _initial.get,
+      _accepting,
+      reachableTransitions,
+      SortedSet(_autStates.toSeq: _*),
+      name
+    )
   }
 }
 
 sealed private class Aut(
     initial: State,
     accepting: Set[State],
-    _transitions: Map[State, SortedSet[Transition]],
+    _transitions: Map[State, mutable.HashSet[Transition]],
     override val states: SortedSet[State],
     _name: Option[String]
 ) extends Automaton {
