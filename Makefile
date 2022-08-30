@@ -25,6 +25,7 @@ experiments:
 	java -Xmx8g \
 	-jar target/scala-2.13/uuverifiers/catra-assembly-0.1.0-SNAPSHOT.jar \
 	solve-satisfy --timeout ${TIMEOUT_MS} ::: basket/*.par
+	cat ${current_version}/*/stdout > ${current_version}.log
 
 .PHONY: smoke-test
 smoke-test:
