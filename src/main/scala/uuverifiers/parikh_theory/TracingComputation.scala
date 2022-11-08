@@ -2,7 +2,13 @@ package uuverifiers.parikh_theory
 import ap.SimpleAPI
 import ap.parser._
 import ap.proof.theoryPlugins.Plugin
-import ap.proof.theoryPlugins.Plugin.{AddAxiom, AxiomSplit}
+import ap.proof.theoryPlugins.Plugin.{
+  AddAxiom,
+  AxiomSplit,
+  CutSplit,
+  RemoveFacts,
+  ScheduleTask
+}
 import ap.terfor.TermOrder
 import ap.terfor.conjunctions.Conjunction
 import uuverifiers.common
@@ -44,17 +50,16 @@ trait TracingComputation extends ParikhTheory {
 
   private def actionToTex(p: SimpleAPI, order: TermOrder)(
       action: ap.proof.theoryPlugins.Plugin.Action
-  ) =
+  ): String =
     action match {
-      case AxiomSplit(_, cases, _) => {
+      case AxiomSplit(_, cases, _) =>
         cases
           .map(_._1)
           .map(p.asIFormula)
           .map(formulaToTex(_))
           .map(Tex.inlineMath)
           .mkString(" $\\mid$ ")
-      }
-      case AddAxiom(assumptions, axiom, _) => {
+      case AddAxiom(assumptions, axiom, _) =>
         "Assumptions: \n" +
           common.Tex.environment("equation") {
             common.Tex.environment("aligned") {
@@ -63,12 +68,17 @@ trait TracingComputation extends ParikhTheory {
                   .conj(assumptions, order)
                   .pipe(p.asIFormula)
                   .pipe(formulaToTex(_))
-              s"&${texFormula}"
+              s"&$texFormula"
             } + "\n"
           } + "\n" +
           "New Axioms: " +
           p.asIFormula(axiom).pipe(formulaToTex(_)).pipe(Tex.inlineMath)
-      }
+      case ScheduleTask(_: TransitionSplitter, _) =>
+        "Schedule splitting: Nothing happens!"
+      case CutSplit(cut, _, _) =>
+        s"Cut split: ${p.asIFormula(cut).pipe(formulaToTex(_)).pipe(Tex.inlineMath)}"
+      case RemoveFacts(wasRemoved) =>
+        s"Remove facts: ${p.asIFormula(wasRemoved).pipe(formulaToTex(_)).pipe(Tex.inlineMath)}"
     }
 
   def actionHook(
