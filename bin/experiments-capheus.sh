@@ -12,4 +12,4 @@ parallel -j$NR_THREADS --header : \
   --eta --results $CURRENT_VERSION.capheus java -jar -Xmx${RAM_ALLOC} $JARFILE \
   solve-satisfy --timeout 60000 \
   --backend {backend} {chunk} \
-  ::: backend baseline lazy ::: chunk catra/chunks/chunk-*
+  ::: backend baseline nuxmv lazy ::: chunk catra/chunks/chunk-*
