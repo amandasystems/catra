@@ -28,7 +28,7 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
     extends Tracing {
 
   import instance._
-  val baseCommand = Array("nuxmv", "-int", "-bmc")
+  val baseCommand = Array("nuxmv", "-int")
   val Unreachable = """^-- invariant block .* is true$""".r
   val Reachable = """^-- invariant block .* is false$""".r
   val CounterValue = """^ {4}counter_(\d+) = (\d+)$""".r
