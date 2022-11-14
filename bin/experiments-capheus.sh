@@ -5,7 +5,6 @@ RAM_ALLOC=4g
 NR_THREADS=10
 
 git pull
-git checkout master
 sbt assembly
 
 parallel -j$NR_THREADS --header : \
