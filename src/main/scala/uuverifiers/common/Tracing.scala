@@ -2,6 +2,7 @@ package uuverifiers.common
 import scala.annotation.elidable
 import scala.annotation.elidable.FINE
 import collection.mutable.HashMap
+import scala.collection.{AbstractMap, AbstractSet, mutable}
 
 object Statistics {
   private val dynTraceEnable = sys.env
@@ -50,8 +51,16 @@ trait Tracing {
   protected def logException(e: Throwable) =
     e.printStackTrace()
 
-  protected def trace[T](message: String = "")(something: T): T = {
-    logInfo(s"trace::${context}::${message}(${something})")
+  protected def trace[T, V <: Ordered[V], K <: Ordered[K]](
+      message: String = ""
+  )(something: T): T = {
+    val determinised = something match {
+      case m: AbstractSet[V]    => m.toIndexedSeq.sorted
+      case m: AbstractMap[K, V] => m.toIndexedSeq.sorted
+      case _                    => something
+    }
+
+    logInfo(s"trace::${context}::$message($determinised)")
 
     something
   }

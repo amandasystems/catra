@@ -146,25 +146,25 @@ class AutomatonBuilder extends Tracing {
     this
   }
 
-  def addTransition(t: Transition): AutomatonBuilder =
-    trace(s"add transition $t") {
-      assert((_autStates contains t.from()) && (_autStates contains t.to()))
+  def addTransition(t: Transition): AutomatonBuilder = {
+    trace(s"add transition $t on $name")()
+    assert((_autStates contains t.from()) && (_autStates contains t.to()))
 
-      _outgoingTransitions = _outgoingTransitions.updatedWith(t.from()) {
-        case None                   => Some(SortedSet(t))
-        case Some(previousOutgoing) => Some(previousOutgoing + t)
-      }
-
-      if (forwardReachable contains t.from()) {
-        setFwdReachable(t.to())
-      }
-
-      if (backwardReachable contains t.to()) {
-        startBwdReachability(t.from())
-      }
-
-      this
+    _outgoingTransitions = _outgoingTransitions.updatedWith(t.from()) {
+      case None                   => Some(SortedSet(t))
+      case Some(previousOutgoing) => Some(previousOutgoing + t)
     }
+
+    if (forwardReachable contains t.from()) {
+      setFwdReachable(t.to())
+    }
+
+    if (backwardReachable contains t.to()) {
+      startBwdReachability(t.from())
+    }
+
+    this
+  }
 
   def getAutomaton(): Automaton = {
     assert(_initial.isDefined, "Must have initial state!")

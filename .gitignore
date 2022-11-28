@@ -19,3 +19,4 @@ experiments/trivial-*.log
 /eqs
 /graphs
 /parikh-plus
+.vscode

@@ -135,11 +135,9 @@ sealed case class Context(
     val autMap: Map[Transition, Term] =
       transitionTermCache.getOrElseUpdate(
         autId,
-        trace(s"getOrUpdateTransitionTermMap::materialise(aut=$autId)")(
-          materialisedAutomata(autId).transitions
-            .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
-            .toMap
-        )
+        materialisedAutomata(autId).transitions
+          .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
+          .toMap
       )
     autMap
   }

@@ -5,10 +5,9 @@ import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
 import ap.terfor.TermOrder
-import ap.terfor.conjunctions.Conjunction
+import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.preds.Atom
 import uuverifiers.common._
-import uuverifiers.parikh_theory.VariousHelpers.simplifyUnlessTimeout
 
 import java.io.File
 import scala.collection.mutable.ArrayBuffer
@@ -189,8 +188,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         aut.states filterNot reachableStates
       }
 
-      val definitelyReached =
+      val definitelyReached = trace("definitelyReached")(
         aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
+      )
 
       val allTransitionsAssigned =
         trace("all transitions assigned?") {
@@ -211,9 +211,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
       val unreachableActions = trace("unreachableActions") {
-        val unreachableTransitions = trace("unreachableTransitions")(
+        val unreachableTransitions =
           knownUnreachableStates.flatMap(aut.transitionsFrom(_))
-        )
+
         val unreachableConstraints =
           conj(unreachableTransitions.map(transitionToTerm(_) === 0))
 
@@ -438,7 +438,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     }
 
     val equations = varFactory.exists(conj(newClauses ++ bridgingClauses))
-    val simplifiedEquations = simplifyUnlessTimeout(order, equations)
+    val simplifiedEquations =
+      ReduceWithConjunction(Conjunction.TRUE, order)(equations)
 
     val assumptions =
       context.autTransitionMasks(leftNr) ++ context.autTransitionMasks(
