@@ -4,8 +4,8 @@ CURRENT_VERSION=$(git rev-parse --short HEAD)
 RAM_ALLOC=4g
 NR_THREADS=10
 
+git reset --hard
 git pull
-git checkout master
 sbt assembly
 
 parallel -j$NR_THREADS --header : \
