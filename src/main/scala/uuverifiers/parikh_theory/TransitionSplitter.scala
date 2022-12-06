@@ -3,28 +3,30 @@ package uuverifiers.parikh_theory
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.{Plugin, TheoryProcedure}
 import ap.terfor.TerForConvenience._
-import ap.terfor.{TermOrder, Term}
+import ap.terfor.TermOrder
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.preds.Atom
 import uuverifiers.common._
 
 object TransitionSplitter {
-  val BASE_COST        = 100
+  val BASE_COST = 100
   val SIZE_COST_FACTOR = 10
 
-  def spawnSplitters(goal : Goal,
-                     theoryInstance: ParikhTheory) : Seq[Plugin.Action] =
+  def spawnSplitters(
+      goal: Goal,
+      theoryInstance: ParikhTheory
+  ): Seq[Plugin.Action] =
     if (goal.facts.predicates contains theoryInstance.addedSplitter) {
       List()
     } else {
       implicit val order = goal.order
 
       val connectedLits =
-        goal.facts.predConj.positiveLitsWithPred(
-          theoryInstance.connectedPredicate)
+        goal.facts.predConj
+          .positiveLitsWithPred(theoryInstance.connectedPredicate)
       val transitionLits =
-        goal.facts.predConj.positiveLitsWithPred(
-          theoryInstance.transitionMaskPredicate)
+        goal.facts.predConj
+          .positiveLitsWithPred(theoryInstance.transitionMaskPredicate)
 
       val tasks =
         for (a <- connectedLits) yield {
@@ -32,7 +34,8 @@ object TransitionSplitter {
             for (b <- transitionLits; if a(0) == b(0) && a(1) == b(1)) yield b
           Plugin.ScheduleTask(
             TransitionSplitter(theoryInstance, a(0), a(1)),
-            BASE_COST + transitions.size * SIZE_COST_FACTOR)
+            BASE_COST + transitions.size * SIZE_COST_FACTOR
+          )
         }
 
       // we add a flag to remember that the tasks for splitting have
@@ -41,24 +44,31 @@ object TransitionSplitter {
         Plugin.AddAxiom(
           List(),
           conj(Atom(theoryInstance.addedSplitter, List(), order)),
-          theoryInstance)
+          theoryInstance
+        )
 
       tasks ++ List(splitterAct)
     }
 
-  def spawnSplitter(theoryInstance: ParikhTheory,
-                    imageTerm : Term,
-                    automataTerm : Term) : Seq[Plugin.Action] =
+  def spawnSplitter(
+      theoryInstance: ParikhTheory,
+      imageTerm: LinearCombination,
+      automataTerm: LinearCombination
+  ): Seq[Plugin.Action] =
     // TOOD: take size of automata into account also in this case
     List(
       Plugin.ScheduleTask(
-        TransitionSplitter(theoryInstance, imageTerm, automataTerm), BASE_COST))
+        TransitionSplitter(theoryInstance, imageTerm, automataTerm),
+        BASE_COST
+      )
+    )
 }
 
-sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
-                                     imageTerm : Term,
-                                     automataTerm : Term)
-    extends TheoryProcedure
+sealed case class TransitionSplitter(
+    private val theoryInstance: ParikhTheory,
+    imageTerm: LinearCombination,
+    automataTerm: LinearCombination
+) extends TheoryProcedure
     with Tracing {
 
   private val materialisedAutomata =
@@ -66,7 +76,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
 //  private val transitionPredicate = theoryInstance.transitionMaskPredicate
 //  override val procedurePredicate: Predicate = transitionPredicate
 
-/*
+  /*
   private def automataToSplit(context: Context): Iterable[Int] =
     context
       .shuffle(
@@ -74,7 +84,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
       )
       .toSeq // Ordering is: false before true. SortBy is stable, so shuffling is preserved.
       .sortBy(aId => !(context.activeAutomata contains aId))
- */
+   */
 
   def splitOnRandomUnknown(
       context: Context,
@@ -129,7 +139,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
 
       if (transitionsToSever.isEmpty || context
             .knownPositive(transitionsToSever)) Nil
-      else transitionsToSever.map(l(_)(context.goal.order))
+      else transitionsToSever
     }
 
     context
@@ -142,14 +152,13 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
       .map(cut => context.binarySplit(eqZ(cut)(context.goal.order)))
   }
 
-  val autNr =
-    automataTerm.asInstanceOf[LinearCombination].constant.intValueSafe
+  val autNr = automataTerm.constant.intValueSafe
 
   override def handleGoal(goal: Goal): Seq[Plugin.Action] = {
     val connectedLits =
-      goal.facts.predConj.positiveLitsWithPred(theoryInstance.connectedPredicate)
-    connectedLits.find(
-      a => a(0) == imageTerm && a(1) == automataTerm) match {
+      goal.facts.predConj
+        .positiveLitsWithPred(theoryInstance.connectedPredicate)
+    connectedLits.find(a => a(0) == imageTerm && a(1) == automataTerm) match {
       case Some(a) => {
         import TransitionSplitter.{BASE_COST, SIZE_COST_FACTOR}
         val context = Context(goal, a, theoryInstance)
@@ -163,14 +172,14 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
         val nrUnknown =
           materialisedAutomata(autNr)
             .transitionsBreadthFirst()
-            .filter(context.transitionStatus(autNr)(_).isUnknown)
-            .size
+            .count(context.transitionStatus(autNr)(_).isUnknown)
 
         theoryInstance.runHooks(
           context,
           "Split",
-          List(Plugin.ScheduleTask(
-                 this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)) ++ split
+          List(
+            Plugin.ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
+          ) ++ split
         )
       }
       case None =>
@@ -179,7 +188,7 @@ sealed case class TransitionSplitter(private val theoryInstance: ParikhTheory,
     }
   }
 
-/*
+  /*
   override def handlePredicateInstance(
       goal: Goal
   )(predicateAtom: Atom): Seq[Plugin.Action] = trace("TransitionSplitter") {

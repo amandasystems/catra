@@ -1,16 +1,16 @@
 package uuverifiers.parikh_theory
-import ap.terfor.preds.Atom
-import ap.terfor.{Term, TermOrder}
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
-import ap.terfor.TerForConvenience._
+import ap.terfor.TerForConvenience.{conj, lcSum}
+import ap.terfor.TermOrder
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
-
-import scala.collection.{BitSet, SortedSet, mutable}
+import ap.terfor.preds.Atom
 import uuverifiers.common._
 
 import java.io.File
+import scala.collection.{BitSet, SortedSet, mutable}
+import scala.util.{Failure, Success, Try}
 
 /**
  * This class captures common contextual values that can be extracted from a
@@ -42,9 +42,9 @@ sealed case class Context(
   /** True if the sum of terms is known to be positive (in our case: that
    *  at least one is positive since all terms are at non-negative)
    **/
-  def knownPositive(terms: Set[Term]): Boolean =
+  def knownPositive(terms: Set[LinearCombination]): Boolean =
     goal.reduceWithFacts
-      .lowerBound(lcSum(terms.map(l))(goal.order))
+      .lowerBound(lcSum(terms))
       .exists(_ > 0)
 
   /** True if autId has no Connected predicate, false otherwise **/
@@ -73,10 +73,10 @@ sealed case class Context(
 
   private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
   import transitionExtractor.{
-    transitionStatusFromTerm,
-    termMeansDefinitelyAbsent,
     goalAssociatedPredicateInstances,
+    termMeansDefinitelyAbsent,
     transitionNr,
+    transitionStatusFromTerm,
     transitionTerm,
     autId => autNr
   }
@@ -106,7 +106,7 @@ sealed case class Context(
   implicit val order: TermOrder = goal.order
 
   private val transitionTermCache =
-    mutable.HashMap[Int, Map[Transition, Term]]()
+    mutable.HashMap[Int, Map[Transition, LinearCombination]]()
 
   private val predicateInstances =
     goalAssociatedPredicateInstances(goal, instanceTerm)(_)
@@ -129,10 +129,12 @@ sealed case class Context(
 
   // FIXME memoise
   def transitionStatus(autId: Int)(transition: Transition): TransitionSelected =
-    transitionStatusFromTerm(goal, l(autTransitionTerm(autId)(transition)))
+    transitionStatusFromTerm(goal, autTransitionTerm(autId)(transition))
 
-  def getOrUpdateTransitionTermMap(autId: Int): Map[Transition, Term] = {
-    val autMap: Map[Transition, Term] =
+  def getOrUpdateTransitionTermMap(
+      autId: Int
+  ): Map[Transition, LinearCombination] = {
+    val autMap: Map[Transition, LinearCombination] =
       transitionTermCache.getOrElseUpdate(
         autId,
         materialisedAutomata(autId).transitions
@@ -142,10 +144,10 @@ sealed case class Context(
     autMap
   }
 
-  def autTransitionTerm(autId: Int)(transition: Transition): Term =
+  def autTransitionTerm(autId: Int)(transition: Transition): LinearCombination =
     getOrUpdateTransitionTermMap(autId)(transition)
 
-  def autTransitionTermsUnordered(autId: Int): Iterable[Term] =
+  def autTransitionTermsUnordered(autId: Int): Iterable[LinearCombination] =
     getOrUpdateTransitionTermMap(autId).values
 
   // FIXME memoise
@@ -161,7 +163,7 @@ sealed case class Context(
       t =>
         !termMeansDefinitelyAbsent(
           goal,
-          l(autTransitionTerm(autId)(t))(goal.order)
+          autTransitionTerm(autId)(t)
         )
     )
 

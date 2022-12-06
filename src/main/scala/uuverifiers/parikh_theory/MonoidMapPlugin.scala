@@ -133,7 +133,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val consideredAutomataSorted =
       consideredAutomata.sortBy(
-        a => context.autTransitionTermsUnordered(a).size
+        a =>
+          (context.autTransitionTermsUnordered(a).size, a) // Fall back on sorting by index for a deterministic ordering
       )
 
     consideredAutomataSorted match {
