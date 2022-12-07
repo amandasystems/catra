@@ -20,7 +20,7 @@ sealed case class Constant(value: Int) extends Term {
   override def counters(): Set[Counter] = Set.empty
 }
 
-sealed case class Counter(name: String) extends Term {
+sealed case class Counter(name: String) extends Term with Ordered[Counter] {
   def incrementBy(i: Int): Map[Counter, Int] = Map(this -> i)
 
   def toConstant(p: SimpleAPI): ConstantTerm = p.createConstantRaw(name)
@@ -31,6 +31,8 @@ sealed case class Counter(name: String) extends Term {
     CounterWithCoefficient(-1, this)
 
   override def counters(): Set[Counter] = Set(this)
+
+  override def compare(that: Counter): Int = this.name compare that.name
 }
 
 sealed abstract class Atom extends Formula {
