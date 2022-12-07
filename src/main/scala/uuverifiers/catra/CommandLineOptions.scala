@@ -55,7 +55,8 @@ sealed case class CommandLineOptions(
     dumpEquationDir: Option[File],
     nrUnknownToMaterialiseProduct: Int,
     enableClauseLearning: Boolean,
-    enableRestarts: Boolean
+    enableRestarts: Boolean,
+    restartTimeoutFactor: Long
 ) {
 
   def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
@@ -121,6 +122,7 @@ object CommandLineOptions {
   private var nrUnknownToStartMaterialiseProduct = 2
   private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
+  private var restartTimeoutFactor = 500L
 
   private val usage =
     s"""
@@ -174,6 +176,8 @@ object CommandLineOptions {
                         Default: $nrUnknownToStartMaterialiseProduct.
       --no-clause-learning -- What it says on the tin.
       --no-restarts -- disable periodical restarts. Experimentally better for SAT.
+      --restart-timeout-factor -- The level of willingness to try before restarting.
+                       Default: $restartTimeoutFactor.
          
 
     Environment variables:
@@ -272,6 +276,9 @@ object CommandLineOptions {
       case "--dump-equations" :: directory :: tail =>
         dumpEquationDir = Some(new File(directory))
         parseFilesAndFlags(tail)
+      case "--restart-timeout-factor" :: someFactor :: tail =>
+        restartTimeoutFactor = someFactor.toLong
+        parseFilesAndFlags(tail)
       case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail =>
@@ -312,7 +319,8 @@ object CommandLineOptions {
       dumpEquationDir = dumpEquationDir,
       nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct,
       enableClauseLearning = enableClauseLearning,
-      enableRestarts = enableRestarts
+      enableRestarts = enableRestarts,
+      restartTimeoutFactor = restartTimeoutFactor
     )
   }
 }

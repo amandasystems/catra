@@ -21,9 +21,6 @@ trait PrincessBasedBackend extends Backend with Tracing {
 
   val arguments: CommandLineOptions
 
-  // TODO maybe expose this as an option?
-  private val RESTART_TO_FACTOR = 500L
-
   /**
    * Essentially performs all the logic common to both modes of operation.
    *
@@ -62,13 +59,14 @@ trait PrincessBasedBackend extends Backend with Tracing {
       p: SimpleAPI,
       iteration: Int = 1
   ): ProverStatus.Value = {
-    val timeout: Long = luby(iteration) * RESTART_TO_FACTOR
+    val timeout: Long = luby(iteration) * arguments.restartTimeoutFactor
     ap.util.Timeout.check
     p.checkSat(block = false)
 
     p.getStatus(timeout) match {
       case ProverStatus.Running =>
         p.stop(block = true)
+        if (arguments.printDecisions) System.err.println("Restart!")
         checkSatWithRestarts(p, iteration = iteration + 1)
       case r => r
     }

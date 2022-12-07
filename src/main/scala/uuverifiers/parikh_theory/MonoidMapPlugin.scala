@@ -131,11 +131,16 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
              context.nrUnknownTransitions(a) <= theoryInstance.materialisationThreshold)
         yield a
 
-    val consideredAutomataSorted =
-      consideredAutomata.sortBy(
-        a =>
-          (context.autTransitionTermsUnordered(a).size, a) // Fall back on sorting by index for a deterministic ordering
+    def complexityThenIndex(a: Int) =
+      (
+        context
+          .nrUniqueTerms(a)
+          .size,
+        a
       )
+
+    val consideredAutomataSorted =
+      consideredAutomata.sortBy(complexityThenIndex)
 
     consideredAutomataSorted match {
       case Seq(fst, snd, _*) => Some((fst, snd))

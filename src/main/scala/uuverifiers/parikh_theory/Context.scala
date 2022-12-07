@@ -6,11 +6,12 @@ import ap.terfor.TermOrder
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.preds.Atom
+import uuverifiers.catra.Memoiser
 import uuverifiers.common._
 
 import java.io.File
 import scala.collection.{BitSet, SortedSet, mutable}
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 /**
  * This class captures common contextual values that can be extracted from a
@@ -69,7 +70,8 @@ sealed case class Context(
     materialisedAutomata(aut).transitions
       .count(t => transitionStatus(aut)(t) == TransitionSelected.Unknown)
 
-  def nrUniqueTerms(aut: Int): Int = autTransitionTermsUnordered(aut).toSet.size
+  def nrUniqueTerms(aut: Int): Int =
+    ttCache.remember(aut)(computeTransitionMaskMap(aut)).values.toSet.size
 
   private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
   import transitionExtractor.{
@@ -105,9 +107,6 @@ sealed case class Context(
   val instanceTerm: LinearCombination = monoidMapPredicateAtom(0)
   implicit val order: TermOrder = goal.order
 
-  private val transitionTermCache =
-    mutable.HashMap[Int, Map[Transition, LinearCombination]]()
-
   private val predicateInstances =
     goalAssociatedPredicateInstances(goal, instanceTerm)(_)
 
@@ -127,28 +126,23 @@ sealed case class Context(
   lazy val activeAutomata: SortedSet[Int] =
     trace("activeAutomata")(SortedSet(unusedInstances.map(autNr): _*))
 
-  // FIXME memoise
-  def transitionStatus(autId: Int)(transition: Transition): TransitionSelected =
-    transitionStatusFromTerm(goal, autTransitionTerm(autId)(transition))
+  private val statusCache =
+    new Memoiser[(Int, Transition), TransitionSelected]()
 
-  def getOrUpdateTransitionTermMap(
-      autId: Int
-  ): Map[Transition, LinearCombination] = {
-    val autMap: Map[Transition, LinearCombination] =
-      transitionTermCache.getOrElseUpdate(
-        autId,
-        materialisedAutomata(autId).transitions
-          .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
-          .toMap
-      )
-    autMap
-  }
+  def transitionStatus(autId: Int)(transition: Transition): TransitionSelected =
+    statusCache.remember((autId, transition))(
+      transitionStatusFromTerm(goal, autTransitionTerm(autId)(transition))
+    )
+
+  private val ttCache = new Memoiser[Int, Map[Transition, LinearCombination]]()
+
+  private def computeTransitionMaskMap(autId: Int) =
+    materialisedAutomata(autId).transitions
+      .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
+      .toMap
 
   def autTransitionTerm(autId: Int)(transition: Transition): LinearCombination =
-    getOrUpdateTransitionTermMap(autId)(transition)
-
-  def autTransitionTermsUnordered(autId: Int): Iterable[LinearCombination] =
-    getOrUpdateTransitionTermMap(autId).values
+    ttCache.remember(autId)(computeTransitionMaskMap(autId))(transition)
 
   // FIXME memoise
   def autTransitionMasks(autId: Int): Seq[Atom] = {
@@ -185,8 +179,9 @@ sealed case class Context(
             // This is necessary because we might be called after all
             // TransitionMask predicates are eliminated, which means that we do
             // not have any information about the labelling.
-            val transitionTermMap = getOrUpdateTransitionTermMap(i)
-            val term = transitionTermMap.getOrElse(t, "No term")
+            val term = Try {
+              autTransitionTerm(i)(t)
+            }.map(_.toString).getOrElse("No term")
             s"${t.label()}: ${transitionToIdx(t)}/$term"
           }
 

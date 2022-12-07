@@ -1,9 +1,8 @@
 package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
-import uuverifiers.parikh_theory.{RegisterCounting, TracingComputation}
+import uuverifiers.parikh_theory.{Context, RegisterCounting, TracingComputation}
 import uuverifiers.common.Automaton
-import uuverifiers.parikh_theory.Context
 import ap.proof.theoryPlugins.Plugin
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 
