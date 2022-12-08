@@ -16,6 +16,8 @@ sealed trait SatisfactionResult extends Result {
       case (c, value) => println(s"${c.name} = $value")
     }
   }
+
+  def isSatOrUnsat(): Boolean
 }
 
 trait ImageResult extends Result {
@@ -25,18 +27,21 @@ case class Sat(assignments: Map[Counter, BigInteger])
     extends SatisfactionResult {
   override val name = "sat"
   override val counterValues: Map[Counter, BigInteger] = assignments
+  override def isSatOrUnsat(): Boolean = true
 }
 case object Unsat extends SatisfactionResult with ImageResult {
   override val name = "unsat"
-
+  override def isSatOrUnsat(): Boolean = true
 }
 case object OutOfMemory extends SatisfactionResult with ImageResult {
   override val name = "memory-out"
+  override def isSatOrUnsat(): Boolean = false
 }
 case class Timeout(timeout_ms: Long)
     extends SatisfactionResult
     with ImageResult {
   override lazy val name = s"timeout > ${timeout_ms}ms"
+  override def isSatOrUnsat(): Boolean = false
 
 }
 
@@ -50,9 +55,9 @@ object SolveRegisterAutomata extends App with Tracing {
 
   def measureTime[T](operation: => T): (T, Double) = {
     val start = System.nanoTime()
-    val SatisfactionResult = operation
+    val result = operation
     val elapsed = (System.nanoTime() - start).toDouble / 1_000_000_000
-    (SatisfactionResult, elapsed)
+    (result, elapsed)
   }
 
   def fatalError(reason: Throwable) = {

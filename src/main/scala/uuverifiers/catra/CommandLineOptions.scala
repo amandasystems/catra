@@ -56,7 +56,8 @@ sealed case class CommandLineOptions(
     nrUnknownToMaterialiseProduct: Int,
     enableClauseLearning: Boolean,
     enableRestarts: Boolean,
-    restartTimeoutFactor: Long
+    restartTimeoutFactor: Long,
+    crossValidate: Boolean
 ) {
 
   def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
@@ -97,9 +98,7 @@ sealed case class CommandLineOptions(
         p.stop
         Success(Timeout(timeout_ms.getOrElse(0)).asInstanceOf[R])
       case e: Throwable => Failure(e)
-
     }
-
 }
 
 object CommandLineOptions {
@@ -123,6 +122,7 @@ object CommandLineOptions {
   private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L
+  private var crossValidate = false
 
   private val usage =
     s"""
@@ -276,6 +276,9 @@ object CommandLineOptions {
       case "--dump-equations" :: directory :: tail =>
         dumpEquationDir = Some(new File(directory))
         parseFilesAndFlags(tail)
+      case "--cross-validate" :: tail =>
+        crossValidate = true
+        parseFilesAndFlags(tail)
       case "--restart-timeout-factor" :: someFactor :: tail =>
         restartTimeoutFactor = someFactor.toLong
         parseFilesAndFlags(tail)
@@ -320,7 +323,8 @@ object CommandLineOptions {
       nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct,
       enableClauseLearning = enableClauseLearning,
       enableRestarts = enableRestarts,
-      restartTimeoutFactor = restartTimeoutFactor
+      restartTimeoutFactor = restartTimeoutFactor,
+      crossValidate = crossValidate
     )
   }
 }

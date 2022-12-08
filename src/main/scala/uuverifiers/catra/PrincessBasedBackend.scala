@@ -1,17 +1,16 @@
 package uuverifiers.catra
 
 import ap.SimpleAPI
+import ap.SimpleAPI.ProverStatus
 import ap.terfor.ConstantTerm
-import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
+import ap.terfor.conjunctions.Conjunction
+import uuverifiers.catra.SolveRegisterAutomata.measureTime
 import uuverifiers.common.Tracing
 
-import scala.util.{Failure, Success, Try}
-import SimpleAPI.ProverStatus
-import ap.parser.IFormula
-
-import scala.collection.mutable.ArrayBuffer
-
+import java.math.BigInteger
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
+import scala.util.Try
 
 /**
  * A helper to construct backends that perform some kind of setup on the
@@ -91,12 +90,112 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
   }
 
+  private def deterministicValidator(
+      arguments: CommandLineOptions
+  ): LazyBackend = {
+    val validatorTimeout = arguments.timeout_ms.map(_ * 2)
+    val timeoutArgs = validatorTimeout
+      .map(to => Seq("--timeout", to.toString))
+      .getOrElse(Seq.empty)
+    new LazyBackend(
+      CommandLineOptions
+        .parse(
+          Array(
+            "solve-satisfy",
+            "--backend",
+            "lazy",
+            "--no-restarts"
+          ) ++ timeoutArgs
+        )
+        .get
+    )
+  }
+
+  private def nuxmvValidator(arguments: CommandLineOptions): NUXMVBackend = {
+    val validatorTimeout = arguments.timeout_ms.map(_ * 10)
+    val timeoutArgs = validatorTimeout
+      .map(to => Seq("--timeout", to.toString))
+      .getOrElse(Seq.empty)
+    new NUXMVBackend(
+      CommandLineOptions
+        .parse(
+          Array(
+            "solve-satisfy",
+            "--backend",
+            "nuxmv"
+          ) ++ timeoutArgs
+        )
+        .get
+    )
+  }
+
+  private def otherBackendAgrees(
+      result: SatisfactionResult,
+      instance: Instance,
+      validator: Backend
+  ): Boolean = {
+    System.err.print(
+      s"[${result.name}] Validating with ${validator.getClass.toString}..."
+    )
+    var succeededValidation = true
+
+    val (validationResult, runtime) = measureTime {
+      result match {
+        case Unsat =>
+          validator.solveSatisfy(instance).get match {
+            case Sat(assignments) =>
+              succeededValidation = false
+              "FAILED\nValidator disagrees with UNSAT, found SAT:\n" + assignments
+                .mkString(",")
+            case Unsat => "OK"
+            case e     => s"Validation Error: $e"
+          }
+
+        case Sat(assignments) =>
+          val instanceWithSolutionAsserted = Instance(
+            counters = instance.counters,
+            automataProducts = instance.automataProducts,
+            constraints =
+              instance.constraints appended assignmentAsConstraint(assignments)
+          )
+          validator.solveSatisfy(instanceWithSolutionAsserted).get match {
+            case Sat(_) => "OK"
+            case Unsat =>
+              succeededValidation = false
+              "FAILED\nValidator disagrees with solution!"
+            case e => s"Validation Error: $e"
+          }
+      }
+    }
+    System.err.println(s"$validationResult in ${runtime.round}s")
+    succeededValidation
+  }
+
+  private def assignmentAsConstraint(
+      assignments: Map[Counter, BigInteger]
+  ): Formula = assignments.foldLeft(TrueOrFalse(true).asInstanceOf[Formula]) {
+    case (formulaSoFar, (c, v)) =>
+      And(
+        formulaSoFar,
+        Inequality(CounterWithCoefficient(1, c), Equals, Constant(v.intValue()))
+      )
+  }
+
   override def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
     trace("solveSatisfy result") {
       arguments.withProver { p =>
         try {
           val counterToConstants = prepareSolver(p, instance)
-          checkSolutions(p, instance)(counterToConstants)
+          val result = checkSolutions(p, instance)(counterToConstants)
+          if (arguments.crossValidate && result.isSatOrUnsat()) {
+            if (!otherBackendAgrees(
+                  result,
+                  instance,
+                  nuxmvValidator(arguments)
+                ))
+              throw new Exception("nuXmv disagrees with solution!")
+          }
+          result
         } catch {
           case _: OutOfMemoryError =>
             p.stop
