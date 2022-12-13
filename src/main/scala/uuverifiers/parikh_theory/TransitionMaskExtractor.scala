@@ -38,8 +38,8 @@ class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
       atom.toSeq: @unchecked
     (
       instanceIdTerm(0),
-      productOffset.constant.intValue,
-      tIdxTerm.constant.intValue,
+      productOffset.constant.intValueSafe,
+      tIdxTerm.constant.intValueSafe,
       tVal
     )
   }
@@ -98,8 +98,8 @@ class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
   ): Boolean = {
     term match {
       case LinearCombination.Constant(x) => x <= 0
-        // TODO: this is a potential soundness bug, since assumptions used by upperBound are not tracked
-      case _                             => goal.reduceWithFacts.upperBound(term).exists(_ <= 0)
+      // TODO: this is a potential soundness bug, since assumptions used by upperBound are not tracked
+      case _ => goal.reduceWithFacts.upperBound(term).exists(_ <= 0)
     }
 
   }
@@ -110,8 +110,8 @@ class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
   ): Boolean = {
     term match {
       case LinearCombination.Constant(x) => x > 0
-        // TODO: this is a potential soundness bug, since assumptions used by lowerBound are not tracked
-      case _                             => goal.reduceWithFacts.lowerBound(term).exists(_ > 0)
+      // TODO: this is a potential soundness bug, since assumptions used by lowerBound are not tracked
+      case _ => goal.reduceWithFacts.lowerBound(term).exists(_ > 0)
     }
 
   }
@@ -122,8 +122,8 @@ class TransitionMaskExtractor(private val theoryInstance: ParikhTheory)
   ): Boolean = {
     term match {
       case LinearCombination.Constant(x) => x <= 0
-        // TODO: this is a potential soundness bug, since assumptions used by lowerBound are not tracked
-      case _                             => !goal.reduceWithFacts.lowerBound(term).exists(_ > 0)
+      // TODO: this is a potential soundness bug, since assumptions used by lowerBound are not tracked
+      case _ => !goal.reduceWithFacts.lowerBound(term).exists(_ > 0)
     }
 
   }

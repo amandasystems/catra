@@ -8,6 +8,7 @@ import ap.terfor.TermOrder
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.preds.Atom
 import uuverifiers.common._
+import uuverifiers.parikh_theory.VariousHelpers.unlessDo
 
 import java.io.File
 import scala.collection.mutable.ArrayBuffer
@@ -45,36 +46,36 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
   private val stats = new Statistics()
 
+  // TODO
+  private def assertActuallyDone(context: Context) = Seq()
+
+  private def handleContext(context: Context): Seq[Plugin.Action] =
+    handleMonoidMapSubsumption(context) elseDo
+      handleConnectedInstances(context) elseDo
+      TransitionSplitter.spawnSplitters(context) elseDo
+      handleMaterialise(context) elseDo
+      assertActuallyDone(context)
+
   /**
-   *  This callback is the entrypoint of the connectedness enforcement. It will
-   *  determine subsumption, i.e. if there are no unknown transitions left on
-   *  the last level of the prdouct. Upon subsumption it will remove the
-   *  connectedness predicate and all associated helper predicates.
+   * This callback is the entrypoint of the connectedness enforcement. It will
+   * determine subsumption, i.e. if there are no unknown transitions left on
+   * the last level of the product. Upon subsumption it will remove the
+   * connectedness predicate and all associated helper predicates.
    *
-   *  If we are not subsumed, we will continue with propagation or splitting.
+   * If we are not subsumed, we will continue with propagation or splitting.
    */
   override def handlePredicateInstance(
       goal: Goal
   )(predicateAtom: Atom): Seq[Plugin.Action] =
     trace("handlePredicateInstance") {
-      val context = Context(goal, predicateAtom, theoryInstance)
-      stats.increment("handlePredicateInstance")
-
-      if (Param.MODEL_GENERATION(context.goal.settings)) {
-//        println("model generation, doing nothing")
-//        println(goal.facts)
-        return List()
-      }
-
-      handleMonoidMapSubsumption(context) elseDo
-        handleConnectedInstances(context) elseDo
-        TransitionSplitter.spawnSplitters(goal, theoryInstance) elseDo
-        handleMaterialise(context)
+      unlessDo(Param.MODEL_GENERATION(goal.settings))(
+        theoryInstance.withContext(goal, predicateAtom)(handleContext)
+      )
     }
 
   private def handleMonoidMapSubsumption(
       context: Context
-  ) =
+  ): Seq[Plugin.Action] =
     trace("handleMonoidMapSubsumption") {
       import context.{
         activeAutomata,
@@ -91,7 +92,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val isSubsumed =
         trace("isSubsumed")(productIsDone && allAutomataGuaranteedConnected)
 
-      if (isSubsumed) {
+      unlessDo(!isSubsumed) {
         // There will be a final Unused predicate on the final automaton.
         val removeAssociatedPredicates =
           unusedInstances.map(Plugin.RemoveFacts(_))
@@ -105,8 +106,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           "Subsume MonoidMap",
           actions = removeAssociatedPredicates :+ removeThisPredicateInstance
         )
-      } else {
-        Seq()
       }
     }
 
@@ -205,14 +204,13 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           }
         }
 
-      val subsumeActions =
-        if (allTransitionsAssigned) {
-          theoryInstance.runHooks(
-            context,
-            "SubsumeConnected",
-            actions = Seq(Plugin.RemoveFacts(connectedInstance))
-          )
-        } else Seq()
+      val subsumeActions = unlessDo(!allTransitionsAssigned) {
+        theoryInstance.runHooks(
+          context,
+          "SubsumeConnected",
+          actions = Seq(Plugin.RemoveFacts(connectedInstance))
+        )
+      }
 
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").

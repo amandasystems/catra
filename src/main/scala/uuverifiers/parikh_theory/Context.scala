@@ -79,9 +79,10 @@ sealed case class Context(
     termMeansDefinitelyAbsent,
     transitionNr,
     transitionStatusFromTerm,
-    transitionTerm,
-    autId => autNr
+    transitionTerm
   }
+
+  def autNr(a: Atom): Int = transitionExtractor.autId(a)
 
   /**
    * Summarise what is going on.
@@ -102,13 +103,17 @@ sealed case class Context(
   import theoryInstance.{
     transitionMaskPredicate => TransitionMask,
     unusedPredicate => Unused,
-    connectedPredicate => Connected
+    connectedPredicate => Connected,
+    addedSplitter => Splitter_Added
   }
   val instanceTerm: LinearCombination = monoidMapPredicateAtom(0)
   implicit val order: TermOrder = goal.order
 
   private val predicateInstances =
     goalAssociatedPredicateInstances(goal, instanceTerm)(_)
+
+  lazy val addedSplitterInstances: Seq[Atom] =
+    trace("connectedInstances")(predicateInstances(Splitter_Added))
 
   lazy val connectedInstances: Seq[Atom] =
     trace("connectedInstances")(predicateInstances(Connected))

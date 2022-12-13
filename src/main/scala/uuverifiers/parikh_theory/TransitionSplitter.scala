@@ -1,5 +1,6 @@
 package uuverifiers.parikh_theory
 
+import ap.parser.IExpression.Predicate
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.{Plugin, TheoryProcedure}
 import ap.terfor.TerForConvenience._
@@ -7,58 +8,55 @@ import ap.terfor.TermOrder
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.preds.Atom
 import uuverifiers.common._
+import uuverifiers.parikh_theory.VariousHelpers.unlessDo
 
 object TransitionSplitter {
   val BASE_COST = 100
   val SIZE_COST_FACTOR = 10
 
-  def spawnSplitters(
-      goal: Goal,
-      theoryInstance: ParikhTheory
-  ): Seq[Plugin.Action] =
-    if (goal.facts.predicates contains theoryInstance.addedSplitter) {
-      List()
-    } else {
-      implicit val order = goal.order
+  private def splitterAddedForThisInstance(context: Context): Atom =
+    Atom(
+      context.theoryInstance.addedSplitter,
+      List(context.instanceTerm),
+      context.order
+    )
 
-      val connectedLits =
-        goal.facts.predConj
-          .positiveLitsWithPred(theoryInstance.connectedPredicate)
-      val transitionLits =
-        goal.facts.predConj
-          .positiveLitsWithPred(theoryInstance.transitionMaskPredicate)
+  private def scheduleSplitterForAutomaton(
+      context: Context
+  )(connectedPred: Atom): Plugin.ScheduleTask = {
+    val autNr = context.autNr(connectedPred)
+    Plugin.ScheduleTask(
+      TransitionSplitter(context.theoryInstance, context.instanceTerm, autNr),
+      BASE_COST + context.nrUnknownTransitions(autNr) * SIZE_COST_FACTOR
+    )
+  }
 
-      val tasks =
-        for (a <- connectedLits) yield {
-          val transitions =
-            for (b <- transitionLits; if a(0) == b(0) && a(1) == b(1)) yield b
-          Plugin.ScheduleTask(
-            TransitionSplitter(theoryInstance, a(0), a(1)),
-            BASE_COST + transitions.size * SIZE_COST_FACTOR
-          )
-        }
+  def spawnSplitters(context: Context): Seq[Plugin.Action] =
+    unlessDo(context.addedSplitterInstances.isEmpty) {
+      implicit val order: TermOrder = context.goal.order
 
-      // we add a flag to remember that the tasks for splitting have
-      // already been created
-      val splitterAct =
+      val scheduleSplittersForConnectedPredicates =
+        context.connectedInstances.map(scheduleSplitterForAutomaton(context))
+
+      val rememberThatSplitterWasAScheduled =
         Plugin.AddAxiom(
-          List(),
-          conj(Atom(theoryInstance.addedSplitter, List(), order)),
-          theoryInstance
+          List(), // Don't we need to know if connected predicates have been removed and add those as reasons?
+          conj(splitterAddedForThisInstance(context)),
+          context.theoryInstance
         )
 
-      tasks ++ List(splitterAct)
+      scheduleSplittersForConnectedPredicates appended rememberThatSplitterWasAScheduled
     }
 
   def spawnSplitter(
       theoryInstance: ParikhTheory,
-      imageTerm: LinearCombination,
+      predicateInstanceTerm: LinearCombination,
       automataTerm: LinearCombination
   ): Seq[Plugin.Action] =
     // TOOD: take size of automata into account also in this case
     List(
       Plugin.ScheduleTask(
-        TransitionSplitter(theoryInstance, imageTerm, automataTerm),
+        TransitionSplitter(theoryInstance, predicateInstanceTerm, automataTerm),
         BASE_COST
       )
     )
@@ -66,25 +64,15 @@ object TransitionSplitter {
 
 sealed case class TransitionSplitter(
     private val theoryInstance: ParikhTheory,
-    imageTerm: LinearCombination,
+    predicateInstanceTerm: LinearCombination,
     automataTerm: LinearCombination
-) extends TheoryProcedure
+) extends PredicateHandlingProcedure
     with Tracing {
 
+  // Note: not the splitter predicate, which is pure book-keeping!
+  override val procedurePredicate: Predicate = theoryInstance.monoidMapPredicate
   private val materialisedAutomata =
     theoryInstance.monoidMapPlugin.materialisedAutomata
-//  private val transitionPredicate = theoryInstance.transitionMaskPredicate
-//  override val procedurePredicate: Predicate = transitionPredicate
-
-  /*
-  private def automataToSplit(context: Context): Iterable[Int] =
-    context
-      .shuffle(
-        context.automataWithConnectedPredicate union context.activeAutomata
-      )
-      .toSeq // Ordering is: false before true. SortBy is stable, so shuffling is preserved.
-      .sortBy(aId => !(context.activeAutomata contains aId))
-   */
 
   def splitOnRandomUnknown(
       context: Context,
@@ -152,40 +140,41 @@ sealed case class TransitionSplitter(
       .map(cut => context.binarySplit(eqZ(cut)(context.goal.order)))
   }
 
-  val autNr = automataTerm.constant.intValueSafe
+  private val autNr = automataTerm.constant.intValueSafe
 
-  override def handleGoal(goal: Goal): Seq[Plugin.Action] = {
-    val connectedLits =
-      goal.facts.predConj
-        .positiveLitsWithPred(theoryInstance.connectedPredicate)
-    connectedLits.find(a => a(0) == imageTerm && a(1) == automataTerm) match {
-      case Some(a) => {
-        import TransitionSplitter.{BASE_COST, SIZE_COST_FACTOR}
-        val context = Context(goal, a, theoryInstance)
+  override def handlePredicateInstance(goal: Goal)(
+      predicateAtom: Atom
+  ): Seq[Plugin.Action] = theoryInstance.withContext(goal, predicateAtom) {
+    context =>
+      context.connectedInstances.find(context.autNr(_) == autNr) match {
+        case Some(a) => {
+          import TransitionSplitter.{BASE_COST, SIZE_COST_FACTOR}
+          val context = Context(goal, a, theoryInstance)
 
-        val split =
-          trySplittingComponent(context, List(autNr))
-            .orElse(splitOnRandomUnknown(context, List(autNr)))
-            .map(Seq(_))
-            .getOrElse(Seq())
+          val split =
+            trySplittingComponent(context, List(autNr))
+              .orElse(splitOnRandomUnknown(context, List(autNr)))
+              .map(Seq(_))
+              .getOrElse(Seq())
 
-        val nrUnknown =
-          materialisedAutomata(autNr)
-            .transitionsBreadthFirst()
-            .count(context.transitionStatus(autNr)(_).isUnknown)
+          val nrUnknown =
+            materialisedAutomata(autNr)
+              .transitionsBreadthFirst()
+              .count(context.transitionStatus(autNr)(_).isUnknown)
 
-        theoryInstance.runHooks(
-          context,
-          "Split",
-          List(
-            Plugin.ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
-          ) ++ split
-        )
+          theoryInstance.runHooks(
+            context,
+            "Split",
+            List(
+              Plugin
+                .ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
+            ) ++ split
+          )
+        }
+        case None =>
+          // no more splitting necessary
+          List()
       }
-      case None =>
-        // no more splitting necessary
-        List()
-    }
   }
 
   /*

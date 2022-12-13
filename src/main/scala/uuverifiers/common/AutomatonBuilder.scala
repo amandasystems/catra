@@ -105,6 +105,9 @@ class AutomatonBuilder extends Tracing {
       )
     }
 
+    if (!(backwardReachable contains _initial.get))
+      return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
+
     // Ignore transitions into and from dead states (unreachable, or where no
     // path leads on to an accepting state)
     val reachableTransitions =

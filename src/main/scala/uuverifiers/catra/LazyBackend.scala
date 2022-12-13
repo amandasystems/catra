@@ -1,6 +1,6 @@
 package uuverifiers.catra
 import ap.SimpleAPI
-import ap.terfor.ConstantTerm
+import ap.terfor.{ConstantTerm, TermOrder}
 import uuverifiers.parikh_theory.{Context, RegisterCounting, TracingComputation}
 import uuverifiers.common.Automaton
 import ap.proof.theoryPlugins.Plugin
@@ -15,15 +15,15 @@ class LazyBackend(override val arguments: CommandLineOptions)
       context: Context,
       event: String,
       actions: Seq[Plugin.Action]
-  ) = {
+  ): Unit = {
     System.err.println(
-      s"${event}. Taking actions: ${actions.mkString(",")}"
+      s"$event. Taking actions: ${actions.mkString(",")}"
     )
   }
 
   override def findImage(instance: Instance): Try[ImageResult] =
     arguments.withProver { p =>
-      val counterToSolverConstant = prepareSolver(p, instance)
+      prepareSolver(p, instance)
       ap.util.Debug.enableAllAssertions(false)
 
       val completeFormula = Conjunction.conj(formulasInSolver, p.order)
@@ -115,7 +115,7 @@ class LazyBackend(override val arguments: CommandLineOptions)
       .map(c => (c, p.createConstantRaw(c.name)))
       .toMap
 
-    implicit val o = p.order
+    implicit val o: TermOrder = p.order
 
     for (constraint <- constraints) {
       p.addAssertion(

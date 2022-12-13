@@ -10,6 +10,8 @@ import ap.parser.IExpression.Predicate
 import ap.terfor.TerForConvenience._
 import uuverifiers.common.{Automaton, State, Tracing, Transition}
 import VariousHelpers.simplifyUnlessTimeout
+import ap.proof.goal.Goal
+import ap.terfor.preds.Atom
 
 import java.io.File
 
@@ -86,8 +88,9 @@ trait ParikhTheory
   val unusedPredicate =
     new Predicate(s"Unused_${this.hashCode}", 2)
 
+  // SplitterAdded(s): Instance s has a splitter spawned already
   val addedSplitter =
-    new Predicate(s"Splitter_Added_${this.hashCode}", 0)
+    new Predicate(s"Splitter_Added_${this.hashCode}", 10)
 
   override lazy val predicates =
     Seq(
@@ -99,6 +102,11 @@ trait ParikhTheory
     )
 
   lazy val monoidMapPlugin = new MonoidMapPlugin(this)
+
+  def withContext[T](g: Goal, predicateAtom: Atom)(op: Context => T): T = {
+    assert(predicateAtom.pred == this.monoidMapPredicate)
+    op(Context(g, predicateAtom, this))
+  }
 
   /**
    * A sequence of hooks to do something whenever an action is taken. Typically
