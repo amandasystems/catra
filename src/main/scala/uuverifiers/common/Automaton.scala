@@ -436,6 +436,7 @@ trait Automaton
       .addStates(trace("adding States")(states))
       .setInitial(initialState)
       .setAccepting(states.filter(isAccept).toSeq: _*)
+      .nameIs(s"$name filtered") // Warning: this is actually a loss of precision since we discard *what* is filtered.
 
     for (t <- transitions if keepEdge(t)) {
       builder.addTransition(t)
