@@ -1,6 +1,6 @@
 #!/bin/sh
 
-JVM_OPTS=-Xmx15g
+JVM_OPTS=-Xmx10g
 CATRA_VERSION=0.1.0-SNAPSHOT
 SCRIPT_DIR=$(dirname "$0")
 
