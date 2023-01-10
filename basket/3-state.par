@@ -1,0 +1,15 @@
+counter int l;
+
+synchronised {
+automaton a {
+  init start;
+
+  start -> sawA [97] { l += 1 };
+  start -> final[99] { l += 1 };
+
+  sawA -> final [98] { l += 1 };
+
+  accepting final, sawA;
+};
+
+};
