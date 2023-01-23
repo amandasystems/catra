@@ -8,8 +8,65 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.io.Source
 import scala.util.Success
+ import scala.math.Ordering.Implicits._
+
+
+sealed case class Score(nrUnsat: Int, nrTimeouts: Int){
+  def +(other: Score) = Score(this.nrUnsat + other.nrUnsat,
+    this.nrTimeouts + other.nrTimeouts)
+
+  def compareScore(that: Score): Int =  
+  {
+    val thisTuple = (this.nrUnsat, this.nrTimeouts)
+    val thatTuple = (that.nrUnsat, that.nrTimeouts)
+    if (thisTuple < thatTuple) {
+      -1
+    } else if(thatTuple == thisTuple) {0} else {1}
+  }
+  }
+
+
+
+sealed case class Configuration(instance: Instance, configuration: CommandLineOptions) {
+  
+  val nrAutomata = instance.automataProducts.map(_.size).sum
+
+  private def runOnce() = configuration.getBackend().solveSatisfy(instance) match {
+    case ProverStatus.Sat => Score(0, 0)
+    case ProverStatus.Unsat => Score(1, 0)
+    case ProverStatus.Timeout => Score(0, 1)
+  }
+  
+  lazy val evaluate = { 
+    (1 to 20).map( _ => runOnce()).foldRight(Score(0,0))(_ + _)
+  }
+
+  // def withMoreRestarts() = Configuration(instance, configuration.withRestarts(configuration.restarts - 10))
+  // def withSmallerInstance() = Configuration(DebugUnsoundness.minimiseInstance(instance), configuration)
+
+  def compareConfig(that: Configuration): Int = {
+    val evaluationComparison = this.evaluate compareScore that.evaluate
+
+  if (evaluationComparison == 0) this.nrAutomata compare that.nrAutomata else evaluationComparison
+
+  }
+
+}
 
 object DebugUnsoundness {
+
+  def simplifyInstances(instances: Seq[Instance], config: CommandLineOptions): Instance = {
+    val candidates = collection.mutable.PriorityQueue()(Ordering[Configuration].by(c => (c.evaluate, c.nrAutomata)))
+    
+    instances.foreach(i => candidates.enqueue(Configuration(i, config)))
+
+    // FIXME: try first minimising restarts
+    // FIXME then try minimising instances
+   
+    instances.head
+
+  }
+
   val nrTriesBeforeAssumedSound = 20
   val timeoutMilliseconds = "120000"
 
