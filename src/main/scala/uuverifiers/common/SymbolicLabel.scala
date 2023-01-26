@@ -5,6 +5,8 @@ sealed abstract class SymbolicLabel
     extends Product
     with Serializable
     with Ordered[SymbolicLabel] {
+  def serialise(): String
+
   def toDotDescription(): String = toString()
 
   def iterate(): Iterator[Char]
@@ -51,9 +53,11 @@ object SymbolicLabel {
     override def upperBoundExclusive() = Some(0.toChar)
     override def iterate() = Iterator()
     override def toString() = "∅"
+    override def serialise() = "[]"
   }
 
   final case class SingleChar(c: Char) extends SymbolicLabel with Tracing {
+    override def serialise() = s"[${c.toInt}]"
     override def subtract(that: SymbolicLabel) = that match {
       case NoChar          => this
       case AnyChar         => NoChar
@@ -88,6 +92,7 @@ object SymbolicLabel {
   final case class CharRange(from: Char, toInclusive: Char)
       extends SymbolicLabel
       with Tracing {
+    override def serialise(): String = s"[${from.toInt}, ${toInclusive.toInt}]"
     override def subtract(that: SymbolicLabel) = ???
     override def intersect(that: SymbolicLabel): SymbolicLabel =
       trace(s"${this} INTERSECTS ${that}") {
@@ -112,6 +117,8 @@ object SymbolicLabel {
     override def upperBoundExclusive() = None
     override def iterate() = (Char.MinValue to Char.MaxValue).iterator
     override def toString() = "Σ"
+    override def serialise(): String =
+      s"[${Char.MinValue.toInt}, ${Char.MaxValue.toInt}]"
   }
 }
 

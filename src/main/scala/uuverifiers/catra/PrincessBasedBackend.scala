@@ -47,7 +47,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
   }
 
-  private def checkSat(p: SimpleAPI): ProverStatus.Value =
+  def checkSat(p: SimpleAPI): ProverStatus.Value =
     if (arguments.enableRestarts && arguments.backend == ChooseLazy)
       checkSatWithRestarts(p)
     else

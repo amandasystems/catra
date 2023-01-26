@@ -21,7 +21,6 @@ class NUXMVBackend(private val arguments: CommandLineOptions) extends Backend {
   override def findImage(instance: Instance) = ???
   override def solveSatisfy(instance: Instance) =
     new NUXMVInstance(arguments, instance).result
-
 }
 
 class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)

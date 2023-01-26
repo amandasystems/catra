@@ -39,6 +39,7 @@ case object ChooseBaseline extends BackendSelection {
 sealed trait RunMode
 case object SolveSatisfy extends RunMode
 case object FindImage extends RunMode
+case object DebugUnsat extends RunMode
 
 sealed case class CommandLineOptions(
     inputFiles: Seq[String],
@@ -57,14 +58,27 @@ sealed case class CommandLineOptions(
     enableClauseLearning: Boolean,
     enableRestarts: Boolean,
     restartTimeoutFactor: Long,
-    crossValidate: Boolean
+    crossValidate: Boolean,
+    randomSeed: Int
 ) {
+  def withRandomSeed(newSeed: Int): CommandLineOptions =
+    copy(randomSeed = newSeed)
+
+  def withRestartTimeoutFactor(newValue: Long): CommandLineOptions =
+    copy(restartTimeoutFactor = newValue)
 
   def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
     dumpSMTDir match {
-      case None => SimpleAPI.withProver(p => runWithTimeout(p)(f(p)))
+      case None =>
+        SimpleAPI.withProver(randomSeed = Some(randomSeed))(
+          p => runWithTimeout(p)(f(p))
+        )
       case Some(dumpDir) =>
-        SimpleAPI.withProver(dumpSMT = true, dumpDirectory = dumpDir)(
+        SimpleAPI.withProver(
+          dumpSMT = true,
+          dumpDirectory = dumpDir,
+          randomSeed = Some(randomSeed)
+        )(
           p => runWithTimeout(p)(f(p))
         )
     }
@@ -123,6 +137,7 @@ object CommandLineOptions {
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L
   private var crossValidate = false
+  private var randomSeed = 1234567
 
   private val usage =
     s"""
@@ -131,6 +146,7 @@ object CommandLineOptions {
     Available subcommands:
       solve-satisfy -- look for a satisfying solution
       find-image -- generate the full Parikh image in Presburger format
+      debug-unsat -- diagnose (an) incorrect unsat result(s)
 
     Available options (🐌 = likely to negatively impact performance):
       --trace -- generate a trace of the computation into trace.tex,
@@ -299,6 +315,9 @@ object CommandLineOptions {
     case "find-image" :: rest =>
       runMode = FindImage
       parseFilesAndFlags(rest)
+    case "debug-unsat" :: rest =>
+      runMode = DebugUnsat
+      parseFilesAndFlags(rest)
     case other :: _ =>
       throw new Exception(s"Error: Invalid mode `$other`!\n\n" + usage)
   }
@@ -324,7 +343,8 @@ object CommandLineOptions {
       enableClauseLearning = enableClauseLearning,
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
-      crossValidate = crossValidate
+      crossValidate = crossValidate,
+      randomSeed = randomSeed
     )
   }
 }

@@ -1,118 +1,89 @@
 package uuverifiers.catra
 
-import fastparse.Parsed
 import uuverifiers.catra.SolveRegisterAutomata.measureTime
-import uuverifiers.common.Automaton
+import uuverifiers.common.{Automaton, Tracing}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.io.Source
-import scala.util.Success
- import scala.math.Ordering.Implicits._
+import scala.math.Ordered.orderingToOrdered
+import scala.util.{Failure, Success}
 
+sealed case class Score(nrUnsat: Int, nrTimeouts: Int) extends Ordered[Score] {
 
-sealed case class Score(nrUnsat: Int, nrTimeouts: Int){
-  def +(other: Score) = Score(this.nrUnsat + other.nrUnsat,
-    this.nrTimeouts + other.nrTimeouts)
+  def +(other: Score): Score =
+    Score(this.nrUnsat + other.nrUnsat, this.nrTimeouts + other.nrTimeouts)
 
-  def compareScore(that: Score): Int =  
-  {
-    val thisTuple = (this.nrUnsat, this.nrTimeouts)
-    val thatTuple = (that.nrUnsat, that.nrTimeouts)
-    if (thisTuple < thatTuple) {
-      -1
-    } else if(thatTuple == thisTuple) {0} else {1}
-  }
-  }
-
-
-
-sealed case class Configuration(instance: Instance, configuration: CommandLineOptions) {
-  
-  val nrAutomata = instance.automataProducts.map(_.size).sum
-
-  private def runOnce() = configuration.getBackend().solveSatisfy(instance) match {
-    case ProverStatus.Sat => Score(0, 0)
-    case ProverStatus.Unsat => Score(1, 0)
-    case ProverStatus.Timeout => Score(0, 1)
-  }
-  
-  lazy val evaluate = { 
-    (1 to 20).map( _ => runOnce()).foldRight(Score(0,0))(_ + _)
-  }
-
-  // def withMoreRestarts() = Configuration(instance, configuration.withRestarts(configuration.restarts - 10))
-  // def withSmallerInstance() = Configuration(DebugUnsoundness.minimiseInstance(instance), configuration)
-
-  def compareConfig(that: Configuration): Int = {
-    val evaluationComparison = this.evaluate compareScore that.evaluate
-
-  if (evaluationComparison == 0) this.nrAutomata compare that.nrAutomata else evaluationComparison
-
-  }
-
+  def compare(that: Score): Int =
+    (this.nrUnsat, this.nrTimeouts) compare (that.nrUnsat, that.nrTimeouts)
 }
 
-object DebugUnsoundness {
+sealed case class Configuration(
+    instance: Instance,
+    configuration: CommandLineOptions
+) extends Ordered[Configuration]
+    with Tracing {
 
-  def simplifyInstances(instances: Seq[Instance], config: CommandLineOptions): Instance = {
-    val candidates = collection.mutable.PriorityQueue()(Ordering[Configuration].by(c => (c.evaluate, c.nrAutomata)))
-    
-    instances.foreach(i => candidates.enqueue(Configuration(i, config)))
+  private val giveUpAtSeed = 5
+  private val nrTimesToEvaluate = 5
 
-    // FIXME: try first minimising restarts
-    // FIXME then try minimising instances
-   
-    instances.head
+  def withRandomSeed(newSeed: Int): Configuration =
+    if (newSeed == configuration.randomSeed) this
+    else this.copy(configuration = configuration.withRandomSeed(newSeed))
 
+  def findBestSeed(): Configuration = {
+    var currentSeed = 1
+
+    optimiseConfiguration(
+      bestSoFar =>
+        if (currentSeed >= giveUpAtSeed) {
+          None
+        } else {
+          val newConfig =
+            bestSoFar.withRandomSeed(trace("Trying seed")(currentSeed))
+          currentSeed += 1
+          Some(newConfig)
+        }
+    )
   }
 
-  val nrTriesBeforeAssumedSound = 20
-  val timeoutMilliseconds = "120000"
+  def writeToFile(fileName: String): Unit = {
+    import java.io.{BufferedWriter, File, FileWriter}
 
-  val Parsed.Success(unsoundInstance, _) = {
-    val inputFile = "unsound/parikh-constraints-0.par"
-    println(s"Starting soundness debugging for $inputFile")
-    val inputFileHandle = Source.fromFile(inputFile)
-    val instance = InputFileParser.parse(inputFileHandle.mkString(""))
-    inputFileHandle.close()
-    instance
+    val bw = new BufferedWriter(new FileWriter(new File(fileName)))
+    // TODO
+    bw.write(this.configuration.toString)
+    bw.write(this.instance.toString)
+    bw.close()
   }
 
-  val backend = new LazyBackend(
-    CommandLineOptions
-      .parse(
-        Array(
-          "solve-satisfy",
-          "--timeout",
-          timeoutMilliseconds
-        )
-      )
-      .get
-  )
+  this.enableTracing()
 
-  def dropAutomata(
+  val nrAutomata: Int = instance.automataProducts.map(_.size).sum
+
+  private def runOnce(): Score = {
+    configuration.getBackend().solveSatisfy(instance) match {
+      case Failure(_) | Success(Sat(_))               => Score(0, 0)
+      case Success(Unsat)                             => Score(1, 0)
+      case Success(OutOfMemory) | Success(Timeout(_)) => Score(0, 1)
+    }
+  }
+
+  lazy val evaluate: Score =
+    trace("final score: ")(
+      (1 to nrTimesToEvaluate)
+        .map(_ => runOnce())
+        .foldRight(Score(0, 0))(_ + _)
+    )
+
+  private def dropAutomata(
       automataProducts: Seq[Seq[Automaton]],
       automataSelected: IndexedSeq[mutable.IndexedSeq[Option[Boolean]]]
   ): ((Int, Int), Seq[Seq[Automaton]]) = {
     // find the first unknown and try excluding it
-    val selectedProduct = automataSelected.indexWhere(p => p.exists(_.isEmpty))
+    val selectedProduct =
+      automataSelected.indexWhere(p => p.exists(_.isEmpty))
     val selectedAutomaton =
       automataSelected(selectedProduct).indexWhere(_.isEmpty)
-
-    val selectionStr: String = automataSelected
-      .map(
-        p =>
-          p.map {
-            case None        => '?'
-            case Some(true)  => '1'
-            case Some(false) => '0'
-          }.mkString
-      )
-      .mkString("\n")
-    println(
-      s"Selection Matrix: $selectionStr, trying ($selectedProduct,$selectedAutomaton)"
-    )
 
     val prunedAutomata = automataProducts.zipWithIndex.map {
       case (as, pi) =>
@@ -128,8 +99,83 @@ object DebugUnsoundness {
     ((selectedProduct, selectedAutomaton), prunedAutomata)
   }
 
+  private def optimiseConfiguration(
+      tryImprove: Configuration => Option[Configuration]
+  ): Configuration = {
+
+    var bestConfig = this
+    var nextCandidate = tryImprove(bestConfig)
+
+    while (nextCandidate.isDefined) {
+      val candidate = nextCandidate.get
+      if (candidate > bestConfig) {
+        bestConfig = candidate
+      }
+      nextCandidate = tryImprove(bestConfig)
+    }
+
+    bestConfig
+  }
+
+  def minimiseInstance(): Configuration = {
+    println("Starting instance minimisation...")
+    val notTried: Option[Boolean] = None
+
+    val automataSelected: IndexedSeq[mutable.IndexedSeq[Option[Boolean]]] =
+      instance.automataProducts
+        .map(p => mutable.IndexedSeq.fill(p.size)(notTried))
+        .toIndexedSeq
+
+    optimiseConfiguration { _ =>
+      if (automataSelected.flatten.exists(_.isEmpty)) {
+        val ((pi, ai), filteredProducts) =
+          dropAutomata(instance.automataProducts, automataSelected)
+
+        val currentName = instance.automataProducts(pi)(ai).name
+        println(s"Removing $currentName...")
+        Some(
+          this.copy(
+            instance = instance.copy(automataProducts = filteredProducts)
+          )
+        )
+      } else None
+    }
+  }
+
+  def tweakRestartiness(): Configuration = {
+    val timeoutStep = 10
+    var currentFactor = configuration.restartTimeoutFactor
+    optimiseConfiguration { bestSoFar =>
+      if (currentFactor <= 1) {
+        None
+      } else {
+        val candidateFactor = currentFactor - timeoutStep
+        currentFactor = candidateFactor max 1
+        Some(
+          bestSoFar.copy(
+            configuration = bestSoFar.configuration.withRestartTimeoutFactor(
+              trace("Trying restart factor")(currentFactor)
+            )
+          )
+        )
+      }
+    }
+  }
+
+  def compare(that: Configuration): Int =
+    (this.evaluate, this.nrAutomata) compare (that.evaluate, that.nrAutomata)
+}
+
+object DebugUnsoundness {
+
+  private val nrTriesBeforeAssumedSound = 20
+
   @tailrec
-  def hasUnsoundness(instance: Instance, iteration: Int = 0): Boolean =
+  def hasUnsoundness(
+      backend: LazyBackend,
+      instance: Instance,
+      iteration: Int = 0
+  ): Boolean =
     if (iteration >= nrTriesBeforeAssumedSound) {
       println(s"\nGave up finding unsoundness after $iteration tries!")
       false
@@ -141,39 +187,20 @@ object DebugUnsoundness {
           true
         case Success(Timeout(_)) =>
           print("⏰")
-          hasUnsoundness(instance, iteration + 1)
+          hasUnsoundness(backend, instance, iteration + 1)
         case Success(Sat(_)) =>
           print(s"❌(${runtime.round}s)")
-          hasUnsoundness(instance, iteration + 1)
+          hasUnsoundness(backend, instance, iteration + 1)
       }
     }
 
-  val notTried: Option[Boolean] = None
-
-  val automataSelected: IndexedSeq[mutable.IndexedSeq[Option[Boolean]]] =
-    unsoundInstance.automataProducts
-      .map(p => mutable.IndexedSeq.fill(p.size)(notTried))
-      .toIndexedSeq
-
-  println("Testing initial assumption...")
-  hasUnsoundness(unsoundInstance)
-
-  while (automataSelected.flatten.exists(_.isEmpty)) {
-    val ((pi, ai), automataProducts) =
-      dropAutomata(unsoundInstance.automataProducts, automataSelected)
-
-    val currentInstance = Instance(
-      counters = unsoundInstance.counters,
-      constraints = unsoundInstance.constraints,
-      automataProducts = automataProducts
-    )
-    val currentName = unsoundInstance.automataProducts(pi)(ai).name
-    println(s"Removing $currentName, does that preserve unsoundness?")
-
-    val unsoundnessFound = hasUnsoundness(currentInstance)
-    if (unsoundnessFound) {
-      println(s"Removing $currentName preserves unsoundness, removing it...")
-    }
-    automataSelected(pi)(ai) = Some(!unsoundnessFound)
-  }
+  def optimiseReproducability(
+      instances: Seq[Instance],
+      config: CommandLineOptions
+  ): Configuration =
+    instances
+      .map(Configuration(_, config).findBestSeed())
+      .max
+      .tweakRestartiness()
+      .minimiseInstance()
 }
