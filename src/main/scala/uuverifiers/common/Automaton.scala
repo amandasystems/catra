@@ -24,11 +24,11 @@ trait Automaton
     with GraphvizDumper {
   def serialise(): String = {
     val initialStr = s"init $initialState;"
-    val transitionsStr = transitions.map(_.serialise()).mkString("\n")
+    val transitionsStr = transitions.map(_.serialise()).mkString("\n\t")
     val acceptingStr = "accepting " + states
       .filter(isAccept)
       .mkString(",") + ";"
-    s"automaton $name {\n$initialStr\n$transitionsStr\n$acceptingStr\n};"
+    s"automaton $name {\n\t$initialStr\n\t$transitionsStr\t\n$acceptingStr\n};"
   }
 
   def name: String = s"a${hashCode()}"

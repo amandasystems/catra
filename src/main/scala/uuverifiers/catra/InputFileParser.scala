@@ -18,11 +18,12 @@ sealed case class Constant(value: Int) extends Term {
     value
   override def negate(): Constant = Constant(value * -1)
   override def counters(): Set[Counter] = Set.empty
+  override def toString: String = value.toString
 }
 
 sealed case class Counter(name: String) extends Term with Ordered[Counter] {
   def incrementBy(i: Int): Map[Counter, Int] = Map(this -> i)
-
+  override def toString: String = name
   def toConstant(p: SimpleAPI): ConstantTerm = p.createConstantRaw(name)
 
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -64,6 +65,8 @@ sealed case class Inequality(
   }
 
   override def counters(): Set[Counter] = lhs.counters() union rhs.counters()
+  override def toString: String =
+    s"($lhs) ${inequality.serialise(isPositive)} ($rhs)"
 }
 
 sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
@@ -72,6 +75,7 @@ sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula = IBoolLit(isTrue)
   override def counters(): Set[Counter] = Set.empty
+  override def toString: String = if (isTrue) "true" else "false"
 }
 
 sealed trait Term {
@@ -87,6 +91,7 @@ sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
     if (coefficient == -1) counter
     else CounterWithCoefficient(coefficient * -1, counter)
   override def counters(): Set[Counter] = Set(counter)
+  override def toString: String = s"$coefficient * $counter"
 }
 
 sealed case class Sum(terms: Seq[Term]) extends Term {
@@ -96,21 +101,42 @@ sealed case class Sum(terms: Seq[Term]) extends Term {
 
   def negate(): Sum = Sum(terms.map(_.negate()))
   override def counters(): Set[Counter] = terms.flatMap(_.counters()).toSet
+  override def toString: String = terms.mkString(" + ")
 }
 
-sealed trait InequalitySymbol
-case object LessThan extends InequalitySymbol
-case object GreaterThan extends InequalitySymbol
-case object Equals extends InequalitySymbol
-case object GreaterThanOrEqual extends InequalitySymbol
-case object LessThanOrEqual extends InequalitySymbol
-case object NotEquals extends InequalitySymbol
+sealed trait InequalitySymbol {
+  def serialise(isPositive: Boolean): String
+}
+
+case object LessThan extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "<" else ">="
+}
+case object GreaterThan extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) ">" else "<="
+}
+case object Equals extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "==" else "!="
+}
+case object GreaterThanOrEqual extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) ">=" else "<"
+}
+case object LessThanOrEqual extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "<=" else ">"
+}
+case object NotEquals extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "==" else "!="
+}
 
 sealed trait Formula extends DocumentFragment {
   def negated(): Formula
   def toPrincess(counterConstants: Map[Counter, ConstantTerm]): IFormula
   def counters(): Set[Counter]
-  // TODO toString
 }
 
 sealed case class And(left: Formula, right: Formula) extends Formula {
@@ -120,6 +146,8 @@ sealed case class And(left: Formula, right: Formula) extends Formula {
   ): IFormula =
     left.toPrincess(counterConstants) &&& right.toPrincess(counterConstants)
   override def counters(): Set[Counter] = left.counters() union right.counters()
+
+  override def toString: String = s"($left) && ($right)"
 }
 sealed case class Or(left: Formula, right: Formula) extends Formula {
   override def negated(): And = And(left.negated(), right.negated())
@@ -128,6 +156,7 @@ sealed case class Or(left: Formula, right: Formula) extends Formula {
   ): IFormula =
     left.toPrincess(counterConstants) ||| right.toPrincess(counterConstants)
   override def counters(): Set[Counter] = left.counters() union right.counters()
+  override def toString: String = s"($left) || ($right)"
 }
 
 sealed trait AutomatonFragment

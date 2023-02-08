@@ -1,12 +1,35 @@
 package uuverifiers.catra
 
-import uuverifiers.catra.SolveRegisterAutomata.measureTime
-import uuverifiers.common.{Automaton, Tracing}
+import uuverifiers.common.Tracing
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.math.Ordered.orderingToOrdered
 import scala.util.{Failure, Success}
+
+trait Optimiser extends Tracing {
+  val startingConfiguration: Configuration
+
+  enableTracing(true)
+
+  def reportResult(didImprove: Boolean): Unit
+  def canImprove(): Boolean
+  def nextCandidate(): Configuration
+
+  def optimise(): Configuration = {
+    var bestConfig = startingConfiguration
+
+    while (canImprove()) {
+      val candidate = nextCandidate()
+      val didImprove = candidate > bestConfig
+      if (didImprove) {
+        trace("New best config!")()
+        bestConfig = candidate
+      }
+      reportResult(didImprove)
+    }
+    bestConfig
+  }
+}
 
 sealed case class Score(nrUnsat: Int, nrTimeouts: Int) extends Ordered[Score] {
 
@@ -17,33 +40,35 @@ sealed case class Score(nrUnsat: Int, nrTimeouts: Int) extends Ordered[Score] {
     (this.nrUnsat, this.nrTimeouts) compare (that.nrUnsat, that.nrTimeouts)
 }
 
+object Configuration {
+  private val giveUpAtSeed = 5
+  private val nrTimesToEvaluate = 5
+
+}
+
 sealed case class Configuration(
     instance: Instance,
     configuration: CommandLineOptions
 ) extends Ordered[Configuration]
-    with Tracing {
-
-  private val giveUpAtSeed = 5
-  private val nrTimesToEvaluate = 5
+    with Tracing { self =>
 
   def withRandomSeed(newSeed: Int): Configuration =
     if (newSeed == configuration.randomSeed) this
     else this.copy(configuration = configuration.withRandomSeed(newSeed))
 
   def findBestSeed(): Configuration = {
-    var currentSeed = 1
-
-    optimiseConfiguration(
-      bestSoFar =>
-        if (currentSeed >= giveUpAtSeed) {
-          None
-        } else {
-          val newConfig =
-            bestSoFar.withRandomSeed(trace("Trying seed")(currentSeed))
-          currentSeed += 1
-          Some(newConfig)
-        }
-    )
+    new Optimiser {
+      private var currentSeed = 1
+      override val startingConfiguration: Configuration = self
+      override def reportResult(didImprove: Boolean): Unit = {}
+      override def canImprove(): Boolean =
+        currentSeed < Configuration.giveUpAtSeed
+      override def nextCandidate(): Configuration = {
+        val nextCandidate = startingConfiguration.withRandomSeed(currentSeed)
+        currentSeed += 1
+        nextCandidate
+      }
+    }.optimise()
   }
 
   def writeToFile(fileName: String): Unit = {
@@ -51,7 +76,9 @@ sealed case class Configuration(
 
     val bw = new BufferedWriter(new FileWriter(new File(fileName)))
     // TODO
+    bw.write("/* Configuration:")
     bw.write(this.configuration.toString)
+    bw.write("*/\n\n")
     bw.write(this.instance.toString)
     bw.close()
   }
@@ -69,97 +96,86 @@ sealed case class Configuration(
   }
 
   lazy val evaluate: Score =
-    trace("final score: ")(
-      (1 to nrTimesToEvaluate)
-        .map(_ => runOnce())
-        .foldRight(Score(0, 0))(_ + _)
-    )
-
-  private def dropAutomata(
-      automataProducts: Seq[Seq[Automaton]],
-      automataSelected: IndexedSeq[mutable.IndexedSeq[Option[Boolean]]]
-  ): ((Int, Int), Seq[Seq[Automaton]]) = {
-    // find the first unknown and try excluding it
-    val selectedProduct =
-      automataSelected.indexWhere(p => p.exists(_.isEmpty))
-    val selectedAutomaton =
-      automataSelected(selectedProduct).indexWhere(_.isEmpty)
-
-    val prunedAutomata = automataProducts.zipWithIndex.map {
-      case (as, pi) =>
-        as.zipWithIndex
-          .filterNot {
-            case (_, ai) =>
-              (ai == selectedAutomaton && pi == selectedProduct) || automataSelected(
-                pi
-              )(ai).contains(false)
-          }
-          .map(_._1)
-    }
-    ((selectedProduct, selectedAutomaton), prunedAutomata)
-  }
-
-  private def optimiseConfiguration(
-      tryImprove: Configuration => Option[Configuration]
-  ): Configuration = {
-
-    var bestConfig = this
-    var nextCandidate = tryImprove(bestConfig)
-
-    while (nextCandidate.isDefined) {
-      val candidate = nextCandidate.get
-      if (candidate > bestConfig) {
-        bestConfig = candidate
-      }
-      nextCandidate = tryImprove(bestConfig)
-    }
-
-    bestConfig
-  }
+    (1 to Configuration.nrTimesToEvaluate)
+      .map(_ => runOnce())
+      .foldRight(Score(0, 0))(_ + _)
 
   def minimiseInstance(): Configuration = {
-    println("Starting instance minimisation...")
-    val notTried: Option[Boolean] = None
+    new Optimiser {
 
-    val automataSelected: IndexedSeq[mutable.IndexedSeq[Option[Boolean]]] =
-      instance.automataProducts
-        .map(p => mutable.IndexedSeq.fill(p.size)(notTried))
-        .toIndexedSeq
+      private val automataSelected =
+        instance.automataProducts
+          .map(p => mutable.IndexedSeq.fill(p.size)(false))
+          .toIndexedSeq
 
-    optimiseConfiguration { _ =>
-      if (automataSelected.flatten.exists(_.isEmpty)) {
-        val ((pi, ai), filteredProducts) =
-          dropAutomata(instance.automataProducts, automataSelected)
+      private var selectedProduct = 0
+      private var selectedAutomaton = 0
+      private var exhausted = false
 
-        val currentName = instance.automataProducts(pi)(ai).name
-        println(s"Removing $currentName...")
-        Some(
-          this.copy(
-            instance = instance.copy(automataProducts = filteredProducts)
-          )
+      private def currentProduct(): mutable.IndexedSeq[Boolean] =
+        automataSelected(selectedProduct)
+
+      private def wrapAroundOrStop() = {
+        if (selectedProduct < automataSelected.size - 1) {
+          selectedProduct += 1
+          selectedAutomaton = 0
+        } else { // Unable to wrap around!
+          exhausted = true
+        }
+      }
+
+      private def incrementSelection() = {
+        if (selectedAutomaton < currentProduct().size - 1)
+          selectedAutomaton += 1
+        else wrapAroundOrStop()
+      }
+
+      override val startingConfiguration: Configuration = self
+      override def reportResult(didImprove: Boolean): Unit = {
+        automataSelected(selectedProduct)(selectedAutomaton) = !didImprove
+        incrementSelection()
+
+      }
+      override def canImprove(): Boolean = !exhausted
+      override def nextCandidate(): Configuration = {
+        val filteredProducts =
+          startingConfiguration.instance.automataProducts.zipWithIndex.map {
+            case (as, pi) =>
+              as.zipWithIndex
+                .filterNot {
+                  case (_, ai) =>
+                    ai == selectedAutomaton && pi == selectedProduct
+                }
+                .map(_._1)
+          }
+
+        startingConfiguration.copy(
+          instance = instance.copy(automataProducts = filteredProducts)
         )
-      } else None
-    }
+      }
+    }.optimise()
   }
 
   def tweakRestartiness(): Configuration = {
     val timeoutStep = 10
-    var currentFactor = configuration.restartTimeoutFactor
-    optimiseConfiguration { bestSoFar =>
-      if (currentFactor <= 1) {
-        None
-      } else {
+    new Optimiser {
+      private var currentFactor = configuration.restartTimeoutFactor
+
+      override val startingConfiguration: Configuration = self
+      override def reportResult(didImprove: Boolean): Unit = {}
+      override def canImprove(): Boolean = currentFactor > 1
+      override def nextCandidate(): Configuration = {
         val candidateFactor = currentFactor - timeoutStep
         currentFactor = candidateFactor max 1
-        Some(
-          bestSoFar.copy(
-            configuration = bestSoFar.configuration.withRestartTimeoutFactor(
-              trace("Trying restart factor")(currentFactor)
+        startingConfiguration.copy(
+          configuration =
+            startingConfiguration.configuration.withRestartTimeoutFactor(
+              currentFactor
             )
-          )
         )
+
       }
-    }
+    }.optimise()
   }
 
   def compare(that: Configuration): Int =
@@ -167,33 +183,6 @@ sealed case class Configuration(
 }
 
 object DebugUnsoundness {
-
-  private val nrTriesBeforeAssumedSound = 20
-
-  @tailrec
-  def hasUnsoundness(
-      backend: LazyBackend,
-      instance: Instance,
-      iteration: Int = 0
-  ): Boolean =
-    if (iteration >= nrTriesBeforeAssumedSound) {
-      println(s"\nGave up finding unsoundness after $iteration tries!")
-      false
-    } else {
-      val (result, runtime) = measureTime(backend solveSatisfy instance)
-      result match {
-        case Success(Unsat) =>
-          println(s"Found unsound result after $iteration tries!")
-          true
-        case Success(Timeout(_)) =>
-          print("⏰")
-          hasUnsoundness(backend, instance, iteration + 1)
-        case Success(Sat(_)) =>
-          print(s"❌(${runtime.round}s)")
-          hasUnsoundness(backend, instance, iteration + 1)
-      }
-    }
-
   def optimiseReproducability(
       instances: Seq[Instance],
       config: CommandLineOptions
