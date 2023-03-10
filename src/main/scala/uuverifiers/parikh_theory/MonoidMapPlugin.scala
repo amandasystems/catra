@@ -159,6 +159,79 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     context.connectedInstances
       .flatMap(handleConnectedInstance(_, context))
 
+  private def explainUnreachability(
+      knownUnreachableStates: Seq[State],
+      unreachableTransitions: Seq[Transition],
+      context: Context,
+      connectedInstance: Atom
+  ): Seq[Plugin.Action] =
+    trace("unreachableActions") {
+      val autId = autNr(connectedInstance)
+      val myTransitionMasks = context.autTransitionMasks(autId)
+      val aut = materialisedAutomata(autId)
+      val transitionToTerm = context.autTransitionTerm(autId)(_)
+      implicit val order: TermOrder = context.goal.order
+
+      // Case 1: total: the automaton accepts no string (no final state is reachable from the initial state)
+      if (knownUnreachableStates contains aut.initialState) {
+        val unreachableFinalStates = aut.states.filter(
+          s => knownUnreachableStates.contains(s) && aut.isAccept(s)
+        )
+
+        val loadBearingTransitions =
+          unreachableFinalStates
+            .flatMap(
+              f =>
+                aut
+                  .minCut(aut.initialState, f)
+                  .map(_._2)
+            )
+            .toSeq
+            .distinct
+
+        val loadBearingMasks =
+          loadBearingTransitions.map(context.autTransitionMask(autId))
+
+        val cutIsZero = conj(loadBearingMasks.map(_.last <= 0))
+
+        return Seq(
+          Plugin
+            .AddAxiom(
+              loadBearingMasks :+ cutIsZero,
+              conj(connectedInstance).negate,
+              theoryInstance
+            )
+        )
+      }
+
+      // Case 2: partial: some transitions may be unreachable
+      unreachableTransitions.flatMap { unreachableTransition =>
+        val term = transitionToTerm(unreachableTransition)
+        val constr = term === 0
+        if (constr.isTrue) return Seq() // FIXME don't use return
+        val separatingCut = aut
+          .minCut(aut.initialState, unreachableTransition.from())
+          .map(_._2)
+        val cutMasks = separatingCut
+          .map(context.autTransitionMask(autId))
+          .toSeq
+        val cutIsZero = conj(cutMasks.map(_.last <= 0))
+        val assumptions = {
+          if (cutIsZero.isTrue) // Forwards-unreachable
+            cutMasks :+ context.autTransitionMask(
+              autId
+            )(unreachableTransition)
+          else // Backwards-unreachable: fall back
+            {
+              for (a <- myTransitionMasks
+                   if a.last.isZero || a.last == term)
+                yield a
+            }
+        } :+ connectedInstance
+        Seq(Plugin.AddAxiom(assumptions, constr, theoryInstance))
+      }
+    }
+
   private def handleConnectedInstance(
       connectedInstance: Atom,
       context: Context
@@ -190,9 +263,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       val reachableStates =
         aut.fwdReachable(deadTransitions) & aut.bwdReachable(deadTransitions)
+
       val knownUnreachableStates = trace("knownUnreachableStates") {
         aut.states filterNot reachableStates
-      }
+      }.toSeq
 
       val definitelyReached = trace("definitelyReached")(
         aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
@@ -214,65 +288,41 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           )
         } else Seq()
 
+      val unreachableTransitions =
+        knownUnreachableStates.flatMap(aut.transitionsFrom(_))
+
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
-      val unreachableActions = trace("unreachableActions") {
-        val unreachableTransitions =
-          knownUnreachableStates.flatMap(aut.transitionsFrom(_))
-
-        val unreachableConstraints =
-          conj(unreachableTransitions.map(transitionToTerm(_) === 0))
-
-        if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
-        else {
-
-          val acts =
-            if (ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)) {
-
-              for (trans <- unreachableTransitions.toSeq;
-                   term = transitionToTerm(trans);
-                   constr = term === 0
-                   if !constr.isTrue;
-                   separatingCut = aut
-                     .minCut(aut.initialState, trans.from())
-                     .map(_._2);
-                   cutMasks = separatingCut
-                     .map(context.autTransitionMask(autId))
-                     .toSeq;
-                   cutIsZero = cutMasks.map(_.last).reduce(_ + _) <= 0;
-                   assumptions = if (cutIsZero.isTrue) // Forwards-unreachable
-                     cutMasks :+ connectedInstance :+ context.autTransitionMask(
-                       autId
-                     )(trans)
-                   else // Backwards-unreachable: fall back
-                     {
-                       for (a <- myTransitionMasks
-                            if a.last.isZero || a.last == term)
-                         yield a
-                     } :+ connectedInstance)
-                yield {
-                  Plugin.AddAxiom(assumptions, constr, theoryInstance)
-                }
-
-            } else {
-
+      val unreachableActions = {
+        val actions =
+          conj(unreachableTransitions.map(transitionToTerm(_) === 0)) match {
+            case c if c.isTrue => Seq()
+            case _
+                if ap.parameters.Param.PROOF_CONSTRUCTION(
+                  context.goal.settings
+                ) =>
+              explainUnreachability(
+                knownUnreachableStates,
+                unreachableTransitions,
+                context,
+                connectedInstance
+              )
+            case c =>
               Seq(
                 Plugin.AddAxiom(
                   myTransitionMasks :+ connectedInstance,
-                  unreachableConstraints,
+                  c,
                   theoryInstance
                 )
               )
-
-            }
-
-          theoryInstance.runHooks(
-            context,
-            "Propagate-Connected",
-            actions = acts
-          )
-        }
+          }
+        theoryInstance.runHooks(
+          context,
+          "Propagate-Connected",
+          actions = actions
+        )
       }
+
       unreachableActions ++ subsumeActions
     }
 
