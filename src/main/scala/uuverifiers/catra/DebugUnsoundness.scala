@@ -42,7 +42,7 @@ sealed case class Score(nrUnsat: Int, nrTimeouts: Int) extends Ordered[Score] {
 
 object Configuration {
   private val giveUpAtSeed = 5
-  private val nrTimesToEvaluate = 5
+  private val nrTimesToEvaluate = 30
 
 }
 
@@ -60,14 +60,14 @@ sealed case class Configuration(
     new Optimiser {
       private var currentSeed = 1
       override val startingConfiguration: Configuration = self
-      override def reportResult(didImprove: Boolean): Unit = {}
+      override def reportResult(didImprove: Boolean): Unit = {
+        if (didImprove) trace("seed was an improvement!")(currentSeed)
+        currentSeed += 1
+      }
       override def canImprove(): Boolean =
         currentSeed < Configuration.giveUpAtSeed
-      override def nextCandidate(): Configuration = {
-        val nextCandidate = startingConfiguration.withRandomSeed(currentSeed)
-        currentSeed += 1
-        nextCandidate
-      }
+      override def nextCandidate(): Configuration =
+        startingConfiguration.withRandomSeed(currentSeed)
     }.optimise()
   }
 
@@ -95,10 +95,11 @@ sealed case class Configuration(
     }
   }
 
-  lazy val evaluate: Score =
+  lazy val evaluate: Score = trace("evaluate final score") {
     (1 to Configuration.nrTimesToEvaluate)
       .map(_ => runOnce())
       .foldRight(Score(0, 0))(_ + _)
+  }
 
   def minimiseInstance(): Configuration = {
     new Optimiser {
@@ -170,7 +171,7 @@ sealed case class Configuration(
         startingConfiguration.copy(
           configuration =
             startingConfiguration.configuration.withRestartTimeoutFactor(
-              currentFactor
+              trace("Trying timeout factor")(currentFactor)
             )
         )
 

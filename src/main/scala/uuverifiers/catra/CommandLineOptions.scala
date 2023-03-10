@@ -70,7 +70,10 @@ sealed case class CommandLineOptions(
   def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
     dumpSMTDir match {
       case None =>
-        SimpleAPI.withProver(randomSeed = Some(randomSeed))(
+        SimpleAPI.withProver(
+          randomSeed = Some(randomSeed)
+          //logging = Set(ap.parameters.Param.LOG_LEMMAS)
+        )(
           p => runWithTimeout(p)(f(p))
         )
       case Some(dumpDir) =>
@@ -132,7 +135,7 @@ object CommandLineOptions {
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
-  private var nrUnknownToStartMaterialiseProduct = 2
+  private var nrUnknownToStartMaterialiseProduct = 2 // FIXME: increase to 6.
   private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L

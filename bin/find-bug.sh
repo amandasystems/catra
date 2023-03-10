@@ -1,23 +1,31 @@
 #!/bin/bash
 
-timeout=120000
+timeout=30000
 logfile=regressions.log
-trap "echo '\nExited!'; exit;" SIGINT SIGTERM
+trap "printf '\nExited!\n'; exit;" SIGINT SIGTERM
 
 iteration=0
 
+echo "Looking for bug"
 while true;
 do
-  echo "Looking for bug"
-  for instance in $(find regressions -type f)
+  for instance in second-investigation/reduced.par
   do
     ((iteration++))
-    printf "."
-    CATRA_TRACE=true ./bin/catra solve-satisfy  --timeout ${timeout} "${instance}" &> ${logfile};
+    ./bin/catra solve-satisfy  --print-decisions --timeout ${timeout} "${instance}" &> ${logfile};
     if $(grep -q '====.* unsat' ${logfile});
     then
-      echo "\nFound bug with ${instance} after ${iteration} iterations!"
-      exit
+      printf "!"
+      cp ${logfile} bug-${iteration}.log
+    fi
+    if $(grep -q '====.* timeout' ${logfile}); then
+      printf "t"
+    else
+      printf "."
+    fi
+    if $(grep -q '====.* error' ${logfile}); then
+      printf "e"
+      cp ${logfile} error-${iteration}.log
     fi
   done
 done

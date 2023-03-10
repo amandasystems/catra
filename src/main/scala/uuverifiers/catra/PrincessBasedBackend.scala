@@ -47,7 +47,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
   }
 
-  def checkSat(p: SimpleAPI): ProverStatus.Value =
+  private def checkSat(p: SimpleAPI): ProverStatus.Value =
     if (arguments.enableRestarts && arguments.backend == ChooseLazy)
       checkSatWithRestarts(p)
     else
@@ -83,7 +83,12 @@ trait PrincessBasedBackend extends Backend with Tracing {
             )
             .toMap
         )
-      case ProverStatus.Unsat       => Unsat
+      case ProverStatus.Unsat => {
+        println(
+          s"Certificate: ${p.certificateAsString(Map(), ap.parameters.Param.InputFormat.Princess)}"
+        )
+        Unsat
+      }
       case ProverStatus.OutOfMemory => OutOfMemory
       case otherStatus =>
         throw new Exception(s"unexpected solver status: $otherStatus")
