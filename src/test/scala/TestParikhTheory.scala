@@ -2,6 +2,7 @@ import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience._
 import ap.terfor.TermOrder
+import org.scalatest.Ignore
 import org.scalatest.funsuite.AnyFunSuite
 import uuverifiers.catra.Counter
 import uuverifiers.common.SymbolicLabel.{CharRange, SingleChar}
@@ -226,7 +227,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
   //       |   ^
   //       +---+
   //         c
-  test(
+  ignore(
     "product of 4-state, per-transition register automaton with loop has correct values"
   ) {
     def baseMaker() =

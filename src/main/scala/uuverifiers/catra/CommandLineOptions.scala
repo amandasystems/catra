@@ -59,7 +59,8 @@ sealed case class CommandLineOptions(
     enableRestarts: Boolean,
     restartTimeoutFactor: Long,
     crossValidate: Boolean,
-    randomSeed: Int
+    randomSeed: Int,
+    printProof: Boolean
 ) {
   def withRandomSeed(newSeed: Int): CommandLineOptions =
     copy(randomSeed = newSeed)
@@ -141,6 +142,7 @@ object CommandLineOptions {
   private var restartTimeoutFactor = 500L
   private var crossValidate = false
   private var randomSeed = 1234567
+  private var printProof = false
 
   private val usage =
     s"""
@@ -167,6 +169,8 @@ object CommandLineOptions {
     For specific back-ends:
 
       Baseline:
+      --print-proof     -- compute and generate a proof upon (non-) solution. 
+                        May extend runtime. Default: $printProof.
       --dump-equations <directory> -- dump the flow equations of each consecutive
                         product (and all terms) as LaTeX equations into this directory.
       --no-check-term-sat -- Check first if the terms of the product alone are
@@ -301,6 +305,9 @@ object CommandLineOptions {
       case "--restart-timeout-factor" :: someFactor :: tail =>
         restartTimeoutFactor = someFactor.toLong
         parseFilesAndFlags(tail)
+      case "--print-proof" :: tail =>
+        printProof = true
+        parseFilesAndFlags(tail)
       case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail =>
@@ -347,7 +354,8 @@ object CommandLineOptions {
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
       crossValidate = crossValidate,
-      randomSeed = randomSeed
+      randomSeed = randomSeed,
+      printProof = printProof
     )
   }
 }

@@ -84,9 +84,10 @@ trait PrincessBasedBackend extends Backend with Tracing {
             .toMap
         )
       case ProverStatus.Unsat => {
-        println(
-          s"Certificate: ${p.certificateAsString(Map(), ap.parameters.Param.InputFormat.Princess)}"
-        )
+        if (arguments.printProof)
+          println(
+            s"Certificate: ${p.certificateAsString(Map(), ap.parameters.Param.InputFormat.Princess)}"
+          )
         Unsat
       }
       case ProverStatus.OutOfMemory => OutOfMemory
