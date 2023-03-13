@@ -221,6 +221,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             cutMasks
           else // Backwards-unreachable: fall back
             {
+              assert(
+                !aut.isAccept(unreachableTransition.from()),
+                s"Transition $unreachableTransition cannot start in accepting state and be bw-unreachable!"
+              )
               val autReversed = aut.reverseGraph()
               val separatingCut = aut.states
                 .filter(aut.isAccept)
