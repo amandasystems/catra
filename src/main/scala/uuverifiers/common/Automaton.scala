@@ -578,6 +578,11 @@ trait Automaton
 
   def counters(): Set[Counter] =
     this.transitions.flatMap(_.affectsCounters()).toSet
+
+  def reverseGraph(): Graphable[State, Transition] =
+    new MapGraph[State, Transition](
+      this.edges().map { case (from, label, to) => (to, label, from) }
+    )
 }
 
 object REJECT_ALL extends Automaton {

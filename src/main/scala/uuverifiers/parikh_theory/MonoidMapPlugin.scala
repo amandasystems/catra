@@ -218,16 +218,28 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         val cutIsZero = conj(cutMasks.map(_.last <= 0))
         val assumptions = {
           if (cutIsZero.isTrue) // Forwards-unreachable
-            cutMasks :+ context.autTransitionMask(
-              autId
-            )(unreachableTransition)
+            cutMasks
           else // Backwards-unreachable: fall back
             {
-              for (a <- myTransitionMasks
-                   if a.last.isZero || a.last == term)
-                yield a
+              val autReversed = aut.reverseGraph()
+              val separatingCut = aut.states
+                .filter(aut.isAccept)
+                .flatMap(
+                  as =>
+                    autReversed
+                      .minCut(as, unreachableTransition.from())
+                      .map(_._2)
+                )
+              val bwCutMasks = separatingCut
+                .map(context.autTransitionMask(autId))
+                .toSeq
+              assert(
+                conj(cutMasks.map(_.last <= 0)).isTrue,
+                s"Expected either zero fw: $cutMasks or bw: $bwCutMasks, but neither was!"
+              )
+              bwCutMasks
             }
-        } :+ connectedInstance
+        } :+ context.autTransitionMask(autId)(unreachableTransition) :+ connectedInstance
         Seq(Plugin.AddAxiom(assumptions, constr, theoryInstance))
       }
     }
