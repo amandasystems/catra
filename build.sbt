@@ -1,6 +1,6 @@
 import Dependencies._
 
-ThisBuild / scalaVersion := "2.13.8"
+ThisBuild / scalaVersion := "2.13.10"
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "uuverifiers"
 
@@ -9,8 +9,8 @@ ThisBuild / scalacOptions ++= Seq(
   //"-Xfatal-warnings",
   "-unchecked",
   "-Xlint",
-//   "-Xelide-below",
-//   "INFO",
+   "-Xelide-below",
+   "INFO",
   "-feature",
   "-opt-inline-from:**",
   "-opt:l:method",
