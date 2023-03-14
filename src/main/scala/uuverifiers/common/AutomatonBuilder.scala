@@ -1,6 +1,5 @@
 package uuverifiers.common
 
-import collection.mutable.ArrayBuffer
 import scala.collection.{SortedSet, mutable}
 
 class AutomatonBuilder extends Tracing {
@@ -8,91 +7,9 @@ class AutomatonBuilder extends Tracing {
   private var _outgoingTransitions = Map[State, SortedSet[Transition]]()
   private var _initial: Option[State] = None
   private var _accepting = Set[State]()
-  private var forwardReachable = Set[State]()
-  private var backwardReachable = Set[State]()
   private var name: Option[String] = None
-
-  /**
-   * Transitively set s and any state reachable when starting in s as reachable.
-   *
-   * @param s The state to set reachable
-   */
-  private def setFwdReachable(s: State) =
-    trace(s"setting forward reachable $s") {
-      var todo = List(s)
-
-      def markReachable(s: State): Unit = {
-        forwardReachable += s
-      }
-      def enqueue(s: State): Unit = trace(s"adding $s to queue") {
-        todo = s :: todo
-      }
-
-      markReachable(s)
-
-      while (todo.nonEmpty) {
-        val current = todo.head
-        todo = todo.tail
-
-        for (t <- _outgoingTransitions.getOrElse(current, Seq())) {
-          val targetSeenBefore = forwardReachable contains t.to()
-          if (!targetSeenBefore) {
-            enqueue(t.to())
-            markReachable(t.to())
-          }
-        }
-      }
-      forwardReachable
-    }
-
-  /**
-   * Start a backwards reachability search here, populating
-   * backwardsReachable.
-   *
-   * @param startingState
-   */
-  private def startBwdReachability(startingState: State) =
-    trace(s"start backwardsReachable $startingState") {
-      val reachedFrom = new mutable.HashMap[State, ArrayBuffer[State]]
-      var todo = List[State](startingState)
-
-      def enqueue(s: State): Unit = trace(s"adding $s to queue") {
-        todo = s :: todo
-      }
-
-      def dequeue() = {
-        val next = todo.head
-        todo = todo.tail
-        next
-      }
-
-      def markReachable(s: State): Unit =
-        trace(s"$s is backwards reachable") {
-          backwardReachable += s
-        }
-
-      _outgoingTransitions.values.flatten
-        .foreach(
-          t => reachedFrom.getOrElseUpdate(t.to(), new ArrayBuffer) += t.from()
-        )
-
-      markReachable(startingState)
-
-      while (todo.nonEmpty) {
-        val next = dequeue()
-
-        for (sources <- reachedFrom get next)
-          for (source <- sources) {
-            val sourceSeenBefore = backwardReachable contains source
-            if (!sourceSeenBefore) {
-              markReachable(source)
-              enqueue(source)
-            }
-          }
-      }
-
-      backwardReachable
-    }
+  private val forward = new IncrementallyReachable[State]
+  private var backward = new IncrementallyReachable[State]
 
   def nameIs(n: String): AutomatonBuilder = {
     this.name = Some(n)
@@ -125,24 +42,27 @@ class AutomatonBuilder extends Tracing {
 
   def setInitial(newInitialState: State): AutomatonBuilder = {
     assertHasState(newInitialState)
-    forwardReachable = Set() // All states are now unreachable...
     _initial = Some(newInitialState)
-    setFwdReachable(newInitialState) //...until we recompute.
+    forward setReachable newInitialState
     this
   }
 
   def setAccepting(acceptingStates: State*): AutomatonBuilder = {
     assert(acceptingStates forall (_autStates(_)))
     _accepting ++= acceptingStates
-    acceptingStates.foreach(s => startBwdReachability(s))
+    acceptingStates.foreach(backward.setReachable)
     this
   }
 
+  @deprecated("Please don't use for performance reasons")
   def setNotAccepting(notAcceptingStates: State*): AutomatonBuilder = {
     assert(notAcceptingStates forall (_autStates(_)))
-    backwardReachable = Set()
+    // We need to reconstruct backwards reachability from scratch
+    backward = new IncrementallyReachable[State]
     _accepting --= notAcceptingStates
-    _accepting.foreach(s => startBwdReachability(s))
+    _accepting.foreach(s => backward.setReachable(s))
+    _outgoingTransitions.values.flatten
+      .foreach(t => backward.canGo(t.to(), t.from()))
     this
   }
 
@@ -155,34 +75,27 @@ class AutomatonBuilder extends Tracing {
       case Some(previousOutgoing) => Some(previousOutgoing + t)
     }
 
-    if (forwardReachable contains t.from()) {
-      setFwdReachable(t.to())
-    }
-
-    if (backwardReachable contains t.to()) {
-      startBwdReachability(t.from())
-    }
-
+    forward.canGo(t.from(), t.to())
+    backward.canGo(t.to(), t.from())
     this
   }
 
+  private def stateIsLive(s: State): Boolean =
+    forward.isReachable(s) && backward.isReachable(s)
+
   def getAutomaton(): Automaton = {
     assert(_initial.isDefined, "Must have initial state!")
+    val initial = _initial.get
 
-    if (!_accepting.exists(forwardReachable contains _))
-      return trace("AutomatonBuilder::getAutomaton")(REJECT_ALL)
+    if (!backward.isReachable(initial)) return trace("getAutomaton")(REJECT_ALL)
 
-    // Ignore transitions into and from dead states (unreachable, or where no
-    // path leads on to an accepting state)
     val reachableTransitions =
       _outgoingTransitions.view
-        .filterKeys(
-          s => (forwardReachable contains s) && (backwardReachable contains s)
-        )
-        .mapValues(ts => ts.filter(backwardReachable contains _.to()))
+        .filterKeys(stateIsLive) // Only from live states
+        .mapValues(ts => ts.filter(t => stateIsLive(t.to()))) // Only to live states
         .toMap
 
-    new Aut(_initial.get, _accepting, reachableTransitions, _autStates, name)
+    new Aut(initial, _accepting, reachableTransitions, _autStates, name)
   }
 }
 
@@ -210,4 +123,39 @@ object AutomatonBuilder {
     aut.transitions.foreach(builder.addTransition)
     builder
   }
+}
+
+@inline
+sealed private class IncrementallyReachable[S] {
+  private val reachable = mutable.Set[S]()
+  private val notYetReachable = mutable.HashMap[S, mutable.Set[S]]()
+
+  private def addMove(from: S, to: S): Unit =
+    notYetReachable.getOrElseUpdate(from, mutable.Set[S]()).add(to)
+
+  // Remove everything reachable from at, and insert those into reachable
+  private def startReachabilityTrace(at: S): Unit = {
+    val todo = mutable.Queue[S](at)
+
+    while (todo.nonEmpty) {
+      val current = todo.dequeue()
+//      assert(
+//        !reachable.contains(current),
+//        s"Invariant violation: reachability re-discovered state $current!"
+//      )
+      reachable add current
+
+      val previouslyUnreachableNeighbours = notYetReachable
+        .remove(current)
+        .getOrElse(mutable.Set.empty)
+        .diff(reachable)
+      todo enqueueAll previouslyUnreachableNeighbours
+    }
+  }
+  def setReachable(reachableState: S): Unit =
+    if (!reachable.contains(reachableState))
+      startReachabilityTrace(reachableState)
+  def canGo(from: S, to: S): Unit =
+    if (reachable contains from) this setReachable to else addMove(from, to)
+  def isReachable(s: S): Boolean = reachable contains s
 }
