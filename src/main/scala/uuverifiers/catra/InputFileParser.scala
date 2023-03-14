@@ -18,11 +18,12 @@ sealed case class Constant(value: Int) extends Term {
     value
   override def negate(): Constant = Constant(value * -1)
   override def counters(): Set[Counter] = Set.empty
+  override def toString: String = value.toString
 }
 
 sealed case class Counter(name: String) extends Term with Ordered[Counter] {
   def incrementBy(i: Int): Map[Counter, Int] = Map(this -> i)
-
+  override def toString: String = name
   def toConstant(p: SimpleAPI): ConstantTerm = p.createConstantRaw(name)
 
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -64,6 +65,8 @@ sealed case class Inequality(
   }
 
   override def counters(): Set[Counter] = lhs.counters() union rhs.counters()
+  override def toString: String =
+    s"($lhs) ${inequality.serialise(isPositive)} ($rhs)"
 }
 
 sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
@@ -72,6 +75,7 @@ sealed case class TrueOrFalse(isTrue: Boolean) extends Atom with Formula {
       counterConstants: Map[Counter, ConstantTerm]
   ): IFormula = IBoolLit(isTrue)
   override def counters(): Set[Counter] = Set.empty
+  override def toString: String = if (isTrue) "true" else "false"
 }
 
 sealed trait Term {
@@ -87,6 +91,7 @@ sealed case class CounterWithCoefficient(coefficient: Int, counter: Counter)
     if (coefficient == -1) counter
     else CounterWithCoefficient(coefficient * -1, counter)
   override def counters(): Set[Counter] = Set(counter)
+  override def toString: String = s"$coefficient * $counter"
 }
 
 sealed case class Sum(terms: Seq[Term]) extends Term {
@@ -96,15 +101,37 @@ sealed case class Sum(terms: Seq[Term]) extends Term {
 
   def negate(): Sum = Sum(terms.map(_.negate()))
   override def counters(): Set[Counter] = terms.flatMap(_.counters()).toSet
+  override def toString: String = terms.mkString(" + ")
 }
 
-sealed trait InequalitySymbol
-case object LessThan extends InequalitySymbol
-case object GreaterThan extends InequalitySymbol
-case object Equals extends InequalitySymbol
-case object GreaterThanOrEqual extends InequalitySymbol
-case object LessThanOrEqual extends InequalitySymbol
-case object NotEquals extends InequalitySymbol
+sealed trait InequalitySymbol {
+  def serialise(isPositive: Boolean): String
+}
+
+case object LessThan extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "<" else ">="
+}
+case object GreaterThan extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) ">" else "<="
+}
+case object Equals extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "==" else "!="
+}
+case object GreaterThanOrEqual extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) ">=" else "<"
+}
+case object LessThanOrEqual extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "<=" else ">"
+}
+case object NotEquals extends InequalitySymbol {
+  override def serialise(isPositive: Boolean): String =
+    if (isPositive) "==" else "!="
+}
 
 sealed trait Formula extends DocumentFragment {
   def negated(): Formula
@@ -119,6 +146,8 @@ sealed case class And(left: Formula, right: Formula) extends Formula {
   ): IFormula =
     left.toPrincess(counterConstants) &&& right.toPrincess(counterConstants)
   override def counters(): Set[Counter] = left.counters() union right.counters()
+
+  override def toString: String = s"($left) && ($right)"
 }
 sealed case class Or(left: Formula, right: Formula) extends Formula {
   override def negated(): And = And(left.negated(), right.negated())
@@ -127,6 +156,7 @@ sealed case class Or(left: Formula, right: Formula) extends Formula {
   ): IFormula =
     left.toPrincess(counterConstants) ||| right.toPrincess(counterConstants)
   override def counters(): Set[Counter] = left.counters() union right.counters()
+  override def toString: String = s"($left) || ($right)"
 }
 
 sealed trait AutomatonFragment
@@ -200,14 +230,14 @@ class InputFileParser extends Tracing {
       Instance(counters, groupedAutomata, constraints)
     }
 
-  def digit[_ : P]: P[Unit] = P(CharIn("0-9"))
-  def asciiLetter[_ : P]: P[Unit] = CharIn("A-Z") | CharIn("a-z") | "_"
-  def counterType[_ : P]: P[String] = P("int").!
-  def constant[_ : P]: P[Int] =
+  def digit[A : P]: P[Unit] = P(CharIn("0-9"))
+  def asciiLetter[A : P]: P[Unit] = CharIn("A-Z") | CharIn("a-z") | "_"
+  def counterType[A : P]: P[String] = P("int").!
+  def constant[A : P]: P[Int] =
     P("-".? ~ ("0" | (CharIn("1-9") ~ digit.rep(0)))).!.map(_.toInt)
   // FIXME I don't like how NotEquals isn't negated equals, but there is no
   // clean way I can think of to fix it.
-  def atom[_ : P]: P[Atom] =
+  def atom[A : P]: P[Atom] =
     P(
       (sum ~ inequalitySymbol ~ sum).map {
         case (lhs, inequality, rhs) => {
@@ -219,7 +249,7 @@ class InputFileParser extends Tracing {
         | "false".!.map(_ => TrueOrFalse(false))
     )
 
-  def inequalitySymbol[_ : P]: P[InequalitySymbol] =
+  def inequalitySymbol[A : P]: P[InequalitySymbol] =
     P(
       "=".!.map(_ => Equals)
         | ">=".!.map(_ => GreaterThanOrEqual)
@@ -229,7 +259,7 @@ class InputFileParser extends Tracing {
         | "!=".!.map(_ => NotEquals)
     )
 
-  def constantOrIdentifier[_ : P]: P[Term] =
+  def constantOrIdentifier[A : P]: P[Term] =
     P(
       (constant ~ "*".? ~ identifier.!).map {
         case (k, x) =>
@@ -240,7 +270,7 @@ class InputFileParser extends Tracing {
         | identifier.!.map(Counter(_))
     )
 
-  def sum[_ : P]: P[Sum] =
+  def sum[A : P]: P[Sum] =
     P(
       (constantOrIdentifier ~ (CharIn("+\\-").! ~ constantOrIdentifier).rep())
         .map {
@@ -253,7 +283,7 @@ class InputFileParser extends Tracing {
         | constantOrIdentifier.map(t => Sum(Seq(t)))
     )
 
-  def unaryExpression[_ : P]: P[Formula] =
+  def unaryExpression[A : P]: P[Formula] =
     P(
       ("!" ~ term).map(_.negated())
         | atom
@@ -261,28 +291,28 @@ class InputFileParser extends Tracing {
 
   // TODO use an enumeration for connective symbols to convince the compiler we
   // know what we're doing.
-  def connective[_ : P]: P[String] = P("&&" | "||").!
+  def connective[_A : P]: P[String] = P("&&" | "||").!
 
-  def paren[_ : P]: P[Formula] = P("(" ~ formula ~ ")")
+  def paren[_A : P]: P[Formula] = P("(" ~ formula ~ ")")
 
-  def term[_ : P]: P[Formula] = P(unaryExpression | paren)
+  def term[_A : P]: P[Formula] = P(unaryExpression | paren)
 
-  def binaryExpression[_ : P]: P[Formula] =
+  def binaryExpression[_A : P]: P[Formula] =
     P(term ~ connective ~ formula).map { // Match is known to be exhaustive.
       case (l, "&&", r) => And(l, r)
       case (l, "||", r) => Or(l, r)
     }
 
-  def formula[_ : P]: P[Formula] = P(binaryExpression | term)
+  def formula[_A : P]: P[Formula] = P(binaryExpression | term)
 
-  def sequenceOfIdentifiers[_ : P]: P[Seq[String]] =
+  def sequenceOfIdentifiers[_A : P]: P[Seq[String]] =
     P(identifier.rep(sep = ",", min = 1))
 
-  def init[_ : P]: P[InitialState] =
+  def init[_A : P]: P[InitialState] =
     P("init" ~ identifier ~ ";").map(InitialState(_))
-  def accepting[_ : P]: P[AcceptingStates] =
+  def accepting[_A : P]: P[AcceptingStates] =
     P("accepting" ~ sequenceOfIdentifiers ~ ";").map(AcceptingStates(_))
-  def labelRange[_ : P]: P[SymbolicLabel] =
+  def labelRange[_A : P]: P[SymbolicLabel] =
     (P(
       "[" ~
         (
@@ -296,29 +326,29 @@ class InputFileParser extends Tracing {
         ~
           "]"
     ))
-  def incrementOrDecrement[_ : P]: P[Int] =
+  def incrementOrDecrement[_A : P]: P[Int] =
     P(
       ("+".!.map(_ => 1)
         | "-".!.map(_ => -1))
         ~ P("=")
     )
-  def counterOperation[_ : P]: P[(Counter, Int)] =
+  def counterOperation[_A : P]: P[(Counter, Int)] =
     P(identifier ~ incrementOrDecrement ~ constant).map {
       case (counterName, coefficient, offset) =>
         (Counter(counterName), coefficient * offset)
     }
-  def counterIncrements[_ : P]: P[Seq[(Counter, Int)]] =
+  def counterIncrements[_A : P]: P[Seq[(Counter, Int)]] =
     P("{" ~ counterOperation.rep(min = 0, sep = ",") ~ "}")
-  def transition[_ : P]: P[Transition] =
+  def transition[_A : P]: P[Transition] =
     P(identifier ~ "->" ~ identifier ~ labelRange ~ counterIncrements.? ~ ";")
       .map {
         case (from, to, label, increments) =>
           Transition(from, to, label, increments.getOrElse(Map()).toMap)
       }
 
-  def constraintDefinition[_ : P]: P[Formula] = P("constraint" ~/ formula)
+  def constraintDefinition[_A : P]: P[Formula] = P("constraint" ~/ formula)
 
-  def automatonDefinition[_ : P]: P[Automaton] =
+  def automatonDefinition[_A : P]: P[Automaton] =
     P(
       "automaton" ~/ identifier ~ "{" ~ (init | accepting | transition).rep ~ "}"
     ).map { case (name, fragments) => automatonFromFragments(name, fragments) }
@@ -327,9 +357,9 @@ class InputFileParser extends Tracing {
    * An identifer is any combination of letters and numbers, starting with a
    * letter.
    */
-  def identifier[_ : P]: P[String] =
+  def identifier[_A : P]: P[String] =
     P(asciiLetter.rep(1) ~ (digit | asciiLetter | "_").rep(0)).!
-  def counterDefinition[_ : P]: P[CounterDefinition] =
+  def counterDefinition[_A : P]: P[CounterDefinition] =
     P(
       "counter" ~/ counterType ~ identifier.rep(sep = ",", min = 1)
     ).map {
@@ -339,21 +369,21 @@ class InputFileParser extends Tracing {
       }
     }
 
-  def productDefinition[_ : P]: P[AutomatonGroup] = {
+  def productDefinition[_A : P]: P[AutomatonGroup] = {
     P("synchronised" ~/ "{" ~ (automatonDefinition ~ ";").rep() ~ "}")
       .map(AutomatonGroup(_))
   }
 
-  def expression[_ : P]: P[DocumentFragment] =
+  def expression[_A : P]: P[DocumentFragment] =
     P(
       counterDefinition | constraintDefinition | automatonDefinition.map(
         a => AutomatonGroup(Seq(a))
       )
         | productDefinition
     )
-  def document[_ : P]: P[Instance] =
+  def document[_A : P]: P[Instance] =
     P((expression ~ ";").rep(1)).map(documentToInstance(_))
-  def parser[_ : P]: P[Instance] = P(" ".rep ~ document ~ End)
+  def parser[_A : P]: P[Instance] = P(" ".rep ~ document ~ End)
 }
 
 object InputFileParser {

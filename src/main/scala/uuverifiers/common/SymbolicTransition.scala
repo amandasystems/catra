@@ -5,6 +5,7 @@ import uuverifiers.catra.Counter
 trait NotAProduct {}
 
 sealed trait Transition extends Ordered[Transition] {
+  def serialise(): String
   def toDotDescription(): String
   def isSelfLoop(): Boolean = from() == to()
   def intersect[T <: Transition](that: T): Option[ProductTransition]
@@ -31,6 +32,7 @@ sealed class SymbolicTransition(
     _label: SymbolicLabel,
     _to: State
 ) extends Transition {
+  override def serialise(): String = s"$from -> $to ${label().serialise()} {};"
   override def intersect[T <: Transition](
       that: T
   ): Option[ProductTransition] = {

@@ -39,6 +39,7 @@ case object ChooseBaseline extends BackendSelection {
 sealed trait RunMode
 case object SolveSatisfy extends RunMode
 case object FindImage extends RunMode
+case object DebugUnsat extends RunMode
 
 sealed case class CommandLineOptions(
     inputFiles: Seq[String],
@@ -57,14 +58,31 @@ sealed case class CommandLineOptions(
     enableClauseLearning: Boolean,
     enableRestarts: Boolean,
     restartTimeoutFactor: Long,
-    crossValidate: Boolean
+    crossValidate: Boolean,
+    randomSeed: Int,
+    printProof: Boolean
 ) {
+  def withRandomSeed(newSeed: Int): CommandLineOptions =
+    copy(randomSeed = newSeed)
+
+  def withRestartTimeoutFactor(newValue: Long): CommandLineOptions =
+    copy(restartTimeoutFactor = newValue)
 
   def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
     dumpSMTDir match {
-      case None => SimpleAPI.withProver(p => runWithTimeout(p)(f(p)))
+      case None =>
+        SimpleAPI.withProver(
+          randomSeed = Some(randomSeed)
+          //logging = Set(ap.parameters.Param.LOG_LEMMAS)
+        )(
+          p => runWithTimeout(p)(f(p))
+        )
       case Some(dumpDir) =>
-        SimpleAPI.withProver(dumpSMT = true, dumpDirectory = dumpDir)(
+        SimpleAPI.withProver(
+          dumpSMT = true,
+          dumpDirectory = dumpDir,
+          randomSeed = Some(randomSeed)
+        )(
           p => runWithTimeout(p)(f(p))
         )
     }
@@ -118,11 +136,13 @@ object CommandLineOptions {
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
-  private var nrUnknownToStartMaterialiseProduct = 2
+  private var nrUnknownToStartMaterialiseProduct = 2 // FIXME: increase to 6.
   private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L
   private var crossValidate = false
+  private var randomSeed = 1234567
+  private var printProof = false
 
   private val usage =
     s"""
@@ -131,6 +151,7 @@ object CommandLineOptions {
     Available subcommands:
       solve-satisfy -- look for a satisfying solution
       find-image -- generate the full Parikh image in Presburger format
+      debug-unsat -- diagnose (an) incorrect unsat result(s)
 
     Available options (🐌 = likely to negatively impact performance):
       --trace -- generate a trace of the computation into trace.tex,
@@ -148,6 +169,8 @@ object CommandLineOptions {
     For specific back-ends:
 
       Baseline:
+      --print-proof     -- compute and generate a proof upon (non-) solution. 
+                        May extend runtime. Default: $printProof.
       --dump-equations <directory> -- dump the flow equations of each consecutive
                         product (and all terms) as LaTeX equations into this directory.
       --no-check-term-sat -- Check first if the terms of the product alone are
@@ -282,6 +305,9 @@ object CommandLineOptions {
       case "--restart-timeout-factor" :: someFactor :: tail =>
         restartTimeoutFactor = someFactor.toLong
         parseFilesAndFlags(tail)
+      case "--print-proof" :: tail =>
+        printProof = true
+        parseFilesAndFlags(tail)
       case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail =>
@@ -298,6 +324,9 @@ object CommandLineOptions {
     case "solve-satisfy" :: rest   => parseFilesAndFlags(rest)
     case "find-image" :: rest =>
       runMode = FindImage
+      parseFilesAndFlags(rest)
+    case "debug-unsat" :: rest =>
+      runMode = DebugUnsat
       parseFilesAndFlags(rest)
     case other :: _ =>
       throw new Exception(s"Error: Invalid mode `$other`!\n\n" + usage)
@@ -324,7 +353,9 @@ object CommandLineOptions {
       enableClauseLearning = enableClauseLearning,
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
-      crossValidate = crossValidate
+      crossValidate = crossValidate,
+      randomSeed = randomSeed,
+      printProof = printProof
     )
   }
 }

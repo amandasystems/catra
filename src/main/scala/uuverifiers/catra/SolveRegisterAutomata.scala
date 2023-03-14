@@ -99,6 +99,25 @@ object SolveRegisterAutomata extends App with Tracing {
     }
   }
 
+  def debugUnsoundness(arguments: CommandLineOptions): Unit = {
+    println(s"Starting debugging of ${arguments.inputFiles.size} instances...")
+    val mostProbableBuggy = DebugUnsoundness.optimiseReproducability(
+      arguments.inputFiles.map(readInstance),
+      arguments
+    )
+    println("Found an optimally buggy instance: wrote to buggy-minimised.par")
+    mostProbableBuggy.writeToFile("buggy-minimised.par")
+  }
+
+  private def readInstance(fileName: String): Instance = {
+    val inputFileHandle = Source.fromFile(fileName)
+    val fileContents = inputFileHandle.mkString("")
+    inputFileHandle.close()
+    InputFileParser.parse(fileContents) match {
+      case Parsed.Success(instance, _) => instance
+    }
+  }
+
   def runInstances(arguments: CommandLineOptions): Unit = {
     for (fileName <- arguments.inputFiles) {
       val inputFileHandle = Source.fromFile(fileName)
@@ -126,6 +145,8 @@ object SolveRegisterAutomata extends App with Tracing {
   }
 
   CommandLineOptions.parse(args) match {
+    case Success(arguments) if arguments.runMode == DebugUnsat =>
+      debugUnsoundness(arguments)
     case Success(arguments) => runInstances(arguments)
     case Failure(reason)    => fatalError(reason)
   }
