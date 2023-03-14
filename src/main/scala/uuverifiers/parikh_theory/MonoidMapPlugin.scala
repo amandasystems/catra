@@ -4,7 +4,7 @@ import ap.parser.IExpression.Predicate
 import ap.proof.goal.Goal
 import ap.proof.theoryPlugins.Plugin
 import ap.terfor.TerForConvenience._
-import ap.terfor.TermOrder
+import ap.terfor.{Formula, TermOrder}
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.preds.Atom
 import uuverifiers.common._
@@ -160,26 +160,36 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       .flatMap(handleConnectedInstance(_, context))
 
   private def explainUnreachability(
-      knownUnreachableStates: Seq[State],
-      unreachableTransitions: Seq[Transition],
+      deadTransitions: Set[Transition],
       context: Context,
       connectedInstance: Atom
   ): Seq[Plugin.Action] =
     trace("unreachableActions") {
       val autId = autNr(connectedInstance)
-      val myTransitionMasks = context.autTransitionMasks(autId)
       val aut = materialisedAutomata(autId)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
       implicit val order: TermOrder = context.goal.order
 
+      def conclude(assuming: Seq[Formula], have: Conjunction) = {
+        println(s"From $assuming, conclude that $have")
+        Seq(Plugin.AddAxiom(assuming, have, theoryInstance))
+      }
+
+      val nothingLearned = Seq.empty
+
+      val fwReachable = aut.fwdReachable(deadTransitions) // FIXME
+
+      val finalStates = aut.states.filter(aut.isAccept).toSet
+      val noReachableAcceptingState =
+        !aut.states.exists(
+          s => finalStates.contains(s) && fwReachable.contains(s)
+        ) // FIXME use set operations
+
       // Case 1: total: the automaton accepts no string (no final state is reachable from the initial state)
-      if (knownUnreachableStates contains aut.initialState) {
-        val unreachableFinalStates = aut.states.filter(
-          s => knownUnreachableStates.contains(s) && aut.isAccept(s)
-        )
+      if (noReachableAcceptingState) {
 
         val loadBearingTransitions =
-          unreachableFinalStates
+          finalStates
             .flatMap(
               f =>
                 aut
@@ -193,7 +203,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           loadBearingTransitions.map(context.autTransitionMask(autId))
 
         val cutIsZero = conj(loadBearingMasks.map(_.last <= 0))
-
+        println(s"Total connectivity loss for cut: $cutIsZero") // FIXME
         return Seq(
           Plugin
             .AddAxiom(
@@ -204,48 +214,62 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         )
       }
 
-      // Case 2: partial: some transitions may be unreachable
-      unreachableTransitions.flatMap { unreachableTransition =>
-        val term = transitionToTerm(unreachableTransition)
-        val constr = term === 0
-        if (constr.isTrue) return Seq() // FIXME don't use return
-        val separatingCut = aut
-          .minCut(aut.initialState, unreachableTransition.from())
-          .map(_._2)
-        val cutMasks = separatingCut
-          .map(context.autTransitionMask(autId))
-          .toSeq
-        val cutIsZero = conj(cutMasks.map(_.last <= 0))
-        val assumptions = {
-          if (cutIsZero.isTrue) // Forwards-unreachable
-            cutMasks
-          else // Backwards-unreachable: fall back
-            {
-              assert(
-                !aut.isAccept(unreachableTransition.from()),
-                s"Transition $unreachableTransition cannot start in accepting state and be bw-unreachable!"
-              )
-              val autReversed = aut.reverseGraph()
-              val separatingCut = aut.states
-                .filter(aut.isAccept)
-                .flatMap(
-                  as =>
-                    autReversed
-                      .minCut(as, unreachableTransition.from())
-                      .map(_._2)
-                )
-              val bwCutMasks = separatingCut
-                .map(context.autTransitionMask(autId))
-                .toSeq
-              assert(
-                conj(cutMasks.map(_.last <= 0)).isTrue,
-                s"Expected either zero fw: $cutMasks or bw: $bwCutMasks, but neither was!"
-              )
-              bwCutMasks
-            }
-        } :+ context.autTransitionMask(autId)(unreachableTransition) :+ connectedInstance
-        Seq(Plugin.AddAxiom(assumptions, constr, theoryInstance))
-      }
+      // FIXME this is a mess of duplicated code!
+
+      // Case 2: forward-unreachable
+      val fwConclusions = aut.states
+        .filter(!fwReachable.contains(_))
+        .flatMap(aut.transitionsFrom)
+        .flatMap { t =>
+          val tIsUnused = transitionToTerm(t) === 0
+          if (tIsUnused.isTrue) return nothingLearned // FIXME don't use return
+          val separatingCut = aut
+            .minCut(aut.initialState, t.from())
+            .map(_._2)
+          val cutMasks = separatingCut
+            .map(context.autTransitionMask(autId))
+            .toSeq
+          val cutIsZero = conj(cutMasks.map(_.last <= 0))
+          assert(cutIsZero.isTrue, s"Forward cut $cutMasks must be true!")
+          println(s"Fw-unreachable cut: $cutMasks for $t")
+          conclude(
+            assuming = cutMasks :+ context
+              .autTransitionMask(autId)(t) :+ connectedInstance,
+            have = tIsUnused
+          )
+        }
+
+      val bwdReachable = aut.bwdReachable(deadTransitions) // FIXME
+      // Case 3: backward-unreachable
+      val bwConclusions = aut.states
+        .filter(!bwdReachable.contains(_))
+        .flatMap(aut.transitionsFrom)
+        .flatMap { t =>
+          val tIsUnused = transitionToTerm(t) === 0
+          if (tIsUnused.isTrue) return Seq() // FIXME don't use return
+          val autReversed = aut.reverseGraph()
+          val separatingCut = aut.states
+            .filter(aut.isAccept)
+            .flatMap(
+              as =>
+                autReversed
+                  .minCut(as, t.from())
+                  .map(_._2)
+            )
+          val cutMasks = separatingCut
+            .map(context.autTransitionMask(autId))
+            .toSeq
+          val cutIsZero = conj(cutMasks.map(_.last <= 0))
+          assert(cutIsZero.isTrue, s"Backward cut $cutMasks must be true!")
+          println(s"Bw-unreachable cut: $cutMasks for $t")
+          conclude(
+            assuming = cutMasks :+ context
+              .autTransitionMask(autId)(t) :+ connectedInstance,
+            have = tIsUnused
+          )
+        }
+
+      (fwConclusions ++ bwConclusions).toSeq
     }
 
   private def handleConnectedInstance(
@@ -318,8 +342,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
                   context.goal.settings
                 ) =>
               explainUnreachability(
-                knownUnreachableStates,
-                unreachableTransitions,
+                deadTransitions,
                 context,
                 connectedInstance
               )
