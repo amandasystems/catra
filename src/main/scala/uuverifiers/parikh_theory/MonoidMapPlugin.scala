@@ -171,7 +171,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       implicit val order: TermOrder = context.goal.order
 
       def conclude(assuming: Seq[Formula], have: Conjunction) = {
-        println(s"From $assuming, conclude that $have")
+        //println(s"From $assuming, conclude that $have")
         Seq(Plugin.AddAxiom(assuming, have, theoryInstance))
       }
 
@@ -181,13 +181,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       val finalStates = aut.states.filter(aut.isAccept).toSet
       val noReachableAcceptingState =
-        !aut.states.exists(
-          s => finalStates.contains(s) && fwReachable.contains(s)
-        ) // FIXME use set operations
+        (finalStates intersect fwReachable).isEmpty
 
       // Case 1: total: the automaton accepts no string (no final state is reachable from the initial state)
       if (noReachableAcceptingState) {
-
         val loadBearingTransitions =
           finalStates
             .flatMap(
@@ -223,15 +220,13 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         .flatMap { t =>
           val tIsUnused = transitionToTerm(t) === 0
           if (tIsUnused.isTrue) return nothingLearned // FIXME don't use return
-          val separatingCut = aut
-            .minCut(aut.initialState, t.from())
-            .map(_._2)
+          // FIXME: this is naive: they can be part of a cycle!
+          val separatingCut = deadTransitions.filter(tr => tr.to() == t.from())
           val cutMasks = separatingCut
             .map(context.autTransitionMask(autId))
             .toSeq
           val cutIsZero = conj(cutMasks.map(_.last <= 0))
           assert(cutIsZero.isTrue, s"Forward cut $cutMasks must be true!")
-          println(s"Fw-unreachable cut: $cutMasks for $t")
           conclude(
             assuming = cutMasks :+ context
               .autTransitionMask(autId)(t) :+ connectedInstance,
