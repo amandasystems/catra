@@ -3,7 +3,9 @@ package uuverifiers.common
 import EdgeWrapper._
 import PathWrapper._
 
+import scala.Console.out
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.collection.mutable.{
   ArrayBuffer,
   HashMap => MHashMap,
@@ -27,7 +29,142 @@ trait Graphable[Node, Label] {
   type Cycle = Set[Node]
   type Edge = (Node, Label, Node)
 
-  class BFSVisitor(
+  /**
+   * Given a set of forbidden edges, determine which ones cut
+   * off which node from a set of starting nodes.
+   *
+   * @param startingNodes nodes to start the search in
+   * @param withoutUsing edges to avoid using
+   * @return A sequence of unreachable states and a minimum
+   *         subset of edges from withoutUsing required to sever them.
+   */
+  def traceDeadNodes(
+      startingNodes: Set[Node],
+      withoutUsing: Set[Label]
+  ): Iterable[(Node, Iterable[Label])] = {
+    if (withoutUsing.isEmpty) return Iterable.empty
+
+    final class CutSelector(private var currentBest: Reachability = Unseen) {
+
+      private var contender = mutable.ArrayBuffer[(CutSelector, Label)]()
+      private var visited = currentBest match {
+        case Unseen => false
+        case _      => true
+      }
+
+      def setVisited(): Unit = visited = true
+
+      def isUnvisited(): Boolean = !visited
+
+      private def mergeContender(): Reachability =
+        if (contender.isEmpty) currentBest
+        else {
+          val (contenderPrevious, contenderFresh) = contender.unzip
+          val downstreamReach =
+            contenderPrevious.map(_.bestSoFar()).reduce(_ andAlso _)
+          val upstreamReach = Conditional(contenderFresh.toSet)
+
+          bestOf(downstreamReach, upstreamReach)
+        }
+
+      private def bestOf(
+          downstream: Reachability,
+          upstream: => Reachability
+      ): Reachability = downstream match {
+        case Always | Unseen => upstream // New value isn't worse
+        case Conditional(downstreamCut) =>
+          upstream match {
+            case Conditional(upstreamCut)
+                if upstreamCut.size < downstreamCut.size =>
+              upstream // We found a better cut
+            case _ => downstream // We found a worse or equivalent cut
+          }
+
+      }
+
+      def bestSoFar(): Reachability = {
+        currentBest = bestOf(currentBest, mergeContender())
+        contender = ArrayBuffer()
+        currentBest
+      }
+
+      def andAlsoReachable(previous: CutSelector): Unit = currentBest match {
+        case Always => // We can never improve
+        case Unseen => currentBest = previous.bestSoFar()
+        case a: Conditional =>
+          currentBest = a.andAlso(previous.bestSoFar()) // It's both
+      }
+
+      def cutEitherBy(previous: CutSelector, transition: Label): Unit =
+        currentBest match {
+          case Always =>
+          case _ =>
+            contender.append((previous, transition))
+        }
+    }
+
+    sealed trait Reachability {
+      def andAlso(other: Reachability): Reachability
+    }
+    case object Always extends Reachability {
+      override def andAlso(other: Reachability): Reachability = Always
+    }
+    case object Unseen extends Reachability {
+      override def andAlso(other: Reachability): Reachability = other
+    }
+    case class Conditional(on: Set[Label]) extends Reachability {
+      override def andAlso(other: Reachability): Reachability = other match {
+        case Always              => Always
+        case Conditional(onThat) => Conditional(on union onThat)
+        case Unseen              => this
+      }
+    }
+
+    val cutSelectors: Map[Node, CutSelector] = allNodes()
+      .map(
+        s =>
+          (
+            s,
+            if (startingNodes contains s) new CutSelector(Always)
+            else new CutSelector(Unseen)
+          )
+      )
+      .toMap
+
+    val todo: MQueue[(Node, CutSelector)] = MQueue(
+      startingNodes.map(n => (n, cutSelectors(n))).toSeq: _*
+    )
+
+    while (todo.nonEmpty) {
+      val (from, fromCutStatus) = todo.dequeue()
+
+      outgoingEdges(from)
+        .filterNot(_.isSelfEdge())
+        .foreach { out =>
+          val to = out.to()
+          val toCutStatus = cutSelectors(to)
+          val justDiscovered = toCutStatus.isUnvisited()
+          val outDeselected = withoutUsing contains out.label()
+          toCutStatus.setVisited()
+
+          if (outDeselected) toCutStatus.cutEitherBy(fromCutStatus, out.label())
+          else toCutStatus andAlsoReachable fromCutStatus
+
+          if (justDiscovered) todo.enqueue((to, toCutStatus))
+
+        }
+    }
+
+    cutSelectors.flatMap {
+      case (n, status) =>
+        (n, status.bestSoFar()) match {
+          case (_, Always | Unseen) => None
+          case (n, Conditional(on)) => Some((n, on))
+        }
+    }
+  }
+
+  sealed class BFSVisitor(
       val graph: Graphable[Node, Label],
       val startNode: Node,
       val walkWhen: ((Node, Label, Node)) => Boolean

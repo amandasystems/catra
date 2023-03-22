@@ -10,6 +10,7 @@ import ap.terfor.preds.Atom
 import uuverifiers.common._
 
 import java.io.File
+import scala.:+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{BitSet, mutable}
 
@@ -229,7 +230,30 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           val acts =
             if (ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)) {
 
-              for (trans <- unreachableTransitions.toSeq;
+              val disconnectionMotivations = aut.traceDeadNodes(
+                startingNodes = Set(aut.initialState),
+                withoutUsing = deadTransitions
+              )
+
+              // TODO also backwards disconnection!
+
+              for ((state, killingTs) <- disconnectionMotivations.toSeq;
+                   outgoingMasks = aut
+                     .transitionsFrom(state)
+                     .map(context.autTransitionMask(autId));
+                   outgoingAreUnused = conj(outgoingMasks.map(_.last === 0))
+                   if !outgoingAreUnused.isTrue;
+                   cutMasks = killingTs
+                     .map(context.autTransitionMask(autId))
+                     .toSeq;
+                   assumptions = outgoingMasks ++ cutMasks :+ connectedInstance)
+                yield Plugin
+                  .AddAxiom(
+                    assumptions,
+                    outgoingAreUnused,
+                    theoryInstance
+                  )
+              /* for (trans <- unreachableTransitions.toSeq;
                    term = transitionToTerm(trans);
                    constr = term === 0
                    if !constr.isTrue;
@@ -252,8 +276,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
                      } :+ connectedInstance)
                 yield {
                   Plugin.AddAxiom(assumptions, constr, theoryInstance)
-                }
-
+                }*/
             } else {
 
               Seq(
