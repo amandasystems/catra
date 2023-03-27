@@ -10,7 +10,6 @@ import ap.terfor.preds.Atom
 import uuverifiers.common._
 
 import java.io.File
-import scala.:+
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.{BitSet, mutable}
 
@@ -173,11 +172,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       implicit val order: TermOrder = context.goal.order
 
+      def transitionDead(t: Transition) =
+        termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
+
       val deadTransitions = trace("deadTransitions") {
         aut.transitions
-          .filter(
-            t => termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
-          )
+          .filter(transitionDead)
           .toSet
       }
 
@@ -187,12 +187,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             t => termMeansDefinitelyPresent(context.goal, transitionToTerm(t))
           )
           .toSet
-      }
-
-      val reachableStates =
-        aut.fwdReachable(deadTransitions) & aut.bwdReachable(deadTransitions)
-      val knownUnreachableStates = trace("knownUnreachableStates") {
-        aut.states filterNot reachableStates
       }
 
       val definitelyReached = trace("definitelyReached")(
@@ -215,88 +209,96 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           )
         } else Seq()
 
+      val proofConstructionEnabled =
+        ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)
+
+      def hasLiveTransitions(s: State) =
+        !aut.transitionsFrom(s).forall(deadTransitions.contains)
+
+      def motivateForwardCut(deadState: State): Seq[Atom] = {
+        val cutMasks = aut
+          .minCut(
+            Seq(aut.initialState),
+            deadState,
+            gt => deadTransitions.contains(gt._2)
+          )
+          .map(_._2)
+          .map(context.autTransitionMask(autId))
+          .toSeq
+        assert(cutMasks.nonEmpty, s"Cut to $deadState was empty!")
+        cutMasks
+      }
+
+      def motivateBackwardCut(deadState: State): Seq[Atom] = {
+        val cutMasks = aut
+          .reversed()
+          .minCut(
+            aut.acceptingStates.toSeq,
+            deadState,
+            gt => deadTransitions.contains(gt._2)
+          )
+          .map(_._2)
+          .map(context.autTransitionMask(autId))
+          .toSeq
+        assert(
+          cutMasks.nonEmpty,
+          s"Backwards cut from ${aut.acceptingStates} to $deadState was empty!"
+        )
+        cutMasks
+      }
+
+      def explainUnreachable(
+          deadState: State,
+          motivateCut: State => Seq[Atom]
+      ): Plugin.AddAxiom = {
+        val outgoingMasks = aut
+          .transitionsFrom(deadState)
+          .map(context.autTransitionMask(autId));
+        val outgoingAreUnused = conj(outgoingMasks.map(_.last === 0))
+
+        val explanation = if (!proofConstructionEnabled) {
+          myTransitionMasks // If we're not using proof construction, don't do the work
+        } else outgoingMasks ++ motivateCut(deadState)
+
+        Plugin
+          .AddAxiom(
+            explanation :+ connectedInstance,
+            outgoingAreUnused,
+            theoryInstance
+          )
+
+      }
+
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
       val unreachableActions = trace("unreachableActions") {
-        val unreachableTransitions =
-          knownUnreachableStates.flatMap(aut.transitionsFrom(_))
+        val fwdReachStates = aut.fwdReachable(deadTransitions)
+        val deadStatesWithLiveTransitions = aut.states.filter(
+          s => !fwdReachStates.contains(s) && hasLiveTransitions(s)
+        )
+        val bwdReachStates = aut.bwdReachable(deadTransitions)
+        val exclusivelyBwdUnreachable = aut.states.filter(
+          s =>
+            !bwdReachStates
+              .contains(s) && hasLiveTransitions(s) && fwdReachStates.contains(
+              s
+            )
+        )
 
-        val unreachableConstraints =
-          conj(unreachableTransitions.map(transitionToTerm(_) === 0))
+        deadStatesWithLiveTransitions.map(
+          explainUnreachable(_, motivateForwardCut)
+        ) ++ exclusivelyBwdUnreachable.map(
+          explainUnreachable(_, motivateBackwardCut)
+        )
+      }.toSeq
 
-        if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
-        else {
-
-          val acts =
-            if (ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)) {
-
-              val disconnectionMotivations = aut.traceDeadNodes(
-                startingNodes = Set(aut.initialState),
-                withoutUsing = deadTransitions
-              )
-
-              // TODO also backwards disconnection!
-
-              for ((state, killingTs) <- disconnectionMotivations.toSeq;
-                   outgoingMasks = aut
-                     .transitionsFrom(state)
-                     .map(context.autTransitionMask(autId));
-                   outgoingAreUnused = conj(outgoingMasks.map(_.last === 0))
-                   if !outgoingAreUnused.isTrue;
-                   cutMasks = killingTs
-                     .map(context.autTransitionMask(autId))
-                     .toSeq;
-                   assumptions = outgoingMasks ++ cutMasks :+ connectedInstance)
-                yield Plugin
-                  .AddAxiom(
-                    assumptions,
-                    outgoingAreUnused,
-                    theoryInstance
-                  )
-              /* for (trans <- unreachableTransitions.toSeq;
-                   term = transitionToTerm(trans);
-                   constr = term === 0
-                   if !constr.isTrue;
-                   separatingCut = aut
-                     .minCut(aut.initialState, trans.from())
-                     .map(_._2);
-                   cutMasks = separatingCut
-                     .map(context.autTransitionMask(autId))
-                     .toSeq;
-                   cutIsZero = cutMasks.map(_.last).reduce(_ + _) <= 0;
-                   assumptions = if (cutIsZero.isTrue) // Forwards-unreachable
-                     cutMasks :+ connectedInstance :+ context.autTransitionMask(
-                       autId
-                     )(trans)
-                   else // Backwards-unreachable: fall back
-                     {
-                       for (a <- myTransitionMasks
-                            if a.last.isZero || a.last == term)
-                         yield a
-                     } :+ connectedInstance)
-                yield {
-                  Plugin.AddAxiom(assumptions, constr, theoryInstance)
-                }*/
-            } else {
-
-              Seq(
-                Plugin.AddAxiom(
-                  myTransitionMasks :+ connectedInstance,
-                  unreachableConstraints,
-                  theoryInstance
-                )
-              )
-
-            }
-
-          theoryInstance.runHooks(
-            context,
-            "Propagate-Connected",
-            actions = acts
-          )
-        }
-      }
-      unreachableActions ++ subsumeActions
+      (if (unreachableActions.nonEmpty)
+         theoryInstance.runHooks(
+           context,
+           "Propagate-Connected",
+           actions = unreachableActions
+         )
+       else unreachableActions) ++ subsumeActions
     }
 
   def getOrComputeProduct(
@@ -411,8 +413,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     )
 
     val transitionToTerm = transitionToTermSeq.toMap
-    val finalTerms = product.states
-      .filter(product.isAccept)
+    val finalTerms = product.acceptingStates
       .map(s => (s, varFactory.nextVariable()))
       .toMap
 

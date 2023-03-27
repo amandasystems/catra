@@ -136,7 +136,6 @@ sealed case class TransitionSplitter(
         .getOrElse(Set.empty) // The SCC is just the initial state
         .map(_._2)
         .map(context.autTransitionTerm(automatonId))
-
       if (transitionsToSever.isEmpty || context
             .knownPositive(transitionsToSever)) Nil
       else transitionsToSever

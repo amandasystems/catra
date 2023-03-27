@@ -3,7 +3,6 @@ package uuverifiers.common
 import EdgeWrapper._
 import PathWrapper._
 
-import scala.Console.out
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.{
@@ -29,154 +28,20 @@ trait Graphable[Node, Label] {
   type Cycle = Set[Node]
   type Edge = (Node, Label, Node)
 
-  /**
-   * Given a set of forbidden edges, determine which ones cut
-   * off which node from a set of starting nodes.
-   *
-   * @param startingNodes nodes to start the search in
-   * @param withoutUsing edges to avoid using
-   * @return A sequence of unreachable states and a minimum
-   *         subset of edges from withoutUsing required to sever them.
-   */
-  def traceDeadNodes(
-      startingNodes: Set[Node],
-      withoutUsing: Set[Label]
-  ): Iterable[(Node, Iterable[Label])] = {
-    if (withoutUsing.isEmpty) return Iterable.empty
-
-    final class CutSelector(private var currentBest: Reachability = Unseen) {
-
-      private var contender = mutable.ArrayBuffer[(CutSelector, Label)]()
-      private var visited = currentBest match {
-        case Unseen => false
-        case _      => true
-      }
-
-      def setVisited(): Unit = visited = true
-
-      def isUnvisited(): Boolean = !visited
-
-      private def mergeContender(): Reachability =
-        if (contender.isEmpty) currentBest
-        else {
-          val (contenderPrevious, contenderFresh) = contender.unzip
-          val downstreamReach =
-            contenderPrevious.map(_.bestSoFar()).reduce(_ andAlso _)
-          val upstreamReach = Conditional(contenderFresh.toSet)
-
-          bestOf(downstreamReach, upstreamReach)
-        }
-
-      private def bestOf(
-          downstream: Reachability,
-          upstream: => Reachability
-      ): Reachability = downstream match {
-        case Always | Unseen => upstream // New value isn't worse
-        case Conditional(downstreamCut) =>
-          upstream match {
-            case Conditional(upstreamCut)
-                if upstreamCut.size < downstreamCut.size =>
-              upstream // We found a better cut
-            case _ => downstream // We found a worse or equivalent cut
-          }
-
-      }
-
-      def bestSoFar(): Reachability = {
-        currentBest = bestOf(currentBest, mergeContender())
-        contender = ArrayBuffer()
-        currentBest
-      }
-
-      def andAlsoReachable(previous: CutSelector): Unit = currentBest match {
-        case Always => // We can never improve
-        case Unseen => currentBest = previous.bestSoFar()
-        case a: Conditional =>
-          currentBest = a.andAlso(previous.bestSoFar()) // It's both
-      }
-
-      def cutEitherBy(previous: CutSelector, transition: Label): Unit =
-        currentBest match {
-          case Always =>
-          case _ =>
-            contender.append((previous, transition))
-        }
-    }
-
-    sealed trait Reachability {
-      def andAlso(other: Reachability): Reachability
-    }
-    case object Always extends Reachability {
-      override def andAlso(other: Reachability): Reachability = Always
-    }
-    case object Unseen extends Reachability {
-      override def andAlso(other: Reachability): Reachability = other
-    }
-    case class Conditional(on: Set[Label]) extends Reachability {
-      override def andAlso(other: Reachability): Reachability = other match {
-        case Always              => Always
-        case Conditional(onThat) => Conditional(on union onThat)
-        case Unseen              => this
-      }
-    }
-
-    val cutSelectors: Map[Node, CutSelector] = allNodes()
-      .map(
-        s =>
-          (
-            s,
-            if (startingNodes contains s) new CutSelector(Always)
-            else new CutSelector(Unseen)
-          )
-      )
-      .toMap
-
-    val todo: MQueue[(Node, CutSelector)] = MQueue(
-      startingNodes.map(n => (n, cutSelectors(n))).toSeq: _*
-    )
-
-    while (todo.nonEmpty) {
-      val (from, fromCutStatus) = todo.dequeue()
-
-      outgoingEdges(from)
-        .filterNot(_.isSelfEdge())
-        .foreach { out =>
-          val to = out.to()
-          val toCutStatus = cutSelectors(to)
-          val justDiscovered = toCutStatus.isUnvisited()
-          val outDeselected = withoutUsing contains out.label()
-          toCutStatus.setVisited()
-
-          if (outDeselected) toCutStatus.cutEitherBy(fromCutStatus, out.label())
-          else toCutStatus andAlsoReachable fromCutStatus
-
-          if (justDiscovered) todo.enqueue((to, toCutStatus))
-
-        }
-    }
-
-    cutSelectors.flatMap {
-      case (n, status) =>
-        (n, status.bestSoFar()) match {
-          case (_, Always | Unseen) => None
-          case (n, Conditional(on)) => Some((n, on))
-        }
-    }
-  }
-
   sealed class BFSVisitor(
       val graph: Graphable[Node, Label],
-      val startNode: Node,
+      val startNodes: Seq[Node],
       val walkWhen: ((Node, Label, Node)) => Boolean
   ) extends Iterator[Node] {
 
     private val nodeUnseen = MSet(graph.allNodes(): _*)
-    private val toVisit = MQueue[Node](startNode)
-    private val connectingEdge = MHashMap[Node, Option[Edge]](startNode -> None)
+    private val toVisit = MQueue[Node](startNodes: _*)
+    private val connectingEdge =
+      MHashMap[Node, Option[Edge]]().withDefaultValue(None)
 
-    nodeUnseen -= startNode
+    nodeUnseen --= startNodes
 
-    override def hasNext = !toVisit.isEmpty
+    override def hasNext = toVisit.nonEmpty
 
     override def next() = {
       val thisNode = toVisit.dequeue()
@@ -219,11 +84,23 @@ trait Graphable[Node, Label] {
     }
   }
 
+  def startBFSFrom(startNode: Node) =
+    new BFSVisitor(this, Seq(startNode), _ => true)
+
+  def startBFSFrom(startNodes: Seq[Node]) =
+    new BFSVisitor(this, startNodes, _ => true)
+
+  def startBFSFrom(
+      startNodes: Seq[Node],
+      walkWhen: ((Node, Label, Node)) => Boolean
+  ) =
+    new BFSVisitor(this, startNodes, walkWhen)
+
   def startBFSFrom(
       startNode: Node,
-      walkWhen: ((Node, Label, Node)) => Boolean = _ => true
+      walkWhen: ((Node, Label, Node)) => Boolean
   ) =
-    new BFSVisitor(this, startNode, walkWhen)
+    new BFSVisitor(this, Seq(startNode), walkWhen)
 
   def neighbours(node: Node): Seq[Node] = outgoingEdges(node).map(_.to())
 
@@ -232,21 +109,37 @@ trait Graphable[Node, Label] {
 
   // Calculate the min-cut between the unweighted flow network between
   // source and drain. This uses Edmonds-Karp.
-  def minCut(source: Node, drain: Node): Set[(Node, Label, Node)] = {
-    assert(source != drain, "source and drain must be different")
+  def minCut(
+      source: Node,
+      drain: Node
+  ): Set[(Node, Label, Node)] =
+    minCut(Seq(source), drain, mayCut = (_: (Node, Label, Node)) => true)
+
+  // Calculate the min-cut between the unweighted flow network between
+  // source and drain. This uses Edmonds-Karp.
+  // This version may fail to find a s/d cut if there is a path using
+  // only transitions where mayCut is false. If mayCut is always true,
+  // this is regular minCut.
+  def minCut(
+      source: Seq[Node],
+      drain: Node,
+      mayCut: ((Node, Label, Node)) => Boolean
+  ): Set[(Node, Label, Node)] = {
+    assert(!source.contains(drain), "source and drain must be different")
     @tailrec
     def findResidual(
         residual: MapGraph[Node, Label]
     ): MapGraph[Node, Label] =
       residual.startBFSFrom(source).pathTo(drain) match {
         case None => residual
-        case Some(augmentingPath) => {
+        case Some(augmentingPath) if !augmentingPath.exists(mayCut) =>
+          residual
+        case Some(augmentingPath) =>
           findResidual(
             residual
-              .dropEdges(augmentingPath.toSet)
+              .dropEdges(augmentingPath.toSet.filter(mayCut))
               .addEdges(augmentingPath.reversePath())
           )
-        }
       }
 
     val residual = findResidual(
@@ -256,9 +149,9 @@ trait Graphable[Node, Label] {
     val visitor = residual.startBFSFrom(source).visitAll()
 
     val reachableInResidual: Set[Node] =
-      residual.allNodes().filter(visitor.nodeVisited(_)).toSet
+      residual.allNodes().filter(visitor.nodeVisited).toSet
 
-    this
+    val res = this
       .edges()
       .filter(
         e =>
@@ -266,6 +159,22 @@ trait Graphable[Node, Label] {
             !(reachableInResidual contains e.to())
       )
       .toSet
+
+    // FIXME remove this!
+    if (res.nonEmpty) {
+      for (e <- res) {
+        assert(mayCut(e), s"Cut uncuttable edge $e!")
+      }
+      val resultingPath =
+        this.dropEdges(res).startBFSFrom(source).pathTo(drain)
+
+      assert(
+        resultingPath.isEmpty,
+        s"Cut did not actually cut $source from $drain, there was a path: $resultingPath!"
+      )
+    }
+
+    res
   }
 
   def unreachableFrom(
@@ -447,9 +356,14 @@ trait Graphable[Node, Label] {
 class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
     extends Graphable[N, L] {
 
+  private lazy val nodes: Set[N] = underlying.keySet union underlying.flatMap {
+    nodeAndOut =>
+      nodeAndOut._2.map(_._1)
+  }.toSet
+
   def this(edges: Iterable[(N, L, N)]) = {
     this(
-      edges.map((_._3 -> List())).toMap ++
+      edges.map(_._3 -> List()).toMap ++
         edges
           .groupBy(_._1)
           .view
@@ -458,9 +372,9 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
     )
   }
 
-  override def hasNode(node: N) = underlying contains node
+  override def hasNode(node: N) = nodes contains node
 
-  def allNodes() = underlying.keys.toSeq
+  def allNodes() = nodes.toSeq
   def outgoingEdges(node: N) =
     underlying
       .getOrElse(node, Set())

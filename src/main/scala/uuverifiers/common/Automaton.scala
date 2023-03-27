@@ -22,6 +22,12 @@ trait Automaton
     extends Tracing
     with Graphable[State, Transition]
     with GraphvizDumper {
+
+  def reversed(): MapGraph[State, Transition] =
+    new MapGraph(edges().map { case (from, label, to) => (to, label, from) })
+
+  lazy val acceptingStates: Set[State] = states.filter(isAccept).toSet
+
   def serialise(): String = {
     val initialStr = s"init $initialState;"
     val transitionsStr = transitions.map(_.serialise()).mkString("\n\t")
@@ -143,7 +149,7 @@ trait Automaton
 
     res += initialState
 
-    while (!todo.isEmpty) {
+    while (todo.nonEmpty) {
       val next = todo.head
       todo = todo.tail
 
@@ -586,6 +592,7 @@ object REJECT_ALL extends Automaton {
   override def transitionsFrom(_from: State) = Seq()
   override def states = Seq.empty
   override lazy val isEmpty = true
+  override lazy val acceptingStates: Set[State] = Set.empty
   override def toString = "∅ REJECT ALL"
 
   override def filterTransitions(keepEdge: Transition => Boolean) = this
