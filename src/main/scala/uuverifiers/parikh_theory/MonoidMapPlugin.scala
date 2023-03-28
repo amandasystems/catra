@@ -164,12 +164,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ): Seq[Plugin.Action] =
     trace(s"handleConnectedInstance $connectedInstance") {
-
       val autId = autNr(connectedInstance)
-      val myTransitionMasks = context.autTransitionMasks(autId)
       val aut = materialisedAutomata(autId)
+      val transitionMask = context.autTransitionMask(autId)(_)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
-
       implicit val order: TermOrder = context.goal.order
 
       def transitionDead(t: Transition) =
@@ -190,7 +188,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       }
 
       val definitelyReached = trace("definitelyReached")(
-        aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
+        aut.fwdReachable(
+          disabledEdges = aut.transitions.toSet -- presentTransitions
+        )
       )
 
       val allTransitionsAssigned =
@@ -213,52 +213,54 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)
 
       def hasLiveTransitions(s: State) =
-        !aut.transitionsFrom(s).forall(deadTransitions.contains)
+        !aut.transitionsFrom(s).forall(deadTransitions)
 
-      def motivateForwardCut(deadState: State): Seq[Atom] = {
-        val cutMasks = aut
+      def motivateForwardCut(
+          deadState: State
+      ): Set[(State, Transition, State)] = {
+        val cut = aut
           .minCut(
             Seq(aut.initialState),
             deadState,
-            gt => deadTransitions.contains(gt._2)
+            gt => deadTransitions(gt._2)
           )
-          .map(_._2)
-          .map(context.autTransitionMask(autId))
-          .toSeq
-        assert(cutMasks.nonEmpty, s"Cut to $deadState was empty!")
-        cutMasks
+
+        assert(cut.nonEmpty, s"Cut to $deadState was empty!")
+        cut
       }
 
-      def motivateBackwardCut(deadState: State): Seq[Atom] = {
-        val cutMasks = aut
+      def motivateBackwardCut(
+          deadState: State
+      ): Set[(State, Transition, State)] = {
+        val cut = aut
           .reversed()
           .minCut(
             aut.acceptingStates.toSeq,
             deadState,
-            gt => deadTransitions.contains(gt._2)
+            gt => deadTransitions(gt._2)
           )
-          .map(_._2)
-          .map(context.autTransitionMask(autId))
-          .toSeq
+
         assert(
-          cutMasks.nonEmpty,
+          cut.nonEmpty,
           s"Backwards cut from ${aut.acceptingStates} to $deadState was empty!"
         )
-        cutMasks
+        cut
       }
 
       def explainUnreachable(
           deadState: State,
-          motivateCut: State => Seq[Atom]
+          motivateCut: State => Set[(State, Transition, State)]
       ): Plugin.AddAxiom = {
         val outgoingMasks = aut
           .transitionsFrom(deadState)
-          .map(context.autTransitionMask(autId));
+          .map(transitionMask)
         val outgoingAreUnused = conj(outgoingMasks.map(_.last === 0))
 
         val explanation = if (!proofConstructionEnabled) {
-          myTransitionMasks // If we're not using proof construction, don't do the work
-        } else outgoingMasks ++ motivateCut(deadState)
+          context.autTransitionMasks(autId) // If we're not using proof construction, don't do the work
+        } else
+          outgoingMasks ++ motivateCut(deadState)
+            .map(e => transitionMask(e._2))
 
         Plugin
           .AddAxiom(
@@ -274,15 +276,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val unreachableActions = trace("unreachableActions") {
         val fwdReachStates = aut.fwdReachable(deadTransitions)
         val deadStatesWithLiveTransitions = aut.states.filter(
-          s => !fwdReachStates.contains(s) && hasLiveTransitions(s)
+          s => !fwdReachStates(s) && hasLiveTransitions(s)
         )
         val bwdReachStates = aut.bwdReachable(deadTransitions)
         val exclusivelyBwdUnreachable = aut.states.filter(
-          s =>
-            !bwdReachStates
-              .contains(s) && hasLiveTransitions(s) && fwdReachStates.contains(
-              s
-            )
+          s => !bwdReachStates(s) && hasLiveTransitions(s) && fwdReachStates(s)
         )
 
         deadStatesWithLiveTransitions.map(

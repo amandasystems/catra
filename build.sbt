@@ -7,10 +7,11 @@ ThisBuild / organization := "uuverifiers"
 ThisBuild / scalacOptions ++= Seq(
   "-deprecation",
   //"-Xfatal-warnings",
+  "-Xdisable-assertions",
   "-unchecked",
   "-Xlint",
-   "-Xelide-below",
-   "INFO",
+  "-Xelide-below",
+  "INFO",
   "-feature",
   "-opt-inline-from:**",
   "-opt:l:method",
