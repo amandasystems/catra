@@ -153,28 +153,12 @@ trait Graphable[Node, Label] {
         .nodeVisited _
     }
 
-    val res = this
+    this
       .edges()
       .filter(
         e => reachableInResidual(e.from()) && !reachableInResidual(e.to())
       )
       .toSet
-
-    // FIXME remove this!
-    if (res.nonEmpty) {
-      for (e <- res) {
-        assert(mayCut(e), s"Cut uncuttable edge $e!")
-      }
-      val resultingPath =
-        this.dropEdges(res).startBFSFrom(source).pathTo(drain)
-
-      assert(
-        resultingPath.isEmpty,
-        s"Cut did not actually cut $source from $drain, there was a path: $resultingPath!"
-      )
-    }
-
-    res
   }
 
   def unreachableFrom(
