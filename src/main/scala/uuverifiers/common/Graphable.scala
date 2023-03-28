@@ -137,7 +137,7 @@ trait Graphable[Node, Label] {
         case Some(augmentingPath) =>
           findResidual(
             residual
-              .dropEdges(augmentingPath.toSet.filter(mayCut))
+              .dropEdges(augmentingPath.filter(mayCut).toSet)
               .addEdges(augmentingPath.reversePath())
           )
       }
