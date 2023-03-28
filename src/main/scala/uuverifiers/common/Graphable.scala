@@ -4,7 +4,6 @@ import EdgeWrapper._
 import PathWrapper._
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 import scala.collection.mutable.{
   ArrayBuffer,
   HashMap => MHashMap,
@@ -126,6 +125,7 @@ trait Graphable[Node, Label] {
       mayCut: ((Node, Label, Node)) => Boolean
   ): Set[(Node, Label, Node)] = {
     assert(!source.contains(drain), "source and drain must be different")
+
     @tailrec
     def findResidual(
         residual: MapGraph[Node, Label]
@@ -142,21 +142,21 @@ trait Graphable[Node, Label] {
           )
       }
 
-    val residual = findResidual(
-      new MapGraph(this.edges().filter(!_.isSelfEdge()))
-    )
+    val reachableInResidual = {
+      val thisWithoutSelfLoops = new MapGraph(
+        this.edges().filter(!_.isSelfEdge())
+      )
 
-    val visitor = residual.startBFSFrom(source).visitAll()
-
-    val reachableInResidual: Set[Node] =
-      residual.allNodes().filter(visitor.nodeVisited).toSet
+      findResidual(thisWithoutSelfLoops)
+        .startBFSFrom(source)
+        .visitAll()
+        .nodeVisited _
+    }
 
     val res = this
       .edges()
       .filter(
-        e =>
-          (reachableInResidual contains e.from()) &&
-            !(reachableInResidual contains e.to())
+        e => reachableInResidual(e.from()) && !reachableInResidual(e.to())
       )
       .toSet
 
