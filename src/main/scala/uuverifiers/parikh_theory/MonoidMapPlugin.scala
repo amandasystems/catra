@@ -100,8 +100,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
         stats.report()
 
-        theoryInstance.runHooks(
-          context,
+        theoryInstance.logDecision(
           "Subsume MonoidMap",
           actions = removeAssociatedPredicates :+ removeThisPredicateInstance
         )
@@ -170,44 +169,43 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
       implicit val order: TermOrder = context.goal.order
 
-      def transitionDead(t: Transition) =
-        termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
-
-      val deadTransitions = trace("deadTransitions") {
-        aut.transitions
-          .filter(transitionDead)
-          .toSet
-      }
-
-      val presentTransitions = trace("presentTransitions") {
+      val deadTransitions = trace("deadTransitions")(
         aut.transitions
           .filter(
-            t => termMeansDefinitelyPresent(context.goal, transitionToTerm(t))
+            t => termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
           )
           .toSet
-      }
-
-      val definitelyReached = trace("definitelyReached")(
-        aut.fwdReachable(
-          disabledEdges = aut.transitions.toSet -- presentTransitions
-        )
       )
 
-      val allTransitionsAssigned =
-        trace("all transitions assigned?") {
-          aut.transitions forall { t =>
-            deadTransitions(t) || definitelyReached(t.from())
-          }
-        }
-
-      val subsumeActions =
-        if (allTransitionsAssigned) {
-          theoryInstance.runHooks(
-            context,
-            "SubsumeConnected",
-            actions = Seq(Plugin.RemoveFacts(connectedInstance))
+      val subsumeActions: Seq[Plugin.Action] = theoryInstance.logDecision(
+        "SubsumeConnected",
+        actions = {
+          val definitelyReached = trace("definitelyReached")(
+            aut.fwdReachable(
+              disabledEdges = aut.transitions
+                .filterNot(
+                  t =>
+                    termMeansDefinitelyPresent(
+                      context.goal,
+                      transitionToTerm(t)
+                    )
+                )
+                .toSet
+            )
           )
-        } else Seq()
+
+          val allTransitionsAssigned =
+            trace("all transitions assigned?") {
+              aut.transitions forall (
+                  t => deadTransitions(t) || definitelyReached(t.from())
+              )
+            }
+
+          if (allTransitionsAssigned)
+            Seq(Plugin.RemoveFacts(connectedInstance))
+          else Seq()
+        }
+      )
 
       val proofConstructionEnabled =
         ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)
@@ -273,30 +271,29 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
-      val unreachableActions = trace("unreachableActions") {
-        val fwdReachStates = aut.fwdReachable(deadTransitions)
-        val deadStatesWithLiveTransitions = aut.states.filter(
-          s => !fwdReachStates(s) && hasLiveTransitions(s)
-        )
-        val bwdReachStates = aut.bwdReachable(deadTransitions)
-        val exclusivelyBwdUnreachable = aut.states.filter(
-          s => !bwdReachStates(s) && hasLiveTransitions(s) && fwdReachStates(s)
-        )
+      val unreachableActions: Seq[Plugin.AddAxiom] = theoryInstance.logDecision(
+        "Propagate-Connected",
+        actions = trace("unreachableActions") {
+          val fwdReachStates = aut.fwdReachable(deadTransitions)
+          val deadStatesWithLiveTransitions = aut.states.filter(
+            s => !fwdReachStates(s) && hasLiveTransitions(s)
+          )
+          val bwdReachStates = aut.bwdReachable(deadTransitions)
+          val exclusivelyBwdUnreachable = aut.states.filter(
+            s =>
+              !bwdReachStates(s) && hasLiveTransitions(s) && fwdReachStates(s)
+          )
 
-        deadStatesWithLiveTransitions.map(
-          explainUnreachable(_, motivateForwardCut)
-        ) ++ exclusivelyBwdUnreachable.map(
-          explainUnreachable(_, motivateBackwardCut)
-        )
-      }.toSeq
+          deadStatesWithLiveTransitions.map(
+            explainUnreachable(_, motivateForwardCut)
+          ) ++ exclusivelyBwdUnreachable
+            .map(
+              explainUnreachable(_, motivateBackwardCut)
+            )
+        }.toSeq
+      )
 
-      (if (unreachableActions.nonEmpty)
-         theoryInstance.runHooks(
-           context,
-           "Propagate-Connected",
-           actions = unreachableActions
-         )
-       else unreachableActions) ++ subsumeActions
+      unreachableActions ++ subsumeActions
     }
 
   def getOrComputeProduct(
@@ -387,12 +384,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val actions = removeUnusedPredicates ++ productClauses
 
-    theoryInstance.runHooks(
-      context,
-      "MaterialiseProduct",
-      actions
-    )
-    actions
+    theoryInstance.dumpContextAutomata(context)
+    theoryInstance.logDecision("MaterialiseProduct", actions)
   }
 
   private def formulaForNewAutomaton(

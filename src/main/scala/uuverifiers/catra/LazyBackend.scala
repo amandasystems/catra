@@ -1,25 +1,14 @@
 package uuverifiers.catra
 import ap.SimpleAPI
-import ap.proof.theoryPlugins.Plugin
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.{ConstantTerm, TermOrder}
 import uuverifiers.common.Automaton
-import uuverifiers.parikh_theory.{Context, RegisterCounting, TracingComputation}
+import uuverifiers.parikh_theory.{RegisterCounting}
 
 import scala.util.Try
 
 class LazyBackend(override val arguments: CommandLineOptions)
     extends PrincessBasedBackend {
-
-  private def traceDecision(
-      context: Context,
-      event: String,
-      actions: Seq[Plugin.Action]
-  ) = {
-    System.err.println(
-      s"${event}. Taking actions: ${actions.mkString(",")}"
-    )
-  }
 
   override def findImage(instance: Instance): Try[ImageResult] =
     arguments.withProver { p =>
@@ -71,40 +60,13 @@ class LazyBackend(override val arguments: CommandLineOptions)
 
     p.setConstructProofs(arguments.enableClauseLearning)
 
-    def buildTheory(automataGroup: Seq[Automaton]): RegisterCounting = {
-      val dumpHook: Seq[
-        (Context, String, Seq[Plugin.Action]) => Unit
-      ] = arguments.dumpGraphvizDir.toSeq.map(
-        directory =>
-          (context: Context, event: String, _: Any) =>
-            if (event == "MaterialiseProduct")
-              context.dumpGraphs(directory)
+    def buildTheory(automataGroup: Seq[Automaton]): RegisterCounting =
+      new RegisterCounting(
+        automataGroup,
+        arguments.nrUnknownToMaterialiseProduct,
+        dumpAutomata = arguments.dumpGraphvizDir,
+        printDecisions = arguments.printDecisions
       )
-
-      val decisionTraceHook = if (arguments.printDecisions) {
-        Seq(traceDecision(_, _, _))
-      } else {
-        Seq()
-      }
-
-      val hooks = dumpHook ++ decisionTraceHook
-
-      val theory = if (arguments.trace) {
-        new RegisterCounting(
-          automataGroup,
-          hooks,
-          arguments.nrUnknownToMaterialiseProduct
-        ) with TracingComputation
-      } else {
-        new RegisterCounting(
-          automataGroup,
-          hooks,
-          arguments.nrUnknownToMaterialiseProduct
-        )
-      }
-
-      theory
-    }
 
     val theories = automataProducts.map(buildTheory _)
 

@@ -2,16 +2,18 @@ package uuverifiers.parikh_theory
 import ap.theories.TheoryRegistry
 import uuverifiers.common.{Automaton, Counting, Transition}
 import ap.terfor.TerForConvenience.{l => toLinearCombination}
-import ap.proof.theoryPlugins.Plugin
 import ap.terfor.conjunctions.Conjunction
 import ap.terfor.{Term, TermOrder}
 import ap.terfor.linearcombination.LinearCombination
 import uuverifiers.catra.Counter
 
+import java.io.File
+
 class RegisterCounting(
     automata: Seq[Automaton],
-    actionHooks: Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq(),
-    override val materialisationThreshold: Int = 5
+    override val materialisationThreshold: Int = 5,
+    override val dumpAutomata: Option[File] = None,
+    override val printDecisions: Boolean = false
 ) extends ParikhTheory {
   private val counters =
     automata
@@ -31,10 +33,6 @@ class RegisterCounting(
   def allowsCounterValues(counterToTerm: Map[Counter, Term])(
       implicit order: TermOrder
   ): Conjunction = allowsMonoidValues(counters.map(counterToTerm))
-
-  override def actionHooks()
-      : Seq[(Context, String, Seq[Plugin.Action]) => Unit] =
-    super.actionHooks() ++ actionHooks
 
   TheoryRegistry register this
 

@@ -173,8 +173,7 @@ sealed case class TransitionSplitter(
             .transitionsBreadthFirst()
             .count(context.transitionStatus(autNr)(_).isUnknown)
 
-        theoryInstance.runHooks(
-          context,
+        theoryInstance.logDecision(
           "Split",
           List(
             Plugin.ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
