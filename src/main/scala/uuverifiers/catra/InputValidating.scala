@@ -8,8 +8,19 @@ sealed case class Invalid(motivation: String) extends ValidationResult
 
 trait InputValidating {
 
-  private def warnUndeclaredCounter(usedHow: String)(undeclaredCounter: Counter) =
+  private def warnUndeclaredCounter(
+      usedHow: String
+  )(undeclaredCounter: Counter) =
     Invalid(s"Counter $undeclaredCounter $usedHow but never declared")
+
+  private def counterOnlyDeclaredOnce(i: Instance): ValidationResult =
+    i.counters.groupBy(identity).filter(_._2.size > 1).keys.toSeq match {
+      case Nil => Valid
+      case duplicates =>
+        Invalid(
+          s"Counter${if (duplicates.size > 1) "s" else ""} declared more than once: ${duplicates.mkString(", ")}"
+        )
+    }
 
   private def undeclaredCounter(i: Instance)(c: Counter): Boolean =
     !(i.counters contains c)
@@ -73,7 +84,8 @@ trait InputValidating {
     Seq(
       onlyDeclaredCountersIncremented,
       onlyDeclaredCountersUsedInConstraints,
-      noOverlappingCounters
+      noOverlappingCounters,
+      counterOnlyDeclaredOnce
     )
 
   @tailrec

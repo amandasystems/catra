@@ -2,7 +2,6 @@ import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus
 import ap.terfor.TerForConvenience._
 import ap.terfor.TermOrder
-import org.scalatest.Ignore
 import org.scalatest.funsuite.AnyFunSuite
 import uuverifiers.catra.Counter
 import uuverifiers.common.SymbolicLabel.{CharRange, SingleChar}
