@@ -1,7 +1,10 @@
 import Dependencies._
+import scala.sys.process.Process
+
+val gitCommit = Process("git rev-parse --short HEAD").lineStream.head
 
 ThisBuild / scalaVersion := "2.13.10"
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / version := gitCommit
 ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
