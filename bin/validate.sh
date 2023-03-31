@@ -1,6 +1,6 @@
 #!/bin/sh
-JARFILE=./target/scala-2.13/uuverifiers/catra-assembly-0.1.0-SNAPSHOT.jar
 CURRENT_VERSION=$(git rev-parse --short HEAD)
+JARFILE=./target/scala-2.13/uuverifiers/catra-assembly-${CURRENT_VERSION}.jar
 RAM_ALLOC=4g
 NR_THREADS=10
 
