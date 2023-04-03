@@ -1,11 +1,11 @@
 #!/bin/sh
 JARFILE=./target/scala-2.13/uuverifiers/catra-assembly-0.1.0-SNAPSHOT.jar
 CURRENT_VERSION=$(git rev-parse --short HEAD)
-RAM_ALLOC=4g
-NR_THREADS=10
+RAM_ALLOC=10g
+NR_THREADS=8
 
-git reset --hard
-git pull
+#git reset --hard
+#git pull
 sbt assembly
 
 parallel -j$NR_THREADS --header : \
