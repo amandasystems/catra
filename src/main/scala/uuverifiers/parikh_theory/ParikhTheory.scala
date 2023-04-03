@@ -107,7 +107,7 @@ trait ParikhTheory
   val addedSplitter =
     new Predicate(s"Splitter_Added_${this.hashCode}", 0)
 
-  override lazy val predicates =
+  override val predicates =
     Seq(
       monoidMapPredicate,
       transitionMaskPredicate,

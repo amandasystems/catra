@@ -32,7 +32,8 @@ sealed class SymbolicTransition(
     _label: SymbolicLabel,
     _to: State
 ) extends Transition {
-  override def serialise(): String = s"$from -> $to ${label().serialise()} {};"
+  override def serialise(): String =
+    s"${from()} -> ${to()} ${label().serialise()} {};"
   override def intersect[T <: Transition](
       that: T
   ): Option[ProductTransition] = {

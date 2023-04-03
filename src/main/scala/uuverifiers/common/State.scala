@@ -39,12 +39,11 @@ sealed case class IntState(id: Int) extends State {
   override def toDotDescription(): String = s"s$id"
 }
 
-sealed class StringState(label: String) extends State {
-  private def label(): String = label
+sealed class StringState(private val label: String) extends State {
   override def toDotDescription(): String = label
   override def toDotIdentifier(): String = label
   override def compare(that: State): Int = that match {
-    case that: StringState => this.label compare that.label()
+    case that: StringState => this.label compare that.label
     case _: IntState       => 1
     case _: ProductState   => -1
   }

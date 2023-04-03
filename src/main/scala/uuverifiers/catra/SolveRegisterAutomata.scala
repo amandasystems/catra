@@ -40,7 +40,7 @@ case object OutOfMemory extends SatisfactionResult with ImageResult {
 case class Timeout(timeout_ms: Long)
     extends SatisfactionResult
     with ImageResult {
-  override lazy val name = s"timeout > ${timeout_ms}ms"
+  override val name = s"timeout > ${timeout_ms}ms"
   override def isSatOrUnsat(): Boolean = false
 
 }

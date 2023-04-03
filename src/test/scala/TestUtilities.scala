@@ -14,7 +14,8 @@ import uuverifiers.common.{
   Transition
 }
 import uuverifiers.parikh_theory.{ParikhTheory, RegisterCounting}
-import ap.terfor.TerForConvenience._
+import ap.terfor.TerForConvenience.*
+import ap.terfor.equations.EquationConj
 import uuverifiers.catra.Counter
 import uuverifiers.parikh_theory.VariousHelpers.transitionsIncrementRegisters
 
@@ -25,6 +26,8 @@ object TestUtilities extends AnyFunSuite with Tracing {
       letterVars: Map[Char, ConstantTerm],
       order: TermOrder
   )(m: Map[Transition, Term]): Formula = {
+    import scala.language.implicitConversions
+
     implicit val o: TermOrder = order
     conj(
       alphabet.map { ch =>
@@ -214,9 +217,10 @@ object TestUtilities extends AnyFunSuite with Tracing {
           vars
             .zip(expectedCounts)
             .map {
-              case (x, expected) => x === l(expected)
+              case (x, expected) =>
+                (x === l(expected)).asInstanceOf[EquationConj]
             }
-        )
+        )(order)
     }
 
     true

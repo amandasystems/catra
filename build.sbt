@@ -1,27 +1,16 @@
 import Dependencies._
 
-ThisBuild / scalaVersion := "2.13.10"
+ThisBuild / scalaVersion := "3.2.2"
 ThisBuild / version := "0.1.0-SNAPSHOT"
 ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
   "-deprecation",
-  //"-Xfatal-warnings",
-  "-Xdisable-assertions",
   "-unchecked",
-  "-Xlint",
   "-Xelide-below",
   "INFO",
-  "-feature",
-  "-opt-inline-from:**",
-  "-opt:l:method",
-  "-opt:l:inline",
-  "-opt:unreachable-code",
-  "-opt:copy-propagation",
-  "-opt:redundant-casts",
-  "-opt:box-unbox",
-  "-Ywarn-dead-code",
-  "-Ywarn-unused"
+  "-source:3.0-migration",
+  "-rewrite"
 )
 
 // ThisBuild / coverageMinimum := 60
@@ -32,7 +21,7 @@ ThisBuild / coverageExcludedFiles := ".*/src/test/.*"
 ThisBuild / resolvers += ("uuverifiers" at "http://logicrunch.research.it.uu.se/maven/")
   .withAllowInsecureProtocol(true)
 
-ThisBuild / libraryDependencies += princess
+ThisBuild / libraryDependencies += princess.cross(CrossVersion.for3Use2_13)
 ThisBuild / libraryDependencies += fastparse
 
 lazy val root = (project in file("."))

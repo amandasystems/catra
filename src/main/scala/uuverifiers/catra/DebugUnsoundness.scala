@@ -21,10 +21,7 @@ trait Optimiser extends Tracing {
     while (canImprove()) {
       val candidate = nextCandidate()
       val didImprove = candidate > bestConfig
-      if (didImprove) {
-        trace("New best config!")()
-        bestConfig = candidate
-      }
+      if (didImprove) bestConfig = candidate
       reportResult(didImprove)
     }
     bestConfig

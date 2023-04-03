@@ -128,8 +128,8 @@ trait Graphable[Node, Label] {
 
     @tailrec
     def findResidual(
-        residual: MapGraph[Node, Label]
-    ): MapGraph[Node, Label] =
+        residual: Graphable[Node, Label]
+    ): Graphable[Node, Label] =
       residual.startBFSFrom(source).pathTo(drain) match {
         case None => residual
         case Some(augmentingPath) if !augmentingPath.exists(mayCut) =>
@@ -330,11 +330,6 @@ trait Graphable[Node, Label] {
     cycles.toSet
   }
 
-  // Create a new homomorphic graph by merging the given nodes, returning both
-  // the new graph and the resulting composite node in that graph.
-  def mergeNodes(nodesToMerge: Iterable[Node]): CompositeGraph[Node, Label] =
-    CompositeGraph(this, nodesToMerge.toSet)
-
 }
 
 class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
@@ -359,11 +354,12 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
   override def hasNode(node: N) = nodes contains node
 
   def allNodes() = nodes.toSeq
-  def outgoingEdges(node: N) =
+  def outgoingEdges(node: N): Seq[(N, L, N)] =
     underlying
-      .getOrElse(node, Set())
+      .getOrElse(node, Set[(N, L)]())
       .map { case (to, label) => (node, label, to) }
       .toSeq
+
   def subgraph(selectedNodes: Set[N]) =
     new MapGraph[N, L](
       underlying.view
@@ -439,47 +435,6 @@ object CompositeNode {
   final case class SingleNode[N](node: N) extends CompositeNode[N] {
     def representative() = node
   }
-}
-
-object CompositeGraph {
-  def apply[N, L](graphToMerge: Graphable[N, L], equivalentNodes: Set[N]) = {
-    val mergedClass = new CompositeNode.MultiNode(equivalentNodes)
-    val nodeToEqClass: Map[N, CompositeNode[N]] = graphToMerge
-      .allNodes()
-      .map(
-        node =>
-          node ->
-            (if (equivalentNodes contains node) {
-               mergedClass
-             } else {
-               new CompositeNode.SingleNode(node)
-             })
-      )
-      .toMap
-
-    // Now, merge the redundant edges
-    val underlying: Graphable[CompositeNode[N], Set[(N, L, N)]] =
-      MapGraph.mapToGraph(
-        graphToMerge
-          .edges()
-          .map {
-            case edge @ (from, _, to) =>
-              (nodeToEqClass(from), edge, nodeToEqClass(to))
-          }
-          .groupBy(e => (e.from(), e.to()))
-          .map {
-            case ((from, to), edgeLump) =>
-              (from, edgeLump.map(_.label()).toSet, to)
-          }
-          .groupBy(_.from())
-          .view
-          .mapValues(_.map(e => (e.to(), e.label())).toList)
-          .toMap
-      )
-
-    new CompositeGraph(underlying, nodeToEqClass)
-  }
-
 }
 
 // Generate a graph with an equivalence class of nodes merged into one, while

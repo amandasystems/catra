@@ -45,7 +45,7 @@ object SymbolicLabel {
       case _                                 => CharRange(fromInclusive, toInclusive)
     }
 
-  final case object NoChar extends SymbolicLabel {
+  case object NoChar extends SymbolicLabel {
     override def overlaps(that: SymbolicLabel) = false
     override def intersect(that: SymbolicLabel) = this
     override def isEmpty() = true
@@ -109,7 +109,7 @@ object SymbolicLabel {
       s"[${formatChar(from)}, ${formatChar(toInclusive)}]"
   }
 
-  final case object AnyChar extends SymbolicLabel {
+  case object AnyChar extends SymbolicLabel {
     override def overlaps(that: SymbolicLabel) = true
     override def intersect(that: SymbolicLabel) = that
     override def isEmpty() = false

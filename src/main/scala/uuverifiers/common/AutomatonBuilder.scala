@@ -67,7 +67,7 @@ class AutomatonBuilder extends Tracing {
   }
 
   def addTransition(t: Transition): AutomatonBuilder = {
-    trace(s"add transition $t on $name")()
+    trace(s"add transition $t on $name")
     assert((_autStates contains t.from()) && (_autStates contains t.to()))
 
     _outgoingTransitions = _outgoingTransitions.updatedWith(t.from()) {
@@ -116,7 +116,7 @@ sealed private class Aut(
     _transitions.getOrElse(from, Seq()).toSeq
   override val initialState: State = initial
   override def isAccept(s: State): Boolean = accepting contains s
-  override def name(): String = _name.getOrElse(super.name)
+  override def name: String = _name.getOrElse(super.name)
   override lazy val acceptingStates: Set[State] = accepting
 }
 

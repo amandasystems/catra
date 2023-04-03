@@ -1,13 +1,15 @@
 import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus
-import ap.terfor.TerForConvenience._
+import ap.terfor.TerForConvenience.*
 import ap.terfor.TermOrder
+import ap.terfor.equations.EquationConj
 import org.scalatest.funsuite.AnyFunSuite
 import uuverifiers.catra.Counter
 import uuverifiers.common.SymbolicLabel.{CharRange, SingleChar}
-import uuverifiers.common.SymbolicLabelConversions._
-import uuverifiers.common._
+import uuverifiers.common.SymbolicLabelConversions.*
+import uuverifiers.common.*
 import uuverifiers.parikh_theory.{ParikhTheory, RegisterCounting}
+import scala.language.implicitConversions
 
 class TestParikhTheory extends AnyFunSuite with Tracing {
   import scala.language.implicitConversions
@@ -31,7 +33,10 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
     TestUtilities.ensuresAlways(lt) {
       case (lengths, order) =>
         implicit val o: TermOrder = order
-        disj(lengths(0) === l(1), lengths(0) === l(2))(order)
+        disj(
+          (lengths(0) === l(1)).asInstanceOf[EquationConj],
+          (lengths(0) === l(2)).asInstanceOf[EquationConj]
+        )(order)
     }
   }
 

@@ -139,7 +139,7 @@ object CommandLineOptions {
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L
   private var crossValidate = false
-  private var randomSeed = 1234567
+  private val randomSeed = 1234567
   private var printProof = false
 
   private val usage =

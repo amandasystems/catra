@@ -12,7 +12,7 @@ object ComputeProduct {
     val instance = InputFileParser.parse(inputFileHandle.mkString(""))
     inputFileHandle.close()
     instance
-  }
+  }: @unchecked
   println("Computing all products...")
   instance.automataProducts.zipWithIndex.foreach {
     case (productGroup, i) if productGroup.size > 1 =>
