@@ -7,9 +7,9 @@ class TestInputFileParser extends AnyFunSuite {
     import fastparse.Parsed.{Failure, Success}
     InputFileParser.parse(input) match {
       case Success(value, _) => value
-      case Failure(_, _, extra) => {
+      case Failure(_, _, extra) =>
         withClue(extra.trace().longMsg)(assert(false))
-      }
+      case Failure(_) => assert(false)
     }
   }
 

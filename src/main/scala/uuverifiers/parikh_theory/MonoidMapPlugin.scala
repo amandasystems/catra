@@ -100,8 +100,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
         stats.report()
 
-        theoryInstance.runHooks(
-          context,
+        theoryInstance.logDecision(
           "Subsume MonoidMap",
           actions = removeAssociatedPredicates :+ removeThisPredicateInstance
         )
@@ -164,115 +163,136 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ): Seq[Plugin.Action] =
     trace(s"handleConnectedInstance $connectedInstance") {
-
       val autId = autNr(connectedInstance)
-      val myTransitionMasks = context.autTransitionMasks(autId)
       val aut = materialisedAutomata(autId)
+      val transitionMask = context.autTransitionMask(autId)(_)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
-
       implicit val order: TermOrder = context.goal.order
 
-      val deadTransitions = trace("deadTransitions") {
+      val deadTransitions = trace("deadTransitions")(
         aut.transitions
           .filter(
             t => termMeansDefinitelyAbsent(context.goal, transitionToTerm(t))
           )
           .toSet
-      }
-
-      val presentTransitions = trace("presentTransitions") {
-        aut.transitions
-          .filter(
-            t => termMeansDefinitelyPresent(context.goal, transitionToTerm(t))
-          )
-          .toSet
-      }
-
-      val reachableStates =
-        aut.fwdReachable(deadTransitions) & aut.bwdReachable(deadTransitions)
-      val knownUnreachableStates = trace("knownUnreachableStates") {
-        aut.states filterNot reachableStates
-      }
-
-      val definitelyReached = trace("definitelyReached")(
-        aut.fwdReachable(aut.transitions.toSet -- presentTransitions)
       )
 
-      val allTransitionsAssigned =
-        trace("all transitions assigned?") {
-          aut.transitions forall { t =>
-            deadTransitions(t) || definitelyReached(t.from())
-          }
-        }
-
-      val subsumeActions =
-        if (allTransitionsAssigned) {
-          theoryInstance.runHooks(
-            context,
-            "SubsumeConnected",
-            actions = Seq(Plugin.RemoveFacts(connectedInstance))
+      val subsumeActions: Seq[Plugin.Action] = theoryInstance.logDecision(
+        "SubsumeConnected",
+        actions = {
+          val definitelyReached = trace("definitelyReached")(
+            aut.fwdReachable(
+              disabledEdges = aut.transitions
+                .filterNot(
+                  t =>
+                    termMeansDefinitelyPresent(
+                      context.goal,
+                      transitionToTerm(t)
+                    )
+                )
+                .toSet
+            )
           )
-        } else Seq()
+
+          val allTransitionsAssigned =
+            trace("all transitions assigned?") {
+              aut.transitions forall (
+                  t => deadTransitions(t) || definitelyReached(t.from())
+              )
+            }
+
+          if (allTransitionsAssigned)
+            Seq(Plugin.RemoveFacts(connectedInstance))
+          else Seq()
+        }
+      )
+
+      val proofConstructionEnabled =
+        ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)
+
+      def hasLiveTransitions(s: State) =
+        !aut.transitionsFrom(s).forall(deadTransitions)
+
+      def motivateForwardCut(
+          deadState: State
+      ): Set[(State, Transition, State)] = {
+        val cut = aut
+          .minCut(
+            Seq(aut.initialState),
+            deadState,
+            gt => deadTransitions(gt._2)
+          )
+
+        assert(cut.nonEmpty, s"Cut to $deadState was empty!")
+        cut
+      }
+
+      def motivateBackwardCut(
+          deadState: State
+      ): Set[(State, Transition, State)] = {
+        val cut = aut
+          .reversed()
+          .minCut(
+            aut.acceptingStates.toSeq,
+            deadState,
+            gt => deadTransitions(gt._2)
+          )
+
+        assert(
+          cut.nonEmpty,
+          s"Backwards cut from ${aut.acceptingStates} to $deadState was empty!"
+        )
+        cut
+      }
+
+      def explainUnreachable(
+          deadState: State,
+          motivateCut: State => Set[(State, Transition, State)]
+      ): Plugin.AddAxiom = {
+        val outgoingMasks = aut
+          .transitionsFrom(deadState)
+          .map(transitionMask)
+        val outgoingAreUnused = conj(outgoingMasks.map(_.last === 0))
+
+        val explanation = if (!proofConstructionEnabled) {
+          context.autTransitionMasks(autId) // If we're not using proof construction, don't do the work
+        } else
+          outgoingMasks ++ motivateCut(deadState)
+            .map(e => transitionMask(e._2))
+
+        Plugin
+          .AddAxiom(
+            explanation :+ connectedInstance,
+            outgoingAreUnused,
+            theoryInstance
+          )
+
+      }
 
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
-      val unreachableActions = trace("unreachableActions") {
-        val unreachableTransitions =
-          knownUnreachableStates.flatMap(aut.transitionsFrom(_))
-
-        val unreachableConstraints =
-          conj(unreachableTransitions.map(transitionToTerm(_) === 0))
-
-        if (unreachableConstraints.isTrue) Seq() // TODO why not subsume?
-        else {
-
-          val acts =
-            if (ap.parameters.Param.PROOF_CONSTRUCTION(context.goal.settings)) {
-
-              for (trans <- unreachableTransitions.toSeq;
-                   term = transitionToTerm(trans);
-                   constr = term === 0
-                   if !constr.isTrue;
-                   separatingCut = aut
-                     .minCut(aut.initialState, trans.from())
-                     .map(_._2);
-                   cutMasks = separatingCut
-                     .map(context.autTransitionMask(autId))
-                     .toSeq;
-                   cutIsZero = cutMasks.map(_.last).reduce(_ + _) <= 0;
-                   assumptions = if (cutIsZero.isTrue) // Forwards-unreachable
-                     cutMasks :+ connectedInstance :+ context.autTransitionMask(
-                       autId
-                     )(trans)
-                   else // Backwards-unreachable: fall back
-                     {
-                       for (a <- myTransitionMasks
-                            if a.last.isZero || a.last == term)
-                         yield a
-                     } :+ connectedInstance)
-                yield {
-                  Plugin.AddAxiom(assumptions, constr, theoryInstance)
-                }
-
-            } else {
-
-              Seq(
-                Plugin.AddAxiom(
-                  myTransitionMasks :+ connectedInstance,
-                  unreachableConstraints,
-                  theoryInstance
-                )
-              )
-
-            }
-
-          theoryInstance.runHooks(
-            context,
-            "Propagate-Connected",
-            actions = acts
+      val unreachableActions: Seq[Plugin.AddAxiom] = theoryInstance.logDecision(
+        "Propagate-Connected",
+        actions = trace("unreachableActions") {
+          val fwdReachStates = aut.fwdReachable(deadTransitions)
+          val deadStatesWithLiveTransitions = aut.states.filter(
+            s => !fwdReachStates(s) && hasLiveTransitions(s)
           )
-        }
-      }
+          val bwdReachStates = aut.bwdReachable(deadTransitions)
+          val exclusivelyBwdUnreachable = aut.states.filter(
+            s =>
+              !bwdReachStates(s) && hasLiveTransitions(s) && fwdReachStates(s)
+          )
+
+          deadStatesWithLiveTransitions.map(
+            explainUnreachable(_, motivateForwardCut)
+          ) ++ exclusivelyBwdUnreachable
+            .map(
+              explainUnreachable(_, motivateBackwardCut)
+            )
+        }.toSeq
+      )
+
       unreachableActions ++ subsumeActions
     }
 
@@ -364,12 +384,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val actions = removeUnusedPredicates ++ productClauses
 
-    theoryInstance.runHooks(
-      context,
-      "MaterialiseProduct",
-      actions
-    )
-    actions
+    theoryInstance.dumpContextAutomata(context)
+    theoryInstance.logDecision("MaterialiseProduct", actions)
   }
 
   private def formulaForNewAutomaton(
@@ -388,8 +404,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     )
 
     val transitionToTerm = transitionToTermSeq.toMap
-    val finalTerms = product.states
-      .filter(product.isAccept)
+    val finalTerms = product.acceptingStates
       .map(s => (s, varFactory.nextVariable()))
       .toMap
 

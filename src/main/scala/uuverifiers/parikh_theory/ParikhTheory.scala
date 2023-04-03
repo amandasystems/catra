@@ -37,6 +37,24 @@ trait ParikhTheory
     with Complete {
   val auts: IndexedSeq[Automaton]
 
+  val dumpAutomata: Option[File] = None
+  val printDecisions: Boolean = false
+
+  def logDecision[A <: Plugin.Action](
+      event: String,
+      actions: Seq[A]
+  ): Seq[A] = {
+    if (printDecisions && actions.nonEmpty) {
+      System.err.println(
+        s"$event. Taking actions: ${actions.mkString(",")}"
+      )
+    }
+    actions
+  }
+
+  def dumpContextAutomata(c: Context): Unit =
+    dumpAutomata.toSeq.foreach(c.dumpGraphs(_))
+
   /**
    * The number of unknown transitions for which to trigger materialising a product.
    * 0 is maximally lazy and only triggers product materialisation when the status of
@@ -99,31 +117,6 @@ trait ParikhTheory
     )
 
   lazy val monoidMapPlugin = new MonoidMapPlugin(this)
-
-  /**
-   * A sequence of hooks to do something whenever an action is taken. Typically
-   * used for logging and debugging. The default is to do...nothing.
-   */
-  def actionHooks(): Seq[(Context, String, Seq[Plugin.Action]) => Unit] = Seq()
-
-  /**
-   * Run a set of event hooks to report actions taken, and return the actions.
-   *
-   * @param context
-   * @param event
-   * @param actions
-   * @return The same actions
-   */
-  final def runHooks(
-      context: Context,
-      event: String,
-      actions: Seq[Plugin.Action]
-  ): Seq[Plugin.Action] = {
-    actionHooks().foreach { hook =>
-      hook(context, event, actions)
-    }
-    actions
-  }
 
   final def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
@@ -244,18 +237,13 @@ trait ParikhTheory
 object ParikhTheory {
   def apply(_auts: IndexedSeq[Automaton])(
       _toMonoid: Transition => Seq[Option[LinearCombination]],
-      _monoidDimension: Int,
-      _hooks: Seq[
-        (Context, String, Seq[Plugin.Action]) => Unit
-      ] = Seq()
+      _monoidDimension: Int
   ): ParikhTheory = {
     new ParikhTheory {
       override val auts: IndexedSeq[Automaton] = _auts
       override def toMonoid(t: Transition): Seq[Option[LinearCombination]] =
         _toMonoid(t)
       override val monoidDimension: Int = _monoidDimension
-      override def actionHooks()
-          : Seq[(Context, String, Seq[Plugin.Action]) => Unit] = _hooks
 
       TheoryRegistry register this
     }

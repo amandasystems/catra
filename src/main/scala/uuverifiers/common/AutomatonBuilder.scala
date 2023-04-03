@@ -95,7 +95,13 @@ class AutomatonBuilder extends Tracing {
         .mapValues(ts => ts.filter(t => stateIsLive(t.to()))) // Only to live states
         .toMap
 
-    new Aut(initial, _accepting, reachableTransitions, _autStates, name)
+    new Aut(
+      initial,
+      forward.isReachable(_accepting),
+      reachableTransitions,
+      _autStates,
+      name
+    )
   }
 }
 
@@ -111,6 +117,7 @@ sealed private class Aut(
   override val initialState: State = initial
   override def isAccept(s: State): Boolean = accepting contains s
   override def name(): String = _name.getOrElse(super.name)
+  override lazy val acceptingStates: Set[State] = accepting
 }
 
 object AutomatonBuilder {
@@ -158,4 +165,5 @@ sealed private class IncrementallyReachable[S] {
   def canGo(from: S, to: S): Unit =
     if (reachable contains from) this setReachable to else addMove(from, to)
   def isReachable(s: S): Boolean = reachable contains s
+  def isReachable(ss: Set[S]): Set[S] = ss intersect reachable
 }

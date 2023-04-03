@@ -144,7 +144,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
                 .map {
                   case t: SymbolicTransition =>
                     t.withIncrements(
-                      t.label
+                      t.label()
                         .iterate()
                         .map(letterToCounter)
                         .map(c => c -> 1)

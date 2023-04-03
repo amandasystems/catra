@@ -27,19 +27,20 @@ trait Graphable[Node, Label] {
   type Cycle = Set[Node]
   type Edge = (Node, Label, Node)
 
-  class BFSVisitor(
+  sealed class BFSVisitor(
       val graph: Graphable[Node, Label],
-      val startNode: Node,
+      val startNodes: Seq[Node],
       val walkWhen: ((Node, Label, Node)) => Boolean
   ) extends Iterator[Node] {
 
     private val nodeUnseen = MSet(graph.allNodes(): _*)
-    private val toVisit = MQueue[Node](startNode)
-    private val connectingEdge = MHashMap[Node, Option[Edge]](startNode -> None)
+    private val toVisit = MQueue[Node](startNodes: _*)
+    private val connectingEdge =
+      MHashMap[Node, Option[Edge]]().withDefaultValue(None)
 
-    nodeUnseen -= startNode
+    nodeUnseen --= startNodes
 
-    override def hasNext = !toVisit.isEmpty
+    override def hasNext = toVisit.nonEmpty
 
     override def next() = {
       val thisNode = toVisit.dequeue()
@@ -82,11 +83,23 @@ trait Graphable[Node, Label] {
     }
   }
 
+  def startBFSFrom(startNode: Node) =
+    new BFSVisitor(this, Seq(startNode), _ => true)
+
+  def startBFSFrom(startNodes: Seq[Node]) =
+    new BFSVisitor(this, startNodes, _ => true)
+
+  def startBFSFrom(
+      startNodes: Seq[Node],
+      walkWhen: ((Node, Label, Node)) => Boolean
+  ) =
+    new BFSVisitor(this, startNodes, walkWhen)
+
   def startBFSFrom(
       startNode: Node,
-      walkWhen: ((Node, Label, Node)) => Boolean = _ => true
+      walkWhen: ((Node, Label, Node)) => Boolean
   ) =
-    new BFSVisitor(this, startNode, walkWhen)
+    new BFSVisitor(this, Seq(startNode), walkWhen)
 
   def neighbours(node: Node): Seq[Node] = outgoingEdges(node).map(_.to())
 
@@ -95,38 +108,55 @@ trait Graphable[Node, Label] {
 
   // Calculate the min-cut between the unweighted flow network between
   // source and drain. This uses Edmonds-Karp.
-  def minCut(source: Node, drain: Node): Set[(Node, Label, Node)] = {
-    assert(source != drain, "source and drain must be different")
+  def minCut(
+      source: Node,
+      drain: Node
+  ): Set[(Node, Label, Node)] =
+    minCut(Seq(source), drain, mayCut = (_: (Node, Label, Node)) => true)
+
+  // Calculate the min-cut between the unweighted flow network between
+  // source and drain. This uses Edmonds-Karp.
+  // This version may fail to find a s/d cut if there is a path using
+  // only transitions where mayCut is false. If mayCut is always true,
+  // this is regular minCut.
+  def minCut(
+      source: Seq[Node],
+      drain: Node,
+      mayCut: ((Node, Label, Node)) => Boolean
+  ): Set[(Node, Label, Node)] = {
+    assert(!source.contains(drain), "source and drain must be different")
+
     @tailrec
     def findResidual(
         residual: MapGraph[Node, Label]
     ): MapGraph[Node, Label] =
       residual.startBFSFrom(source).pathTo(drain) match {
         case None => residual
-        case Some(augmentingPath) => {
+        case Some(augmentingPath) if !augmentingPath.exists(mayCut) =>
+          residual
+        case Some(augmentingPath) =>
           findResidual(
             residual
-              .dropEdges(augmentingPath.toSet)
+              .dropEdges(augmentingPath.filter(mayCut).toSet)
               .addEdges(augmentingPath.reversePath())
           )
-        }
       }
 
-    val residual = findResidual(
-      new MapGraph(this.edges().filter(!_.isSelfEdge()))
-    )
+    val reachableInResidual = {
+      val thisWithoutSelfLoops = new MapGraph(
+        this.edges().filter(!_.isSelfEdge())
+      )
 
-    val visitor = residual.startBFSFrom(source).visitAll()
-
-    val reachableInResidual: Set[Node] =
-      residual.allNodes().filter(visitor.nodeVisited(_)).toSet
+      findResidual(thisWithoutSelfLoops)
+        .startBFSFrom(source)
+        .visitAll()
+        .nodeVisited _
+    }
 
     this
       .edges()
       .filter(
-        e =>
-          (reachableInResidual contains e.from()) &&
-            !(reachableInResidual contains e.to())
+        e => reachableInResidual(e.from()) && !reachableInResidual(e.to())
       )
       .toSet
   }
@@ -310,9 +340,14 @@ trait Graphable[Node, Label] {
 class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
     extends Graphable[N, L] {
 
+  private lazy val nodes: Set[N] = underlying.keySet union underlying.flatMap {
+    nodeAndOut =>
+      nodeAndOut._2.map(_._1)
+  }.toSet
+
   def this(edges: Iterable[(N, L, N)]) = {
     this(
-      edges.map((_._3 -> List())).toMap ++
+      edges.map(_._3 -> List()).toMap ++
         edges
           .groupBy(_._1)
           .view
@@ -321,9 +356,9 @@ class MapGraph[N, L](val underlying: Map[N, List[(N, L)]])
     )
   }
 
-  override def hasNode(node: N) = underlying contains node
+  override def hasNode(node: N) = nodes contains node
 
-  def allNodes() = underlying.keys.toSeq
+  def allNodes() = nodes.toSeq
   def outgoingEdges(node: N) =
     underlying
       .getOrElse(node, Set())

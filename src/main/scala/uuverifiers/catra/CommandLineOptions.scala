@@ -46,7 +46,6 @@ sealed case class CommandLineOptions(
     timeout_ms: Option[Long],
     dumpSMTDir: Option[File],
     dumpGraphvizDir: Option[File],
-    trace: Boolean,
     printDecisions: Boolean,
     runMode: RunMode,
     backend: BackendSelection,
@@ -126,7 +125,6 @@ object CommandLineOptions {
 
   /// Option fields
   private var timeout_ms: Option[Long] = None
-  private var trace = false
   private var printDecisions = false
   private var inputFiles: Seq[String] = Seq()
   private var dumpSMTDir: Option[File] = None
@@ -136,7 +134,7 @@ object CommandLineOptions {
   private var noCheckIntermediateSat = false
   private var noEliminateQuantifiers = false
   private var dumpEquationDir: Option[File] = None
-  private var nrUnknownToStartMaterialiseProduct = 2 // FIXME: increase to 6.
+  private var nrUnknownToStartMaterialiseProduct = 6
   private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L
@@ -154,8 +152,6 @@ object CommandLineOptions {
       debug-unsat -- diagnose (an) incorrect unsat result(s)
 
     Available options (🐌 = likely to negatively impact performance):
-      --trace -- generate a trace of the computation into trace.tex,
-                  plus various .dot files. (default = $trace) 🐌
       --print-decisions -- log partial decisions. Less verbose trace.
       --timeout milliseconds -- set the timeout in ms (default = $timeout_ms)
       --dump-smt <directory> -- dump SMT commands into this directory
@@ -263,9 +259,6 @@ object CommandLineOptions {
       case "--print-decisions" :: tail =>
         printDecisions = true
         parseFilesAndFlags(tail)
-      case "--trace" :: tail =>
-        trace = true
-        parseFilesAndFlags(tail)
       case "--timeout" :: milliseconds :: tail =>
         timeout_ms = Some(milliseconds.toLong)
         parseFilesAndFlags(tail)
@@ -339,7 +332,6 @@ object CommandLineOptions {
     CommandLineOptions(
       inputFiles = util.Random.shuffle(inputFiles),
       timeout_ms = timeout_ms,
-      trace = trace,
       printDecisions = printDecisions,
       dumpSMTDir = dumpSMTDir,
       dumpGraphvizDir = dumpGraphvizDir,
