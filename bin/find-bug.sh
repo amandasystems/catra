@@ -9,7 +9,7 @@ iteration=0
 echo "Looking for bug"
 while true;
 do
-  for instance in second-investigation/reduced.par
+  for instance in bug-proof-cert.par
   do
     ((iteration++))
     ./bin/catra solve-satisfy  --print-decisions --timeout ${timeout} "${instance}" &> ${logfile};

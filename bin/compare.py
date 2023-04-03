@@ -102,6 +102,8 @@ if unshared_instances:
     print(f"I: Proceeding with the {len(common_instances)} common instance(s)...")
 
 outcomes: defaultdict[str, Counter] = defaultdict(Counter)
+instance_outcomes: defaultdict[str, list] = defaultdict(list)
+
 
 for instance in common_instances:
     runtimes = [log[instance][1] for log in log_to_results]
@@ -124,10 +126,15 @@ for instance in common_instances:
     instance_type = (
         statuses_without_timeouts[0] if statuses_without_timeouts else "unknown"
     )
-    outcomes[instance_type].update(classify_outcome(runtimes))
+    outcome = classify_outcome(runtimes)
+    instance_outcomes[outcome[0]].append(instance)
+    outcomes[instance_type].update(outcome)
 
 print()
 print("======= Summary =======")
+for outcome, instances in instance_outcomes.items():
+    print(f"{outcome}: {' '.join(instances)}")
+    
 for outer_label, counts in outcomes.items():
     print(f"## {outer_label}")
     inner_label_maxlen = max(len(l) for l in counts.keys()) + 4
