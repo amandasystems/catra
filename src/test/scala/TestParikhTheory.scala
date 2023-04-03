@@ -356,7 +356,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     SimpleAPI.withProver { p =>
       val constants = alphabet.map(c => p.createConstantRaw(c.toString)).toSeq
-      val a = constants(0)
+      val a = constants.head
 
       p addTheory theory
 

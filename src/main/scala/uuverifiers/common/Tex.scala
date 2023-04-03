@@ -115,10 +115,10 @@ object Tex {
 
     import IdealInt.{ONE, ZERO, MINUS_ONE}
 
-    val (lhs, rhs: IIntLit) = term.iterator.toSeq match {
+    val (lhs, rhs: IIntLit) = (term.iterator.toSeq match {
       case Seq(l: ITerm, r: IIntLit) => (l, r.minusSimplify)
       case _                         => (term, IIntLit(ZERO))
-    }
+    }): @unchecked
 
     relation match {
       case EqZero                      => s"${termToTex(lhs)} = $rhs"

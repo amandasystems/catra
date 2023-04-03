@@ -9,7 +9,7 @@ ThisBuild / scalacOptions ++= Seq(
   "-unchecked",
   "-Xelide-below",
   "INFO",
-  "-source:3.0-migration",
+  "-source:3.2-migration",
   "-rewrite"
 )
 
