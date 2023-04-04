@@ -1,0 +1,22 @@
+counter int l, r, fr, fl, ff;
+
+synchronised {
+automaton a {
+  init start;
+
+  start -> left [1] { l += 1 };
+  start -> right [1] { r += 1 };
+
+  right -> right [1];
+  right -> final [1] {fr += 1 };
+
+  left -> final [1] { fl += 1 };
+
+  final -> final [1] { ff += 1 };
+
+  accepting left, right, final;
+};
+
+};
+
+constraint ff > 0;
