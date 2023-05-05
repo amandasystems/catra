@@ -56,15 +56,15 @@ sealed case class Inequality(
 
     inequality match {
       case LessThan if isPositive            => left < right
-      case LessThan if !isPositive           => left > right
+      case LessThan if !isPositive           => left >= right
       case GreaterThan if isPositive         => left > right
-      case GreaterThan if !isPositive        => left < right
+      case GreaterThan if !isPositive        => left <= right
       case Equals if isPositive              => left === right
       case Equals if !isPositive             => left =/= right
       case GreaterThanOrEqual if isPositive  => left >= right
-      case GreaterThanOrEqual if !isPositive => left <= right
+      case GreaterThanOrEqual if !isPositive => left < right
       case LessThanOrEqual if isPositive     => left <= right
-      case LessThanOrEqual if !isPositive    => left >= right
+      case LessThanOrEqual if !isPositive    => left > right
       case NotEquals if isPositive           => left =/= right
       case NotEquals if !isPositive          => left === right
     }

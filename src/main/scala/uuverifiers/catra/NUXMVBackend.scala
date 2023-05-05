@@ -223,6 +223,8 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
       }
       out.close()
 
+      printNUXMVModule()
+
       val process = Runtime.getRuntime.exec(nuxmvCmd)
       val stdin = process.getOutputStream
       val stderr = process.getErrorStream
