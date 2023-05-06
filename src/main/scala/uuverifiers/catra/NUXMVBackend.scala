@@ -43,9 +43,9 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
 
   trace("nuxmv command line")(nuxmvCmd.mkString(" "))
 
-  val outFile = new File("parikh.smv")
-  // val outFile =
-  //   File.createTempFile("parikh-", ".smv")
+  // val outFile = new File("parikh.smv")
+  val outFile =
+    File.createTempFile("parikh-", ".smv")
 
   val blockNum =
     automataProducts.size
@@ -309,6 +309,6 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
         result
       }
     } finally {
-      // outFile.delete
+      outFile.delete
     }
 }
