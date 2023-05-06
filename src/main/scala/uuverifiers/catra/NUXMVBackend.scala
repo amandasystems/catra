@@ -28,8 +28,10 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
 
   import instance._
   val baseCommand = Array("nuxmv", "-int")
-  val Unreachable = """^-- invariant block .* is true$""".r
-  val Reachable = """^-- invariant block .* is false$""".r
+  // val Unreachable = """^-- invariant block .* is true$""".r
+  // val Reachable = """^-- invariant block .* is false$""".r
+  val Unreachable = """^-- invariant .* is true$""".r
+  val Reachable = """^-- invariant .* is false$""".r
   val CounterValue = """^ {4}counter_(\d+) = (\d+)$""".r
 
   val nuxmvCmd = arguments.timeout_ms match {
@@ -41,8 +43,9 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
 
   trace("nuxmv command line")(nuxmvCmd.mkString(" "))
 
-  val outFile =
-    File.createTempFile("parikh-", ".smv")
+  val outFile = new File("parikh.smv")
+  // val outFile =
+  //   File.createTempFile("parikh-", ".smv")
 
   val blockNum =
     automataProducts.size
@@ -209,10 +212,16 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
         )
       }
 
-    println("  " + or((autTransitions ++ blockTransitions): _*))
+    println("  " + or((autTransitions): _*))
+    // println("  " + or((autTransitions ++ blockTransitions): _*))
 
     println("INVARSPEC")
-    println("  " + blockVar + " != " + blockNum + ";")
+    println("! (" + and(
+              (for (c <- constraints)
+                yield SimpleAPI.pp(c.toPrincess(counterSubst))): _*
+            ) + ");")
+    // println("  " + blockVar + " != " + blockNum + ";")
+
   }
 
   val result: Try[SatisfactionResult] =
@@ -222,8 +231,6 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
         printNUXMVModule()
       }
       out.close()
-
-      printNUXMVModule()
 
       val process = Runtime.getRuntime.exec(nuxmvCmd)
       val stdin = process.getOutputStream
@@ -302,6 +309,6 @@ class NUXMVInstance(arguments: CommandLineOptions, instance: Instance)
         result
       }
     } finally {
-      outFile.delete
+      // outFile.delete
     }
 }
