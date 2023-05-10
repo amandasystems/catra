@@ -62,7 +62,9 @@ trait PredicateHandlingProcedure extends TheoryProcedure with Tracing {
         .take(1) // Why can't we do all of them!?
         .flatMap(handlePredicateInstance(goal))
     } catch {
-      case e: Throwable => /* logException(e); */ throw e
+      case e: Throwable =>
+        /* logException(e); */
+        throw e
     }
 }
 

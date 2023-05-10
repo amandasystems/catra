@@ -39,5 +39,18 @@ lazy val root = (project in file("."))
   .settings(
     name := "uuverifiers/catra",
     libraryDependencies += scalaTest % Test,
-    libraryDependencies += scalaCheck % Test
+    libraryDependencies += scalaCheck % Test,
+    assembly / mainClass := Some(
+      "uuverifiers.catra.SolveRegisterAutomata"
+    )
   )
+
+lazy val benchmark = (project in file("runner"))
+  .settings(
+    name := "catra-benchmark",
+    libraryDependencies +=
+      "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
+    assembly / mainClass := Some(
+      "uuverifiers.RunBenchmarks"
+    )
+  ) dependsOn root

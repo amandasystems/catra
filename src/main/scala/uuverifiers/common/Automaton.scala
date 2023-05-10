@@ -594,6 +594,7 @@ object REJECT_ALL extends Automaton {
   override lazy val isEmpty = true
   override lazy val acceptingStates: Set[State] = Set.empty
   override def toString = "∅ REJECT ALL"
+  override def name = "REJECT_ALL"
 
   override def filterTransitions(keepEdge: Transition => Boolean) = this
 

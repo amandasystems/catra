@@ -152,6 +152,7 @@ object CommandLineOptions {
       debug-unsat -- diagnose (an) incorrect unsat result(s)
 
     Available options (🐌 = likely to negatively impact performance):
+      --version         -- ignore everything and just print the version number.
       --print-decisions -- log partial decisions. Less verbose trace.
       --timeout milliseconds -- set the timeout in ms (default = $timeout_ms)
       --dump-smt <directory> -- dump SMT commands into this directory
@@ -235,7 +236,7 @@ object CommandLineOptions {
     (here relativize Paths.get(f.getCanonicalPath())).toString
   }
 
-  private def expandFileNameOrDirectoryOrGlob(
+  def expandFileNameOrDirectoryOrGlob(
       filePattern: String
   ): Seq[String] = {
     val expandedHomePath =
@@ -301,6 +302,8 @@ object CommandLineOptions {
       case "--print-proof" :: tail =>
         printProof = true
         parseFilesAndFlags(tail)
+      case "--version" :: _ =>
+        throw new RuntimeException(getVersion())
       case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail =>
@@ -309,12 +312,16 @@ object CommandLineOptions {
     }
   }
 
+  def getVersion(): String =
+    s"catra-${getClass.getPackage.getImplementationVersion}"
+
   @tailrec
   def parseMode(args: List[String]): Unit = args match {
-    case Nil                       => throw new Exception("Error: No mode specified! \n\n" + usage)
-    case "--" :: tail              => parseMode(tail)
-    case "--help" :: _ | "-h" :: _ => throw new Exception(usage)
-    case "solve-satisfy" :: rest   => parseFilesAndFlags(rest)
+    case Nil                          => throw new Exception("Error: No mode specified! \n\n" + usage)
+    case "--" :: tail                 => parseMode(tail)
+    case "--version" :: _ | "-v" :: _ => throw new Exception(getVersion())
+    case "--help" :: _ | "-h" :: _    => throw new Exception(usage)
+    case "solve-satisfy" :: rest      => parseFilesAndFlags(rest)
     case "find-image" :: rest =>
       runMode = FindImage
       parseFilesAndFlags(rest)

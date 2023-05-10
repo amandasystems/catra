@@ -2,6 +2,7 @@ package uuverifiers.catra
 import ap.SimpleAPI
 import ap.terfor.ConstantTerm
 import ap.parser.{IBoolLit, IFormula, ITerm, ITimes}
+import fastparse.Parsed
 import uuverifiers.common.{
   Automaton,
   AutomatonBuilder,
@@ -12,6 +13,7 @@ import uuverifiers.common.{
 }
 
 import scala.collection.mutable
+import scala.io.Source
 
 sealed case class Constant(value: Int) extends Term {
   override def toPrincess(counterConstants: Map[Counter, ConstantTerm]): ITerm =
@@ -387,6 +389,15 @@ class InputFileParser extends Tracing {
 }
 
 object InputFileParser {
+  def parseFile(fileName: String): Parsed[Instance] = {
+    val inputFileHandle = Source.fromFile(fileName)
+    try {
+      parse(inputFileHandle.mkString(""))
+    } finally {
+      inputFileHandle.close()
+    }
+  }
+
   def parse(s: String): fastparse.Parsed[Instance] = {
     val p = new InputFileParser()
     ap.util.Timeout.withTimeoutMillis(10000) {
