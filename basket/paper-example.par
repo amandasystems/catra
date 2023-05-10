@@ -1,0 +1,44 @@
+counter int al, bl, cl, ar, br, cr, dl, dr;
+
+synchronised {
+automaton atLeastOneC {
+  init S;
+
+  S -> S [97] {al +=1};
+  S -> S [98] {bl +=1};
+  S -> S [99] {cl +=1};
+  S -> C [99] {cl += 1};
+  S -> D [100] {dl += 1};
+
+  D -> D [100] {dl += 1};
+  D -> S [100] {dl += 1};
+  D -> C [100] {dl += 1};
+
+  C -> C [97] {al +=1};
+  C -> C [98] {bl +=1};
+  C -> C [99] {cl +=1};
+  accepting C, D;
+};
+
+automaton bbEtc {
+  init S;
+
+  S -> A [97] {ar += 1};
+  S -> B [98] {br += 1};
+  S -> B [100] {br +=1};
+
+  A -> A [99] {cr += 1};
+  A -> F [97] {ar += 1};
+
+  B -> S [98] {br += 1};
+  B -> F [99] {cr += 1};
+  B -> B [99] {cr += 1};
+  B -> F [100] {br += 1};
+
+  accepting F;
+
+};
+};
+
+constraint cr = cl && al = ar && bl = br;
+constraint ar > br;
