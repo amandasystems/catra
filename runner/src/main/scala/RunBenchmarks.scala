@@ -55,8 +55,8 @@ object RunBenchmarks extends App {
 
   {
     val runtime = Runtime.getRuntime
-    println(s"JVM version: ${System.getProperty("java.version")}")
-    println(s"Heap size: total: ${runtime.totalMemory()}B, max: ${runtime
+    println(s"INFO JVM version: ${System.getProperty("java.version")}")
+    println(s"INFO Heap size: total: ${runtime.totalMemory()}B, max: ${runtime
       .maxMemory()}B, free: ${runtime.freeMemory()}B")
   }
 
@@ -64,20 +64,29 @@ object RunBenchmarks extends App {
     val results = experiments.par
       .map {
         case (instanceName, instance, config, configName) =>
-          Seq(
+          (
             instanceName,
             configName,
-            fmtResult(measureTime(config.getBackend().solveSatisfy(instance)))
+            measureTime(config.getBackend().solveSatisfy(instance))
           )
       }
+      .iterator
+      .toSeq
+      .groupBy(_._1)
+      .view
+      .mapValues(_.map(s => (s._2, s._3)))
 
-    for (r <- results) {
-      println(r.mkString("\t"))
+    println(s"CONFIGS ${configNames.mkString("\t")}")
+    for ((instance, rs) <- results) {
+      val rsMap = rs.toMap
+      println(
+        s"RESULT $instance\t${configNames.map(c => fmtResult(rsMap(c))).mkString("\t")}"
+      )
     }
   }
 
   println(
-    s"Executed ${experiments.length} experiments with ${configurations.size} configurations and ${instances.length} instances in $runtime."
+    s"INFO Executed ${experiments.length} experiments with ${configurations.size} configurations and ${instances.length} instances in $runtime."
   )
 
 }
