@@ -3,17 +3,26 @@ import uuverifiers.catra
 import fastparse.Parsed
 import uuverifiers.catra.SatisfactionResult
 
+import java.util.Calendar
 import scala.util.{Failure, Random, Success, Try}
 import scala.collection.parallel.CollectionConverters._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent._
+import scala.concurrent.duration._
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
 
+  def runWithTimeout[T](timeoutMs: Long)(f: => T): Option[T] = {
+    import scala.language.postfixOps
+    Some(Await.result(Future(f), timeoutMs milliseconds))
+  }
+
   val baseConf = Array("solve-satisfy", "--timeout", "120000")
   val configurations: Map[String, catra.CommandLineOptions] = Map(
-    "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
+    //"lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
     "nuxmv" -> Array("--backend", "nuxmv"),
-    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
+    //"baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
     "lazy-regular" -> Array("--backend", "lazy")
   ).view
     .mapValues(
@@ -55,8 +64,10 @@ object RunBenchmarks extends App {
 
   {
     val runtime = Runtime.getRuntime
-    println(s"INFO JVM version: ${System.getProperty("java.version")}")
-    println(s"INFO Heap size: total: ${runtime.totalMemory()}B, max: ${runtime
+    print(
+      s"INFO ${Calendar.getInstance().getTime} JVM version: ${System.getProperty("java.version")}"
+    )
+    println(s" Heap size: total: ${runtime.totalMemory()}B, max: ${runtime
       .maxMemory()}B, free: ${runtime.freeMemory()}B")
   }
 
@@ -64,11 +75,9 @@ object RunBenchmarks extends App {
     val results = experiments.par
       .map {
         case (instanceName, instance, config, configName) =>
-          (
-            instanceName,
-            configName,
+          val resultAndTime =
             measureTime(config.getBackend().solveSatisfy(instance))
-          )
+          (instanceName, configName, resultAndTime)
       }
       .iterator
       .toSeq
@@ -86,7 +95,7 @@ object RunBenchmarks extends App {
   }
 
   println(
-    s"INFO Executed ${experiments.length} experiments with ${configurations.size} configurations and ${instances.length} instances in $runtime."
+    s"INFO ${Calendar.getInstance().getTime} Executed ${experiments.length} experiments with ${configurations.size} configurations and ${instances.length} instances in $runtime."
   )
 
 }

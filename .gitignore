@@ -20,3 +20,5 @@ experiments/trivial-*.log
 /graphs
 /parikh-plus
 .vscode
+benchmark/target
+validator/target

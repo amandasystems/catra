@@ -64,8 +64,14 @@ sealed case class CommandLineOptions(
   def withRandomSeed(newSeed: Int): CommandLineOptions =
     copy(randomSeed = newSeed)
 
+  def withTimeout(newTimeout: Option[Long]): CommandLineOptions =
+    copy(timeout_ms = newTimeout)
+
   def withRestartTimeoutFactor(newValue: Long): CommandLineOptions =
     copy(restartTimeoutFactor = newValue)
+
+  def withBackend(newBackend: BackendSelection): CommandLineOptions =
+    copy(backend = newBackend)
 
   def withProver[R <: Result](f: SimpleAPI => R): Try[R] =
     dumpSMTDir match {
@@ -330,6 +336,32 @@ object CommandLineOptions {
       parseFilesAndFlags(rest)
     case other :: _ =>
       throw new Exception(s"Error: Invalid mode `$other`!\n\n" + usage)
+  }
+
+  /**
+   * Convenience feature: produce a default set of options without parsing.
+   **/
+  def default(): CommandLineOptions = {
+    CommandLineOptions(
+      inputFiles = Seq(),
+      timeout_ms = timeout_ms,
+      printDecisions = printDecisions,
+      dumpSMTDir = dumpSMTDir,
+      dumpGraphvizDir = dumpGraphvizDir,
+      runMode = runMode,
+      backend = backend,
+      checkTermSat = !noCheckTermSat,
+      checkIntermediateSat = !noCheckIntermediateSat,
+      eliminateQuantifiers = !noEliminateQuantifiers,
+      dumpEquationDir = dumpEquationDir,
+      nrUnknownToMaterialiseProduct = nrUnknownToStartMaterialiseProduct,
+      enableClauseLearning = enableClauseLearning,
+      enableRestarts = enableRestarts,
+      restartTimeoutFactor = restartTimeoutFactor,
+      crossValidate = crossValidate,
+      randomSeed = randomSeed,
+      printProof = printProof
+    )
   }
 
   def parse(args: Array[String]): Try[CommandLineOptions] = Try {

@@ -1,7 +1,7 @@
 import Dependencies._
 
 ThisBuild / scalaVersion := "2.13.10"
-ThisBuild / version := "0.1.0-SNAPSHOT"
+ThisBuild / version := "0.1.0"
 ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
@@ -9,17 +9,18 @@ ThisBuild / scalacOptions ++= Seq(
   //"-Xfatal-warnings",
   "-Xdisable-assertions",
   "-unchecked",
-  "-Xlint",
+  //"-Xlint",
   "-Xelide-below",
   "INFO",
   "-feature",
-  "-opt-inline-from:**",
+  /*"-opt-inline-from:**",
   "-opt:l:method",
   "-opt:l:inline",
   "-opt:unreachable-code",
   "-opt:copy-propagation",
   "-opt:redundant-casts",
   "-opt:box-unbox",
+   */
   "-Ywarn-dead-code",
   "-Ywarn-unused"
 )
@@ -45,12 +46,22 @@ lazy val root = (project in file("."))
     )
   )
 
-lazy val benchmark = (project in file("runner"))
+lazy val benchmark = (project in file("benchmark"))
   .settings(
     name := "catra-benchmark",
+    version := s"${version.value}-1", // Version scheme is CATRA version - benchmark version
     libraryDependencies +=
       "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
     assembly / mainClass := Some(
       "uuverifiers.RunBenchmarks"
     )
+  ) dependsOn root
+
+lazy val validator = (project in file("validator"))
+  .settings(
+    name := "catra-validate",
+    version := s"${version.value}-1", // Version scheme is CATRA version - validator version
+    libraryDependencies +=
+      "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
+    assembly / mainClass := Some("uuverifiers.Validate")
   ) dependsOn root
