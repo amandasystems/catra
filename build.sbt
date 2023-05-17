@@ -60,7 +60,7 @@ lazy val benchmark = (project in file("benchmark"))
 lazy val validator = (project in file("validator"))
   .settings(
     name := "catra-validate",
-    version := s"${version.value}-1", // Version scheme is CATRA version - validator version
+    version := s"${version.value}-2", // Version scheme is CATRA version - validator version
     libraryDependencies +=
       "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
     assembly / mainClass := Some("uuverifiers.Validate")

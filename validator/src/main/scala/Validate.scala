@@ -24,7 +24,7 @@ import scala.collection.parallel.CollectionConverters._
 
 object Validate extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val timeout = Some(30000L)
+  private val timeout = Some(120000L)
   private val config = catra.CommandLineOptions.default().withTimeout(timeout)
   private val validator = config.withBackend(catra.ChooseNuxmv).getBackend()
 
@@ -97,12 +97,11 @@ object Validate extends App {
   private def validateResult(
       instance: catra.Instance,
       value: SatisfactionResult
-  ): Option[String] =
-    value match {
-      case Sat(assignments)         => validateSat(assignments, instance)
-      case Unsat                    => validateUnsat(instance)
-      case OutOfMemory | Timeout(_) => None
-    }
+  ): Option[String] = value match {
+    case Sat(assignments)         => validateSat(assignments, instance)
+    case Unsat                    => validateUnsat(instance)
+    case OutOfMemory | Timeout(_) => None
+  }
 
   private def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
     config.getBackend().solveSatisfy(instance)
@@ -121,17 +120,18 @@ object Validate extends App {
       }
 
     for ((instance, rs) <- results) {
-      rs.foreach(e => println(s"${now()} E $instance: $e"))
-      if (rs.nonEmpty) {
-        foundIssue = true
+      val outcome = rs match {
+        case Some(failure) => foundIssue = true; s"FAIL $failure"
+        case None          => "OK"
       }
+      println(s"${now()} $instance $outcome")
     }
   }
 
   println(if (foundIssue) {
-    s"${now()} Done validating in ${runtime}s!"
+    s"${now()} Validated ${instances.length} instances in ${runtime}s, with errors!"
   } else {
-    s"${now()} All validated OK in ${runtime}s!"
+    s"${now()} All ${instances.length} instances validated OK in ${runtime}s!"
   })
 
 }
