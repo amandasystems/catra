@@ -60,7 +60,7 @@ object SolveRegisterAutomata extends App with Tracing {
     (result, elapsed)
   }
 
-  def fatalError(reason: Throwable) = {
+  def fatalError(reason: Throwable): Nothing = {
     Console.err.println(reason.getMessage)
     sys.exit(1)
   }

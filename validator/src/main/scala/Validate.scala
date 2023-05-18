@@ -1,19 +1,12 @@
 package uuverifiers
 import fastparse.Parsed
 import uuverifiers.catra.{
-  And,
-  Constant,
   Counter,
-  CounterWithCoefficient,
-  Equals,
-  Formula,
-  Inequality,
   Instance,
   OutOfMemory,
   Sat,
   SatisfactionResult,
   Timeout,
-  TrueOrFalse,
   Unsat
 }
 
@@ -24,14 +17,12 @@ import scala.collection.parallel.CollectionConverters._
 
 object Validate extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val timeout = Some(120000L)
-  private val config = catra.CommandLineOptions.default().withTimeout(timeout)
+  import catra.InputFileParser.assignmentAsConstraint
+
+  private val config =
+    catra.CommandLineOptions.parse("solve-satisfy" +: args).get
   private val validator = config.withBackend(catra.ChooseNuxmv).getBackend()
-
-  private val instanceFiles =
-    args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
-
-  private val instances: Array[(String, Instance)] = instanceFiles
+  private val instances = config.inputFiles
     .flatMap(
       f =>
         catra.InputFileParser.parseFile(f) match {
@@ -41,31 +32,16 @@ object Validate extends App {
     )
 
   private def validateUnsat(instance: Instance): Option[String] =
-    validator.solveSatisfy(instance).get match {
-      case Sat(otherAssignment) =>
+    validator.solveSatisfy(instance) match {
+      case Success(Sat(otherAssignment)) =>
         Some(
           s"Validator disagrees with UNSAT, found result: ${assignmentAsConstraint(otherAssignment)}"
         )
-      case Unsat       => None
-      case OutOfMemory => Some("OOM validating Unsat!")
-      case Timeout(_)  => Some("Unknown: timeout validating Unsat!")
+      case Success(Unsat)       => None
+      case Success(OutOfMemory) => Some("OOM validating Unsat!")
+      case Success(Timeout(_))  => Some("Unknown: timeout validating Unsat!")
+      case Failure(e)           => Some(s"Error during validation of UNSAT: $e")
     }
-
-  private def assignmentAsConstraint(
-      assignments: Map[Counter, BigInteger]
-  ): Formula = {
-    assignments
-      .map {
-        case (c, v) =>
-          Inequality(
-            CounterWithCoefficient(1, c),
-            Equals,
-            Constant(v.intValueExact())
-          )
-      }
-      .reduceOption(And)
-      .getOrElse(TrueOrFalse(true))
-  }
 
   private def now(): Date = Calendar.getInstance().getTime
 
@@ -84,12 +60,14 @@ object Validate extends App {
       constraints = encodedAssignment
     )
 
-    validator.solveSatisfy(instanceWithSolutionAsserted).get match {
-      case Sat(_) => None
-      case Unsat =>
+    validator.solveSatisfy(instanceWithSolutionAsserted) match {
+      case Success(Sat(_)) => None
+      case Success(Unsat) =>
         Some(s"Validator disagrees with SAT result: $encodedAssignment")
-      case OutOfMemory => Some("OOM validating SAT!")
-      case Timeout(_)  => Some("Unknown: timeout validating!")
+      case Success(OutOfMemory) => Some("OOM validating SAT!")
+      case Success(Timeout(_))  => Some("Unknown: timeout validating!")
+      case Failure(e) =>
+        Some(s"Error during validation of $encodedAssignment: $e")
     }
 
   }
@@ -119,7 +97,7 @@ object Validate extends App {
           }
       }
 
-    for ((instance, rs) <- results) {
+    for ((instance, rs) <- results.iterator) {
       val outcome = rs match {
         case Some(failure) => foundIssue = true; s"FAIL $failure"
         case None          => "OK"

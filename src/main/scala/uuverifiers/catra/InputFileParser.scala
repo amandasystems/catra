@@ -12,6 +12,7 @@ import uuverifiers.common.{
   Tracing
 }
 
+import java.math.BigInteger
 import scala.collection.mutable
 import scala.io.Source
 
@@ -391,6 +392,27 @@ class InputFileParser extends Tracing {
 }
 
 object InputFileParser {
+
+  /**
+   * Generate a constraint that describes a satisfying assignment.
+   *
+   * @param assignments Assignments from counters to their values
+   * @return A Formula describing assignments (or True if assignments
+   *         are empty)
+   */
+  def assignmentAsConstraint(assignments: Map[Counter, BigInteger]): Formula = {
+    assignments
+      .map {
+        case (c, v) =>
+          Inequality(
+            CounterWithCoefficient(1, c),
+            Equals,
+            Constant(v.intValueExact())
+          )
+      }
+      .reduceOption(And)
+      .getOrElse(TrueOrFalse(true))
+  }
   def parseFile(fileName: String): Parsed[Instance] = {
     val inputFileHandle = Source.fromFile(fileName)
     try {

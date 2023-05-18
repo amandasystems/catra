@@ -57,7 +57,6 @@ sealed case class CommandLineOptions(
     enableClauseLearning: Boolean,
     enableRestarts: Boolean,
     restartTimeoutFactor: Long,
-    crossValidate: Boolean,
     randomSeed: Int,
     printProof: Boolean
 ) {
@@ -144,7 +143,6 @@ object CommandLineOptions {
   private var enableClauseLearning: Boolean = true
   private var enableRestarts = true
   private var restartTimeoutFactor = 500L
-  private var crossValidate = false
   private var randomSeed = 1234567
   private var printProof = false
 
@@ -299,9 +297,6 @@ object CommandLineOptions {
       case "--dump-equations" :: directory :: tail =>
         dumpEquationDir = Some(new File(directory))
         parseFilesAndFlags(tail)
-      case "--cross-validate" :: tail =>
-        crossValidate = true
-        parseFilesAndFlags(tail)
       case "--restart-timeout-factor" :: someFactor :: tail =>
         restartTimeoutFactor = someFactor.toLong
         parseFilesAndFlags(tail)
@@ -358,7 +353,6 @@ object CommandLineOptions {
       enableClauseLearning = enableClauseLearning,
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
-      crossValidate = crossValidate,
       randomSeed = randomSeed,
       printProof = printProof
     )
@@ -384,7 +378,6 @@ object CommandLineOptions {
       enableClauseLearning = enableClauseLearning,
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
-      crossValidate = crossValidate,
       randomSeed = randomSeed,
       printProof = printProof
     )

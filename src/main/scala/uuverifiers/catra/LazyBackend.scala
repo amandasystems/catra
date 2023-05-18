@@ -3,7 +3,7 @@ import ap.SimpleAPI
 import ap.terfor.conjunctions.{Conjunction, ReduceWithConjunction}
 import ap.terfor.{ConstantTerm, TermOrder}
 import uuverifiers.common.Automaton
-import uuverifiers.parikh_theory.{RegisterCounting}
+import uuverifiers.parikh_theory.RegisterCounting
 
 import scala.util.Try
 

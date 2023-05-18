@@ -1,4 +1,4 @@
-import Dependencies._
+import Dependencies.*
 
 ThisBuild / scalaVersion := "2.13.10"
 ThisBuild / version := "0.1.0"
@@ -49,7 +49,7 @@ lazy val root = (project in file("."))
 lazy val benchmark = (project in file("benchmark"))
   .settings(
     name := "catra-benchmark",
-    version := s"${version.value}-1", // Version scheme is CATRA version - benchmark version
+    version := s"${version.value}-2", // Version scheme is CATRA version - benchmark version
     libraryDependencies +=
       "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
     assembly / mainClass := Some(
@@ -60,7 +60,7 @@ lazy val benchmark = (project in file("benchmark"))
 lazy val validator = (project in file("validator"))
   .settings(
     name := "catra-validate",
-    version := s"${version.value}-2", // Version scheme is CATRA version - validator version
+    version := s"${version.value}-3", // Version scheme is CATRA version - validator version
     libraryDependencies +=
       "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
     assembly / mainClass := Some("uuverifiers.Validate")

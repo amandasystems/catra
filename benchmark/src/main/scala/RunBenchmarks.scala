@@ -1,39 +1,50 @@
 package uuverifiers
-import uuverifiers.catra
 import fastparse.Parsed
 import uuverifiers.catra.SatisfactionResult
 
 import java.util.Calendar
 import scala.util.{Failure, Random, Success, Try}
 import scala.collection.parallel.CollectionConverters._
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent._
-import scala.concurrent.duration._
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
 
-  def runWithTimeout[T](timeoutMs: Long)(f: => T): Option[T] = {
-    import scala.language.postfixOps
-    Some(Await.result(Future(f), timeoutMs milliseconds))
-  }
-
-  val baseConf = Array("solve-satisfy", "--timeout", "120000")
-  val configurations: Map[String, catra.CommandLineOptions] = Map(
-    //"lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
+  private val baseConf = Array("solve-satisfy", "--timeout", "120000")
+  private val nrMaterialiseEager = 500
+  private val nrMaterialiseLazy = 1
+  private val configurations = Map(
+    "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
     "nuxmv" -> Array("--backend", "nuxmv"),
     //"baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
-    "lazy-regular" -> Array("--backend", "lazy")
+    "lazy-regular" -> Array("--backend", "lazy"),
+    "lazy-no-clauselearning" -> Array(
+      "--backend",
+      "lazy",
+      "--no-restarts",
+      "--no-clause-learning"
+    ),
+    s"lazy-eager-$nrMaterialiseEager" -> Array(
+      "--backend",
+      "lazy",
+      "--nr-unknown-to-start-materialise",
+      nrMaterialiseEager.toString
+    ),
+    s"lazy-lazy-$nrMaterialiseLazy" -> Array(
+      "--backend",
+      "lazy",
+      "--nr-unknown-to-start-materialise",
+      nrMaterialiseLazy.toString
+    )
   ).view
     .mapValues(
       c => catra.CommandLineOptions.parse(baseConf ++ c).get
     )
     .toMap
 
-  val instanceFiles =
+  private val instanceFiles =
     args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
 
-  val instances = instanceFiles
+  private val instances = instanceFiles
     .flatMap(
       f =>
         catra.InputFileParser.parseFile(f) match {
@@ -42,9 +53,9 @@ object RunBenchmarks extends App {
         }
     )
 
-  val configNames = configurations.keys.toSeq.sorted
+  private val configNames = configurations.keys.toSeq.sorted
 
-  def fmtResult(r: (Try[SatisfactionResult], Double)): String = {
+  private def fmtResult(r: (Try[SatisfactionResult], Double)): String = {
     r match {
       case (Failure(_), _)                      => "e"
       case (Success(catra.Sat(_)), runtime)     => s"s$runtime"
@@ -55,7 +66,7 @@ object RunBenchmarks extends App {
   }
 
   // Shuffle the experiments to prevent systemic bias between configurations!
-  val experiments = Random.shuffle(instances.flatMap {
+  private val experiments = Random.shuffle(instances.flatMap {
     case (file, instance) =>
       configNames.map(
         configName => (file, instance, configurations(configName), configName)
@@ -71,7 +82,7 @@ object RunBenchmarks extends App {
       .maxMemory()}B, free: ${runtime.freeMemory()}B")
   }
 
-  val (_, runtime) = measureTime {
+  private val (_, runtime) = measureTime {
     val results = experiments.par
       .map {
         case (instanceName, instance, config, configName) =>
