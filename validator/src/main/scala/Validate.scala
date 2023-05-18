@@ -78,7 +78,7 @@ object Validate extends App {
   ): Option[String] = value match {
     case Sat(assignments)         => validateSat(assignments, instance)
     case Unsat                    => validateUnsat(instance)
-    case OutOfMemory | Timeout(_) => None
+    case OutOfMemory | Timeout(_) => Some("Timeout!")
   }
 
   private def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
@@ -87,23 +87,18 @@ object Validate extends App {
   private var foundIssue = false
 
   private val (_, runtime) = measureTime {
-    val results = instances.par
-      .map {
+    instances.par
+      .foreach {
         case (instanceName, instance) =>
-          solveSatisfy(instance) match {
-            case Failure(e) => (instanceName, Some(s"CRASH $e"))
-            case Success(value) =>
-              (instanceName, validateResult(instance, value))
-          }
+          val outcome =
+            solveSatisfy(instance) map (validateResult(instance, _)) match {
+              case Failure(e)             => Some(s"CRASH $e")
+              case Success(Some(failure)) => foundIssue = true; failure
+              case Success(None)          => "OK!"
+            }
+          println(s"${now()} $instanceName $outcome")
       }
 
-    for ((instance, rs) <- results.iterator) {
-      val outcome = rs match {
-        case Some(failure) => foundIssue = true; s"FAIL $failure"
-        case None          => "OK"
-      }
-      println(s"${now()} $instance $outcome")
-    }
   }
 
   println(if (foundIssue) {
