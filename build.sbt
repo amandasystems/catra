@@ -49,9 +49,7 @@ lazy val root = (project in file("."))
 lazy val benchmark = (project in file("benchmark"))
   .settings(
     name := "catra-benchmark",
-    version := s"${version.value}-2", // Version scheme is CATRA version - benchmark version
-    libraryDependencies +=
-      "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
+    version := s"${version.value}-4", // Version scheme is CATRA version - benchmark version
     assembly / mainClass := Some(
       "uuverifiers.RunBenchmarks"
     )

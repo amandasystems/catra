@@ -7,8 +7,10 @@ JARFILE="benchmark/target/scala-2.13/catra-benchmark-assembly-${CURRENT_VERSION}
 
 mkdir -p logs
 
+echo "" > $LOGFILE
+
 echo "${CURRENT_VERSION}: Executing experiments in parallel, logging to ${LOGFILE}"
 find "$@" -type f | xargs -n $RESTART_AFTER -- \
-  timeout 1h java -XX:MaxRAMPercentage=90.0 -jar "$JARFILE" | tee "$LOGFILE"
+  java -XX:MaxRAMPercentage=90.0 -jar "$JARFILE" | tee -a "$LOGFILE"
 
 echo "Done with all experiments!" >> "$LOGFILE"
