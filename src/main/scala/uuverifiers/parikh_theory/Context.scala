@@ -166,33 +166,35 @@ sealed case class Context(
   def dumpGraphs(
       directory: File,
       fileNamePrefix: String = s"${theoryInstance.filePrefix}"
-  ): Seq[String] = {
-    materialisedAutomata.zipWithIndex.map {
-      case (a, i) =>
-        new GraphvizDumper {
-          // NOTE: this is a brittle mapping since it will break silently if the
-          // order in ParikhTheory.automataClauses changes...
-          private val transitionToIdx: Map[Transition, Int] =
-            a.transitions.zipWithIndex.toMap
+  ): Seq[String] =
+    materialisedAutomata.zipWithIndex
+      .filter(ai => activeAutomata contains ai._2) // We only need to dump active automata, which may have changed!
+      .map {
+        case (a, i) =>
+          new GraphvizDumper {
+            // NOTE: this is a brittle mapping since it will break silently if the
+            // order in ParikhTheory.automataClauses changes...
+            private val transitionToIdx: Map[Transition, Int] =
+              a.transitions.zipWithIndex.toMap
 
-          private def markTransitionTerms(t: Transition) = {
-            // This is necessary because we might be called after all
-            // TransitionMask predicates are eliminated, which means that we do
-            // not have any information about the labelling.
-            val term = Try {
-              autTransitionTerm(i)(t)
-            }.map(_.toString).getOrElse("No term")
-            s"${t.label()}: ${transitionToIdx(t)}/$term"
-          }
+            private def markTransitionTerms(t: Transition) = {
+              // This is necessary because we might be called after all
+              // TransitionMask predicates are eliminated, which means that we do
+              // not have any information about the labelling.
+              val term = Try {
+                autTransitionTerm(i)(t)
+              }.map(_.toString).getOrElse("No term")
+              s"${t.label()}: ${transitionToIdx(t)}/$term"
+            }
 
-          def toDot(): String = a.toDot(
-            transitionAnnotator = markTransitionTerms _,
-            stateAnnotator = _.toString()
-          )
+            def toDot(): String = a.toDot(
+              transitionAnnotator = markTransitionTerms _,
+              stateAnnotator = _.toString()
+            )
 
-        }.dumpDotFile(directory, fileNamePrefix + s"-aut-$i.dot")
-        fileNamePrefix + s"-aut-$i.dot"
-    }.toSeq
-  }
+          }.dumpDotFile(directory, fileNamePrefix + s"-aut-$i.dot")
+          fileNamePrefix + s"-aut-$i.dot"
+      }
+      .toSeq
 
 }
