@@ -53,7 +53,7 @@ trait ParikhTheory
   }
 
   def dumpContextAutomata(c: Context): Unit =
-    dumpAutomata.toSeq.foreach(c.dumpGraphs(_))
+    dumpAutomata.foreach(c.dumpGraphs(_))
 
   /**
    * The number of unknown transitions for which to trigger materialising a product.

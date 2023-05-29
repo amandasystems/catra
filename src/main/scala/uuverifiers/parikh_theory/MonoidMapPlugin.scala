@@ -59,6 +59,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     trace("handlePredicateInstance") {
       val context = Context(goal, predicateAtom, theoryInstance)
       stats.increment("handlePredicateInstance")
+      theoryInstance.dumpContextAutomata(context)
 
       if (Param.MODEL_GENERATION(context.goal.settings)) {
 //        println("model generation, doing nothing")
@@ -384,7 +385,6 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val actions = removeUnusedPredicates ++ productClauses
 
-    theoryInstance.dumpContextAutomata(context)
     theoryInstance.logDecision("MaterialiseProduct", actions)
   }
 
