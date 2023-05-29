@@ -62,34 +62,36 @@ sealed class ExperimentRunner(
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val regularTimeout = 120000
+  private val regularTimeout = 20000
   private val baseConf =
     Array("solve-satisfy", "--timeout", regularTimeout.toString)
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
   private val configurations = Map(
     "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
-    "nuxmv" -> Array("--backend", "nuxmv")
-    //"baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
-//    "lazy-regular" -> Array("--backend", "lazy"),
-//    "lazy-no-clauselearning" -> Array(
-//      "--backend",
-//      "lazy",
-//      "--no-restarts",
-//      "--no-clause-learning"
-//    ),
-//    s"lazy-eager-$nrMaterialiseEager" -> Array(
-//      "--backend",
-//      "lazy",
-//      "--nr-unknown-to-start-materialise",
-//      nrMaterialiseEager.toString
-//    ),
-//    s"lazy-lazy-$nrMaterialiseLazy" -> Array(
-//      "--backend",
-//      "lazy",
-//      "--nr-unknown-to-start-materialise",
-//      nrMaterialiseLazy.toString
-//    )
+    "nuxmv-1" -> Array("--backend", "nuxmv"),
+    "nuxmv-2" -> Array("--backend", "nuxmv"),
+    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
+    "lazy-1" -> Array("--backend", "lazy"),
+    "lazy-2" -> Array("--backend", "lazy"),
+    "lazy-no-clauselearning" -> Array(
+      "--backend",
+      "lazy",
+      "--no-restarts",
+      "--no-clause-learning"
+    ),
+    s"lazy-eager-$nrMaterialiseEager" -> Array(
+      "--backend",
+      "lazy",
+      "--nr-unknown-to-start-materialise",
+      nrMaterialiseEager.toString
+    ),
+    s"lazy-lazy-$nrMaterialiseLazy" -> Array(
+      "--backend",
+      "lazy",
+      "--nr-unknown-to-start-materialise",
+      nrMaterialiseLazy.toString
+    )
   ).view
     .mapValues(
       c => catra.CommandLineOptions.parse(baseConf ++ c).get
@@ -158,9 +160,8 @@ object RunBenchmarks extends App {
     println(s"HARD TIMEOUT $maxTimeout FOR ALL")
 
     runner.results(maxTimeout) match {
-      case Failure(_: TimeoutException) => {
+      case Failure(_: TimeoutException) =>
         println("ERR hard timeout, some experiment is misbehaving!")
-      }
       case Failure(e) => println(s"ERR unknown error running experiments: $e")
       case Success(outcomes) =>
         for ((instance, rs) <- outcomes) {

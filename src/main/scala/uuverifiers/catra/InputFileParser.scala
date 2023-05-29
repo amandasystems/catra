@@ -237,6 +237,12 @@ class InputFileParser extends Tracing {
   private def digit[A : P]: P[Unit] = P(CharIn("0-9"))
   private def asciiLetter[A : P]: P[Unit] = CharIn("A-Z") | CharIn("a-z") | "_"
   private def counterType[A : P]: P[String] = P("int").!
+  private def charLiteral[A : P]: P[Char] = {
+    P(
+      "#" ~ (CharIn("A-Z") | CharIn("a-z")).!.map(_.charAt(0))
+        | ("0" | (CharIn("1-9") ~ digit.rep(0))).!.map(_.toInt.toChar)
+    )
+  }
   private def constant[A : P]: P[Int] =
     P("-".? ~ ("0" | (CharIn("1-9") ~ digit.rep(0)))).!.map(_.toInt)
   // FIXME I don't like how NotEquals isn't negated equals, but there is no
@@ -321,12 +327,11 @@ class InputFileParser extends Tracing {
     P(
       "[" ~
         (
-          (constant ~ "," ~ constant).map {
-            case (lower, upper) =>
-              SymbolicLabel(lower.toChar, upper.toChar)
-          }
-            | constant.map(c => SymbolicLabel.SingleChar(c.toChar))
-            | "any".!.map(_ => SymbolicLabel.AnyChar)
+          "any".!.map(_ => SymbolicLabel.AnyChar)
+            | (charLiteral ~ "," ~ charLiteral).map {
+              case (lower, upper) => SymbolicLabel(lower, upper)
+            }
+            | charLiteral.map(c => SymbolicLabel.SingleChar(c))
         )
         ~
           "]"
