@@ -102,7 +102,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
         stats.report()
 
         theoryInstance.logDecision(
-          "Subsume MonoidMap",
+          s"Subsume MonoidMap at ${context.goal.age}",
           actions = removeAssociatedPredicates :+ removeThisPredicateInstance
         )
       } else {
@@ -179,7 +179,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       )
 
       val subsumeActions: Seq[Plugin.Action] = theoryInstance.logDecision(
-        "SubsumeConnected",
+        s"SubsumeConnected at ${context.goal.age}",
         actions = {
           val definitelyReached = trace("definitelyReached")(
             aut.fwdReachable(
@@ -273,7 +273,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       // constrain any terms associated with a transition from a
       // *known* unreachable state to be = 0 ("not used").
       val unreachableActions: Seq[Plugin.AddAxiom] = theoryInstance.logDecision(
-        "Propagate-Connected",
+        s"Propagate-Connected at ${context.goal.age}",
         actions = trace("unreachableActions") {
           val fwdReachStates = aut.fwdReachable(deadTransitions)
           val deadStatesWithLiveTransitions = aut.states.filter(
@@ -385,7 +385,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val actions = removeUnusedPredicates ++ productClauses
 
-    theoryInstance.logDecision("MaterialiseProduct", actions)
+    theoryInstance
+      .logDecision(s"MaterialiseProduct at ${context.goal.age}", actions)
   }
 
   private def formulaForNewAutomaton(

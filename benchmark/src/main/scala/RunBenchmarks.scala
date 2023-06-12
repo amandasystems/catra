@@ -16,30 +16,28 @@ object RunBenchmarks extends App {
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
   private val configurations = Map(
-    "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
-    "nuxmv-1" -> Array("--backend", "nuxmv"),
-    "nuxmv-2" -> Array("--backend", "nuxmv"),
-    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
-    "lazy-1" -> Array("--backend", "lazy"),
-    "lazy-2" -> Array("--backend", "lazy"),
-    "lazy-no-clauselearning" -> Array(
-      "--backend",
-      "lazy",
-      "--no-restarts",
-      "--no-clause-learning"
-    ),
-    s"lazy-eager-$nrMaterialiseEager" -> Array(
-      "--backend",
-      "lazy",
-      "--nr-unknown-to-start-materialise",
-      nrMaterialiseEager.toString
-    ),
-    s"lazy-lazy-$nrMaterialiseLazy" -> Array(
-      "--backend",
-      "lazy",
-      "--nr-unknown-to-start-materialise",
-      nrMaterialiseLazy.toString
-    )
+//    "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
+    "nuxmv" -> Array("--backend", "nuxmv"),
+//    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
+    "lazy" -> Array("--backend", "lazy")
+//    "lazy-no-clauselearning" -> Array(
+//      "--backend",
+//      "lazy",
+//      "--no-restarts",
+//      "--no-clause-learning"
+//    ),
+//    s"lazy-eager-$nrMaterialiseEager" -> Array(
+//      "--backend",
+//      "lazy",
+//      "--nr-unknown-to-start-materialise",
+//      nrMaterialiseEager.toString
+//    ),
+//    s"lazy-lazy-$nrMaterialiseLazy" -> Array(
+//      "--backend",
+//      "lazy",
+//      "--nr-unknown-to-start-materialise",
+//      nrMaterialiseLazy.toString
+//    )
   ).view
     .mapValues(
       c => catra.CommandLineOptions.parse(baseConf ++ c).get

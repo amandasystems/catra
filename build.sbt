@@ -1,7 +1,7 @@
 import Dependencies.*
 
 ThisBuild / scalaVersion := "2.13.10"
-ThisBuild / version := "0.1.3"
+ThisBuild / version := "0.1.4"
 ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
@@ -49,7 +49,7 @@ lazy val root = (project in file("."))
 lazy val benchmark = (project in file("benchmark"))
   .settings(
     name := "catra-benchmark",
-    version := s"${version.value}-4", // Version scheme is CATRA version - benchmark version
+    version := s"${version.value}-5", // Version scheme is CATRA version - benchmark version
     assembly / mainClass := Some(
       "uuverifiers.RunBenchmarks"
     )

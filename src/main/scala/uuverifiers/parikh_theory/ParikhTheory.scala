@@ -118,6 +118,12 @@ trait ParikhTheory
 
   lazy val monoidMapPlugin = new MonoidMapPlugin(this)
 
+  def automaton(autId: Int): Automaton =
+    monoidMapPlugin.materialisedAutomata(autId)
+
+  def automaton(autTerm: LinearCombination): Automaton =
+    this.automaton(autTerm.constant.intValueSafe)
+
   final def plugin: Option[Plugin] = Some(monoidMapPlugin)
 
   // FIXME separate out the mapping to the monoid values

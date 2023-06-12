@@ -7,10 +7,16 @@ import ap.terfor.TermOrder
 import ap.terfor.linearcombination.LinearCombination
 import ap.terfor.preds.Atom
 import uuverifiers.common._
+import uuverifiers.parikh_theory.TransitionSplitter.{
+  BASE_COST,
+  RANDOM_SPLIT_COST,
+  SIZE_COST_FACTOR
+}
 
 object TransitionSplitter {
-  val BASE_COST = 100
-  val SIZE_COST_FACTOR = 10
+  private val BASE_COST = 100
+  private val SIZE_COST_FACTOR = 100
+  private val RANDOM_SPLIT_COST = 1
 
   def spawnSplitters(
       goal: Goal,
@@ -19,7 +25,7 @@ object TransitionSplitter {
     if (goal.facts.predicates contains theoryInstance.addedSplitter) {
       List()
     } else {
-      implicit val order = goal.order
+      implicit val order: TermOrder = goal.order
 
       val connectedLits =
         goal.facts.predConj
@@ -54,14 +60,12 @@ object TransitionSplitter {
       theoryInstance: ParikhTheory,
       imageTerm: LinearCombination,
       automataTerm: LinearCombination
-  ): Seq[Plugin.Action] =
-    // TOOD: take size of automata into account also in this case
-    List(
-      Plugin.ScheduleTask(
-        TransitionSplitter(theoryInstance, imageTerm, automataTerm),
-        BASE_COST
-      )
+  ): Seq[Plugin.Action] = List(
+    Plugin.ScheduleTask(
+      TransitionSplitter(theoryInstance, imageTerm, automataTerm),
+      BASE_COST
     )
+  )
 }
 
 sealed case class TransitionSplitter(
@@ -86,7 +90,7 @@ sealed case class TransitionSplitter(
       .sortBy(aId => !(context.activeAutomata contains aId))
    */
 
-  def splitOnRandomUnknown(
+  private def splitOnRandomUnknown(
       context: Context,
       auts: Iterable[Int]
   ): Option[Plugin.Action] = {
@@ -151,40 +155,39 @@ sealed case class TransitionSplitter(
       .map(cut => context.binarySplit(eqZ(cut)(context.goal.order)))
   }
 
-  val autNr = automataTerm.constant.intValueSafe
+  val autNr: Int = automataTerm.constant.intValueSafe
 
-  override def handleGoal(goal: Goal): Seq[Plugin.Action] = {
-    val connectedLits =
-      goal.facts.predConj
-        .positiveLitsWithPred(theoryInstance.connectedPredicate)
-    connectedLits.find(a => a(0) == imageTerm && a(1) == automataTerm) match {
-      case Some(a) => {
-        import TransitionSplitter.{BASE_COST, SIZE_COST_FACTOR}
-        val context = Context(goal, a, theoryInstance)
+  private def doSplit(description: String, split: Plugin.Action, penalty: Int) =
+    Plugin.ScheduleTask(
+      (_: Goal) => theoryInstance.logDecision(description, Seq(split)),
+      penalty
+    )
 
-        val split =
-          trySplittingComponent(context, List(autNr))
-            .orElse(splitOnRandomUnknown(context, List(autNr)))
-            .map(Seq(_))
-            .getOrElse(Seq())
+  override def handleGoal(goal: Goal): Seq[Plugin.Action] =
+    goal.facts.predConj
+      .positiveLitsWithPred(theoryInstance.connectedPredicate)
+      .find(a => a(0) == imageTerm && a(1) == automataTerm)
+      .flatMap { connectedInstance =>
+        val context = Context(goal, connectedInstance, theoryInstance)
 
-        val nrUnknown =
-          materialisedAutomata(autNr)
-            .transitionsBreadthFirst()
-            .count(context.transitionStatus(autNr)(_).isUnknown)
+        trySplittingComponent(context, List(autNr))
+          .map(doSplit("SplitSever", _, 0))
+          .orElse(
+            splitOnRandomUnknown(context, List(autNr))
+              .map(doSplit("SplitRandom", _, RANDOM_SPLIT_COST))
+          )
+          .map { splitAction =>
+            val nrUnknown =
+              materialisedAutomata(autNr)
+                .transitionsBreadthFirst()
+                .count(context.transitionStatus(autNr)(_).isUnknown)
+            val respawnAction = Plugin
+              .ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
 
-        theoryInstance.logDecision(
-          "Split",
-          List(
-            Plugin.ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
-          ) ++ split
-        )
+            List(splitAction, respawnAction)
+          }
       }
-      case None =>
-        // no more splitting necessary
-        List()
-    }
-  }
+      .getOrElse(Seq()) // No splitting was possible: we must be done.
 
   /*
   override def handlePredicateInstance(
