@@ -63,6 +63,7 @@ class LazyBackend(override val arguments: CommandLineOptions)
     def buildTheory(automataGroup: Seq[Automaton]): RegisterCounting =
       new RegisterCounting(
         automataGroup,
+        prioritiseSeveringCuts = arguments.prioritiseSeveringCuts,
         arguments.nrUnknownToMaterialiseProduct,
         dumpAutomata = arguments.dumpGraphvizDir,
         printDecisions = arguments.printDecisions

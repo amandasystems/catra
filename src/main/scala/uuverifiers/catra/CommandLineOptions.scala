@@ -19,7 +19,7 @@ sealed trait BackendSelection
 object BackendSelection {
   def apply(name: String): BackendSelection =
     Seq(ChooseLazy, ChooseNuxmv, ChooseBaseline)
-      .find(_.toString() == name)
+      .find(_.toString == name)
       .getOrElse {
         throw new IllegalArgumentException(s"Unknown backend: $name!")
       }
@@ -58,7 +58,8 @@ sealed case class CommandLineOptions(
     enableRestarts: Boolean,
     restartTimeoutFactor: Long,
     randomSeed: Int,
-    printProof: Boolean
+    printProof: Boolean,
+    prioritiseSeveringCuts: Boolean
 ) {
   def withRandomSeed(newSeed: Int): CommandLineOptions =
     copy(randomSeed = newSeed)
@@ -91,13 +92,13 @@ sealed case class CommandLineOptions(
         )
     }
 
-  def getBackend(): Backend = backend match {
+  def getBackend: Backend = backend match {
     case ChooseLazy     => new LazyBackend(this)
     case ChooseNuxmv    => new NUXMVBackend(this)
     case ChooseBaseline => new BaselineBackend(this)
   }
 
-  def runWithTimeout[R <: Result](
+  private def runWithTimeout[R <: Result](
       p: SimpleAPI
   )(block: => R): Try[R] =
     try {
@@ -124,7 +125,7 @@ sealed case class CommandLineOptions(
 }
 
 object CommandLineOptions {
-  private val fileSystem = FileSystems.getDefault()
+  private val fileSystem = FileSystems.getDefault
   private val fileExtension = ".par"
   var runMode: RunMode = SolveSatisfy
 
@@ -145,6 +146,7 @@ object CommandLineOptions {
   private var restartTimeoutFactor = 500L
   private var randomSeed = 1234567
   private var printProof = false
+  private var prioritiseSeveringCuts = true
 
   private val usage =
     s"""
@@ -202,6 +204,8 @@ object CommandLineOptions {
       --no-restarts -- disable periodical restarts. Experimentally better for SAT.
       --restart-timeout-factor -- The level of willingness to try before restarting.
                        Default: $restartTimeoutFactor.
+      --no-prioritise-severing-cuts -- Try to cut paths out of the automata when splitting,
+                       before attempting random splits. Default: ${!prioritiseSeveringCuts}.
          
 
     Environment variables:
@@ -236,8 +240,8 @@ object CommandLineOptions {
   }
 
   private def relativeToHere(f: File): String = {
-    val here = Paths.get(new File(".").getCanonicalPath())
-    (here relativize Paths.get(f.getCanonicalPath())).toString
+    val here = Paths.get(new File(".").getCanonicalPath)
+    (here relativize Paths.get(f.getCanonicalPath)).toString
   }
 
   def expandFileNameOrDirectoryOrGlob(
@@ -246,9 +250,9 @@ object CommandLineOptions {
     val expandedHomePath =
       Paths.get(filePattern.replaceFirst("^~", System.getProperty("user.home")))
 
-    expandedHomePath.toFile() match {
-      case f if f.isDirectory() => enumerateDirectory(expandedHomePath)
-      case f if f.exists()      => Seq(relativeToHere(f))
+    expandedHomePath.toFile match {
+      case f if f.isDirectory => enumerateDirectory(expandedHomePath)
+      case f if f.exists()    => Seq(relativeToHere(f))
       case f =>
         Console.err.println(s"W: file $f does not exist; skipping!")
         Seq()
@@ -256,7 +260,7 @@ object CommandLineOptions {
   }
 
   @tailrec
-  def parseFilesAndFlags(args: List[String]): Unit = {
+  private def parseFilesAndFlags(args: List[String]): Unit = {
     args match {
       case Nil                       =>
       case "--" :: tail              => parseFilesAndFlags(tail)
@@ -303,8 +307,11 @@ object CommandLineOptions {
       case "--print-proof" :: tail =>
         printProof = true
         parseFilesAndFlags(tail)
+      case "--no-prioritise-severing-cuts" :: tail =>
+        prioritiseSeveringCuts = false
+        parseFilesAndFlags(tail)
       case "--version" :: _ =>
-        throw new RuntimeException(getVersion())
+        throw new RuntimeException(getVersion)
       case option :: _ if option.matches("--.*") =>
         throw new IllegalArgumentException(s"unknown option: $option!")
       case other :: tail =>
@@ -313,14 +320,14 @@ object CommandLineOptions {
     }
   }
 
-  def getVersion(): String =
+  private def getVersion: String =
     s"catra-${getClass.getPackage.getImplementationVersion}"
 
   @tailrec
-  def parseMode(args: List[String]): Unit = args match {
+  private def parseMode(args: List[String]): Unit = args match {
     case Nil                          => throw new Exception("Error: No mode specified! \n\n" + usage)
     case "--" :: tail                 => parseMode(tail)
-    case "--version" :: _ | "-v" :: _ => throw new Exception(getVersion())
+    case "--version" :: _ | "-v" :: _ => throw new Exception(getVersion)
     case "--help" :: _ | "-h" :: _    => throw new Exception(usage)
     case "solve-satisfy" :: rest      => parseFilesAndFlags(rest)
     case "find-image" :: rest =>
@@ -354,7 +361,8 @@ object CommandLineOptions {
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
       randomSeed = randomSeed,
-      printProof = printProof
+      printProof = printProof,
+      prioritiseSeveringCuts = prioritiseSeveringCuts
     )
   }
 
@@ -379,7 +387,8 @@ object CommandLineOptions {
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
       randomSeed = randomSeed,
-      printProof = printProof
+      printProof = printProof,
+      prioritiseSeveringCuts = prioritiseSeveringCuts
     )
   }
 }

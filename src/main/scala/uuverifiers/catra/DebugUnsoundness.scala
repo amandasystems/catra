@@ -88,7 +88,7 @@ sealed case class Configuration(
   val nrAutomata: Int = instance.automataProducts.map(_.size).sum
 
   private def runOnce(): Score = {
-    configuration.getBackend().solveSatisfy(instance) match {
+    configuration.getBackend.solveSatisfy(instance) match {
       case Failure(_) | Success(Sat(_))               => Score(0, 0)
       case Success(Unsat)                             => Score(1, 0)
       case Success(OutOfMemory) | Success(Timeout(_)) => Score(0, 1)

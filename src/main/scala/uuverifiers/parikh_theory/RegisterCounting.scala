@@ -11,6 +11,7 @@ import java.io.File
 
 class RegisterCounting(
     automata: Seq[Automaton],
+    override val prioritiseSeveringCuts: Boolean,
     override val materialisationThreshold: Int = 5,
     override val dumpAutomata: Option[File] = None,
     override val printDecisions: Boolean = false

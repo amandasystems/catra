@@ -460,7 +460,10 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
 
     val counters: Set[Counter] = leftAut.counters() union rightAut.counters()
 
-    val theory = new RegisterCounting(IndexedSeq(leftAut, rightAut))
+    val theory = new RegisterCounting(
+      IndexedSeq(leftAut, rightAut),
+      prioritiseSeveringCuts = true
+    )
 
     SimpleAPI.withProver { p =>
       val constants =
@@ -528,7 +531,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
         .getAutomaton()
     )
 
-    val theory = new RegisterCounting(automata)
+    val theory = new RegisterCounting(automata, prioritiseSeveringCuts = true)
 
     SimpleAPI.withProver { p =>
       // Needs to happen first because it may affect order?
@@ -570,8 +573,8 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .setAccepting(2)
       .getAutomaton()
 
-    val theorySingle = new RegisterCounting(Seq(singleState))
-    val theoryTwo = new RegisterCounting(Seq(twoState))
+    val theorySingle = new RegisterCounting(Seq(singleState), true)
+    val theoryTwo = new RegisterCounting(Seq(twoState), true)
 
     SimpleAPI.withProver { p =>
       // Needs to happen first because it may affect order?
@@ -609,7 +612,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
       .setAccepting(2)
       .getAutomaton()
 
-    val theory = new RegisterCounting(Seq(emptyString, someOrNoChar))
+    val theory = new RegisterCounting(Seq(emptyString, someOrNoChar), true)
 
     SimpleAPI.withProver { p =>
       // Needs to happen first because it may affect order?
@@ -658,7 +661,7 @@ class TestParikhTheory extends AnyFunSuite with Tracing {
         .addTransition(Counting(6, CharRange(0, 65535), Map.empty, 6))
         .getAutomaton()
     )
-    val theory = new RegisterCounting(auts)
+    val theory = new RegisterCounting(auts, true)
 
     SimpleAPI.withProver { p =>
       p addTheory theory

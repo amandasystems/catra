@@ -22,6 +22,14 @@ sealed case class Context(
     monoidMapPredicateAtom: Atom,
     theoryInstance: ParikhTheory
 ) extends Tracing {
+  def getSplitter(i: Int): TransitionSplitter = {
+    if (theoryInstance.prioritiseSeveringCuts)
+      new SplitToCutComponent(theoryInstance, instanceTerm, i)
+        .chainBefore(new SplitOnRandomUnknown(theoryInstance, instanceTerm, i))
+    else
+      new SplitOnRandomUnknown(theoryInstance, instanceTerm, i)
+
+  }
 
   def autTransitionMask(autId: Int)(transition: Transition): Atom =
     autTransitionMasks(autId)(

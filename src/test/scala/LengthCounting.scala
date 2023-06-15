@@ -50,6 +50,6 @@ object LengthCounting {
         override def counters(): Set[Counter] = Set(lengthSymbol)
       }
     }
-    new RegisterCounting(automata = auts)
+    new RegisterCounting(automata = auts, prioritiseSeveringCuts = false)
   }
 }
