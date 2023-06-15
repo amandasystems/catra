@@ -34,6 +34,8 @@ class RegisterCounting(
       implicit order: TermOrder
   ): Conjunction = allowsMonoidValues(counters.map(counterToTerm))
 
+  override def toString : String = "RegisterCounting[" + automata.size + "]"
+
   TheoryRegistry register this
 
 }

@@ -71,8 +71,10 @@ sealed case class TransitionSplitter(
 ) extends TheoryProcedure
     with Tracing {
 
-  private val materialisedAutomata =
-    theoryInstance.monoidMapPlugin.materialisedAutomata
+  override def toString : String = "TransitionSplitter"
+
+  import theoryInstance.monoidMapPlugin.getMaterialisedAutomaton
+
 //  private val transitionPredicate = theoryInstance.transitionMaskPredicate
 //  override val procedurePredicate: Predicate = transitionPredicate
 
@@ -94,7 +96,7 @@ sealed case class TransitionSplitter(
     auts
       .map(
         aId =>
-          materialisedAutomata(aId)
+          getMaterialisedAutomaton(aId)
             .transitionsBreadthFirst()
             .filter(context.transitionStatus(aId)(_).isUnknown)
             .map(context.autTransitionTerm(aId))
@@ -169,7 +171,7 @@ sealed case class TransitionSplitter(
             .getOrElse(Seq())
 
         val nrUnknown =
-          materialisedAutomata(autNr)
+          getMaterialisedAutomaton(autNr)
             .transitionsBreadthFirst()
             .count(context.transitionStatus(autNr)(_).isUnknown)
 

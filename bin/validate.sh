@@ -5,4 +5,4 @@ LOGFILE="logs/${CURRENT_VERSION}.validation.log"
 JARFILE="validator/target/scala-2.13/catra-validate-assembly-${CURRENT_VERSION}.jar"
 
 mkdir -p logs
-java -XX:MaxRAMPercentage=90.0 -jar "$JARFILE" "$@" | tee $LOGFILE
+java -Xss20000k -Xmx3000m -jar "$JARFILE" "$@" | tee $LOGFILE

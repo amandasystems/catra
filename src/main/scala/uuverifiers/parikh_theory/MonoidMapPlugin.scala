@@ -24,6 +24,8 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     with NoAxiomGeneration
     with Tracing {
 
+  override def toString : String = "MonoidMapPlugin"
+
   private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
 
   import transitionExtractor.{
@@ -33,9 +35,17 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   }
 
   // A cache for materialised automata. The first ones are the same as auts.
-  val materialisedAutomata: ArrayBuffer[Automaton] = ArrayBuffer(
+  private val materialisedAutomata: ArrayBuffer[Automaton] = ArrayBuffer(
     theoryInstance.auts: _*
   )
+
+  def getMaterialisedAutomaton(id : Int) : Automaton = synchronized {
+    materialisedAutomata(id)
+  }
+
+  def allMaterialisedAutomata : Seq[Automaton] = synchronized {
+    materialisedAutomata.toSeq
+  }
 
   // bitvector for selected left bitvector for selected right, left id, right id
   private val productFingerprintToId =
@@ -165,7 +175,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
   ): Seq[Plugin.Action] =
     trace(s"handleConnectedInstance $connectedInstance") {
       val autId = autNr(connectedInstance)
-      val aut = materialisedAutomata(autId)
+      val aut = getMaterialisedAutomaton(autId)
       val transitionMask = context.autTransitionMask(autId)(_)
       val transitionToTerm = context.autTransitionTerm(autId)(_)
       implicit val order: TermOrder = context.goal.order
@@ -311,17 +321,21 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       )
     )
 
-    val productId = productFingerprintToId.getOrElseUpdate(
-      signature,
-      materialisedAutomata.size
-    )
-    if (productId == materialisedAutomata.size) {
-      val product = trace(s"Computed new product from ${leftId}x$rightId")(
-        context
-          .filteredAutomaton(leftId) productWith context
-          .filteredAutomaton(rightId)
-      )
-      materialisedAutomata += product
+    val productId = synchronized {
+      (productFingerprintToId get signature) match {
+        case Some(id) => id
+        case None => {
+          val product = trace(s"Computed new product from ${leftId}x$rightId")(
+            context
+              .filteredAutomaton(leftId) productWith context
+              .filteredAutomaton(rightId)
+          )
+          val id = materialisedAutomata.size
+          productFingerprintToId.put(signature, id)
+          materialisedAutomata += product
+          id
+        }
+      }
     }
 
     // Note: we cannot filter the product since it came from a different
@@ -351,7 +365,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     val productClauses =
       if (trace(s"$leftId}x$rightId is empty")(
-            materialisedAutomata(productNr).isEmpty
+            getMaterialisedAutomaton(productNr).isEmpty
           )) {
 
         def extractAssumptions(id: Int) =
@@ -395,7 +409,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       context: Context
   ) = {
 
-    val product = materialisedAutomata(productNr)
+    val product = getMaterialisedAutomaton(productNr)
     implicit val order: TermOrder = context.goal.order
     val varFactory = new FreshVariables(0)
     val transitionToTermSeq = trace("product transitionToTerm")(
@@ -443,7 +457,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
               )
             }
 
-          materialisedAutomata(autNr).transitions.map(
+          getMaterialisedAutomaton(autNr).transitions.map(
             termTransition =>
               trace(s"a#$autNr bridge: $termTransition") {
                 val termTransitionTerm = transitionToTerm(termTransition)

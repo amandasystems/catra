@@ -23,16 +23,19 @@ sealed case class Context(
     theoryInstance: ParikhTheory
 ) extends Tracing {
 
+  import theoryInstance.monoidMapPlugin.{getMaterialisedAutomaton, allMaterialisedAutomata}
+
   def autTransitionMask(autId: Int)(transition: Transition): Atom =
     autTransitionMasks(autId)(
-      materialisedAutomata(autId).transitions.indexOf(transition)
+      getMaterialisedAutomaton(autId).transitions.indexOf(transition)
     )
 
   def deselectedTransitionSignature(autId: Int): BitSet = {
     val definitelyDeselected =
-      mutable.BitSet(materialisedAutomata(autId).transitions.size)
+      mutable.BitSet(getMaterialisedAutomaton(autId).transitions.size)
+    definitelyDeselected.clear()
 
-    materialisedAutomata(autId).transitions.zipWithIndex
+    getMaterialisedAutomaton(autId).transitions.zipWithIndex
       .filter(tAndId => transitionStatus(autId)(tAndId._1).definitelyAbsent)
       .map(_._2)
       .foreach(tId => definitelyDeselected += tId)
@@ -67,7 +70,7 @@ sealed case class Context(
     if (xs.isEmpty) None else Some(xs(rand nextInt xs.size))
 
   def nrUnknownTransitions(aut: Int): Int =
-    materialisedAutomata(aut).transitions
+    getMaterialisedAutomaton(aut).transitions
       .count(t => transitionStatus(aut)(t) == TransitionSelected.Unknown)
 
   def nrUniqueTerms(aut: Int): Int =
@@ -95,9 +98,6 @@ sealed case class Context(
 
     s"Context: active automata: $automata, predicates: $predicates"
   }
-
-  private val materialisedAutomata =
-    theoryInstance.monoidMapPlugin.materialisedAutomata
 
   import theoryInstance.{
     transitionMaskPredicate => TransitionMask,
@@ -137,7 +137,7 @@ sealed case class Context(
   private val ttCache = new Memoiser[Int, Map[Transition, LinearCombination]]()
 
   private def computeTransitionMaskMap(autId: Int) =
-    materialisedAutomata(autId).transitions
+    getMaterialisedAutomaton(autId).transitions
       .zip(autTransitionMasks(autId).map(transitionTerm).iterator)
       .toMap
 
@@ -153,7 +153,7 @@ sealed case class Context(
 
   // FIXME excellent candidate for memoisation!
   def filteredAutomaton(autId: Int): Automaton =
-    materialisedAutomata(autId).filterTransitions(
+    getMaterialisedAutomaton(autId).filterTransitions(
       t =>
         !termMeansDefinitelyAbsent(
           goal,
@@ -167,7 +167,7 @@ sealed case class Context(
       directory: File,
       fileNamePrefix: String = s"${theoryInstance.filePrefix}"
   ): Seq[String] =
-    materialisedAutomata.zipWithIndex
+    allMaterialisedAutomata.zipWithIndex
       .filter(ai => activeAutomata contains ai._2) // We only need to dump active automata, which may have changed!
       .map {
         case (a, i) =>
