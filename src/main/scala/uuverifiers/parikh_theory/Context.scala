@@ -192,7 +192,10 @@ sealed case class Context(
               stateAnnotator = _.toString()
             )
 
-          }.dumpDotFile(directory, fileNamePrefix + s"-aut-$i.dot")
+          }.dumpDotFile(
+            directory,
+            fileNamePrefix + f"-aut-$i-goal-${goal.age}%07d.dot"
+          )
           fileNamePrefix + s"-aut-$i.dot"
       }
       .toSeq

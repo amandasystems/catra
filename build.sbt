@@ -1,7 +1,7 @@
 import Dependencies.*
 
 ThisBuild / scalaVersion := "2.13.10"
-ThisBuild / version := "0.1.2"
+ThisBuild / version := "0.1.3"
 ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
@@ -58,8 +58,6 @@ lazy val benchmark = (project in file("benchmark"))
 lazy val validator = (project in file("validator"))
   .settings(
     name := "catra-validate",
-    version := s"${version.value}-4", // Version scheme is CATRA version - validator version
-    libraryDependencies +=
-      "org.scala-lang.modules" %% "scala-parallel-collections" % "1.0.4",
+    version := s"${version.value}-5", // Version scheme is CATRA version - validator version
     assembly / mainClass := Some("uuverifiers.Validate")
   ) dependsOn root

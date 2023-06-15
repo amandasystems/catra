@@ -1,27 +1,20 @@
 package uuverifiers
 import fastparse.Parsed
-import uuverifiers.catra.{
-  Counter,
-  Instance,
-  OutOfMemory,
-  Sat,
-  SatisfactionResult,
-  Timeout,
-  Unsat
-}
+import uuverifiers.catra._
 
 import java.math.BigInteger
 import java.util.{Calendar, Date}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future, duration}
 import scala.util.{Failure, Success, Try}
-import scala.collection.parallel.CollectionConverters._
-
 object Validate extends App {
-  import catra.SolveRegisterAutomata.measureTime
   import catra.InputFileParser.assignmentAsConstraint
+  import catra.SolveRegisterAutomata.measureTime
 
   private val config =
     catra.CommandLineOptions.parse("solve-satisfy" +: args).get
   private val validator = config.withBackend(catra.ChooseNuxmv).getBackend()
+
   private val instances = config.inputFiles
     .flatMap(
       f =>
@@ -84,21 +77,34 @@ object Validate extends App {
   private def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
     config.getBackend().solveSatisfy(instance)
 
-  private var foundIssue = false
+  private def testInstance(instanceName: String, instance: Instance) =
+    (instanceName, solveSatisfy(instance) map (validateResult(instance, _)))
 
-  private val (_, runtime) = measureTime {
-    instances.par
-      .foreach {
-        case (instanceName, instance) =>
-          val outcome =
-            solveSatisfy(instance) map (validateResult(instance, _)) match {
-              case Failure(e)             => Some(s"CRASH $e")
-              case Success(Some(failure)) => foundIssue = true; failure
-              case Success(None)          => "OK!"
-            }
-          println(s"${now()} $instanceName $outcome")
+  private val (foundIssue, runtime) = measureTime {
+    var foundIssue = false
+
+    implicit val ec: ExecutionContext = ExecutionContext.global
+
+    val hardTimeout =
+      config.timeout_ms
+        .map(t => Duration(t * 3 + 1000, duration.MILLISECONDS))
+        .getOrElse(duration.Duration.Inf)
+
+    instances.map {
+      case (name, instance) => Future { testInstance(name, instance) }
+    } foreach { task =>
+      val outcome = Try(Await.result(task, hardTimeout)) match {
+        case Failure(exception) => s"Crash: $exception"
+        case Success((instanceName, Failure(e))) =>
+          Some(s"$instanceName CRASH $e")
+        case Success((instanceName, Success(Some(failure)))) =>
+          foundIssue = true; s"$instanceName $failure"
+        case Success((instanceName, Success(None))) => s"$instanceName OK!"
       }
 
+      println(s"${now()} $outcome")
+    }
+    foundIssue
   }
 
   println(if (foundIssue) {
