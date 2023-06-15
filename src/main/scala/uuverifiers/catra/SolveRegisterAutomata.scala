@@ -94,8 +94,8 @@ object SolveRegisterAutomata extends App with Tracing {
     }
 
     arguments.runMode match {
-      case FindImage    => arguments.getBackend().findImage(instance)
-      case SolveSatisfy => arguments.getBackend().solveSatisfy(instance)
+      case FindImage    => arguments.getBackend.findImage(instance)
+      case SolveSatisfy => arguments.getBackend.solveSatisfy(instance)
     }
   }
 

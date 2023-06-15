@@ -10,7 +10,7 @@ import uuverifiers.common.ExperimentRunner
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val regularTimeout = 20000
+  private val regularTimeout = 60000
   private val baseConf =
     Array("solve-satisfy", "--timeout", regularTimeout.toString)
   private val nrMaterialiseEager = 500
@@ -19,7 +19,12 @@ object RunBenchmarks extends App {
 //    "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
     "nuxmv" -> Array("--backend", "nuxmv"),
 //    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
-    "lazy" -> Array("--backend", "lazy")
+    "lazy" -> Array("--backend", "lazy"),
+    "lazy-simple-splitting" -> Array(
+      "--backend",
+      "lazy",
+      "--no-prioritise-severing-cuts"
+    )
 //    "lazy-no-clauselearning" -> Array(
 //      "--backend",
 //      "lazy",

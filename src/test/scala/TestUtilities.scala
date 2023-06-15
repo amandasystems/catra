@@ -159,7 +159,7 @@ object TestUtilities extends AnyFunSuite with Tracing {
           }
       }
 
-    val pt = new RegisterCounting(auts)
+    val pt = new RegisterCounting(auts, prioritiseSeveringCuts = true)
 
     SimpleAPI.withProver { p =>
       val counterToTerm =

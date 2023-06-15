@@ -13,7 +13,7 @@ object Validate extends App {
 
   private val config =
     catra.CommandLineOptions.parse("solve-satisfy" +: args).get
-  private val validator = config.withBackend(catra.ChooseNuxmv).getBackend()
+  private val validator = config.withBackend(catra.ChooseNuxmv).getBackend
 
   private val instances = config.inputFiles
     .flatMap(
@@ -75,7 +75,7 @@ object Validate extends App {
   }
 
   private def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
-    config.getBackend().solveSatisfy(instance)
+    config.getBackend.solveSatisfy(instance)
 
   private def testInstance(instanceName: String, instance: Instance) =
     (instanceName, solveSatisfy(instance) map (validateResult(instance, _)))

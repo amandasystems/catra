@@ -45,6 +45,10 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
   private val stats = new Statistics()
 
+  private def spawnSplitters(context: Context): Seq[Plugin.Action] =
+    context.activeAutomata.toSeq
+      .flatMap(a => context.getSplitter(a).spawn(context.goal))
+
   /**
    *  This callback is the entrypoint of the connectedness enforcement. It will
    *  determine subsumption, i.e. if there are no unknown transitions left on
@@ -69,7 +73,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
       handleMonoidMapSubsumption(context) elseDo
         handleConnectedInstances(context) elseDo
-        TransitionSplitter.spawnSplitters(goal, theoryInstance) elseDo
+        spawnSplitters(context) elseDo
         handleMaterialise(context)
     }
 
@@ -369,17 +373,14 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           )
         )
       } else {
-        TransitionSplitter.spawnSplitter(
-          context.theoryInstance,
-          context.monoidMapPredicateAtom(0),
-          productNr
-        ) ++
-          formulaForNewAutomaton(
-            productNr,
-            leftId,
-            rightId,
-            context
-          )
+        context
+          .getSplitter(productNr)
+          .spawn(context.goal) ++ formulaForNewAutomaton(
+          productNr,
+          leftId,
+          rightId,
+          context
+        )
 
       }
 

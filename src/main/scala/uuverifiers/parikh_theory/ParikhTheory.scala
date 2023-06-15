@@ -35,6 +35,9 @@ trait ParikhTheory
     with NoAxioms
     with Tracing
     with Complete {
+
+  val prioritiseSeveringCuts: Boolean
+
   val auts: IndexedSeq[Automaton]
 
   val dumpAutomata: Option[File] = None
@@ -50,6 +53,11 @@ trait ParikhTheory
       )
     }
     actions
+  }
+
+  def logDecision[A <: Plugin.Action](event: String, action: A): A = {
+    if (printDecisions) System.err.println(s"$event. Taking action: $action")
+    action
   }
 
   def dumpContextAutomata(c: Context): Unit =
@@ -104,8 +112,9 @@ trait ParikhTheory
   val unusedPredicate =
     new Predicate(s"Unused_${this.hashCode}", 2)
 
+  // Splitter_Added(s, n): Splitters installed in instance s for automaton n.
   val addedSplitter =
-    new Predicate(s"Splitter_Added_${this.hashCode}", 0)
+    new Predicate(s"Splitter_Added_${this.hashCode}", 2)
 
   override lazy val predicates =
     Seq(
@@ -246,6 +255,7 @@ object ParikhTheory {
       _monoidDimension: Int
   ): ParikhTheory = {
     new ParikhTheory {
+      override val prioritiseSeveringCuts: Boolean = true
       override val auts: IndexedSeq[Automaton] = _auts
       override def toMonoid(t: Transition): Seq[Option[LinearCombination]] =
         _toMonoid(t)

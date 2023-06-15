@@ -34,7 +34,7 @@ sealed class ExperimentRunner(
     for ((instanceName, instance, config, configName) <- experiments)
       yield Future {
         val resultAndTime =
-          measureTime(config.getBackend().solveSatisfy(instance))
+          measureTime(config.getBackend.solveSatisfy(instance))
         (instanceName, configName, resultAndTime)
       }
   def results(
