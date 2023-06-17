@@ -4,10 +4,70 @@ import ap.SimpleAPI
 import ap.SimpleAPI.ProverStatus
 import ap.terfor.ConstantTerm
 import ap.terfor.conjunctions.Conjunction
+import ap.parser._
 import uuverifiers.common.Tracing
 import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+
+object PrincessBasedBackend {
+
+  /**
+   * It is more efficient to skolemize formulas before sending them to
+   * the prover. This way, learnt lemmas can be kept during restarts.
+   */
+  class SkolemizingVisitor(p : SimpleAPI)
+        extends CollectingVisitor[(List[ITerm], Int, Int),
+                                  IExpression] {
+    import IExpression._
+
+    def apply(t : IExpression) : IExpression = this.visit(t, (List(), 0, 1))
+
+    override def preVisit(t : IExpression,
+                          ctxt : (List[ITerm], Int, Int)) : PreVisitResult = {
+      val (subst, shift, polarity) = ctxt
+
+      t match {
+        case t : IVariable => {
+          ShortCutResult(if (t.index >= subst.size)
+                           t shiftedBy shift
+                         else
+                           subst(t.index))
+        }
+        case _ : INot => {
+          UniSubArgs((subst, shift, -polarity))
+        }
+        case IBinFormula(IBinJunctor.Eqv, _, _) | _ : IFunApp | _ : IAtom => {
+          UniSubArgs((subst, shift, 0))
+        }
+        case ISortedQuantified(q, sort, f)
+            if (polarity == 1 && q == Quantifier.EX) ||
+               (polarity == -1 && q == Quantifier.ALL) => {
+          val newConst = p.createConstant(sort)
+          TryAgain(f, (newConst :: subst, shift - 1, polarity))
+        }
+        case t : IVariableBinder => {
+          val newSubst = for (t <- subst) yield VariableShiftVisitor(t, 0, 1)
+          UniSubArgs((ISortedVariable(0, t.sort) :: newSubst, shift, 0))
+        }
+        case _ => KeepArg
+      }
+    }
+
+    def postVisit(t : IExpression,
+                  ctxt : (List[ITerm], Int, Int),
+                  subres : Seq[IExpression]) : IExpression = {
+      t update subres
+    }
+
+  }
+
+  def skolemize(f : IFormula)(p : SimpleAPI) : IFormula = {
+    val visitor = new SkolemizingVisitor(p)
+    visitor(f).asInstanceOf[IFormula]
+  }
+
+}
 
 /**
  * A helper to construct backends that perform some kind of setup on the
@@ -44,6 +104,14 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
   }
 
+  private def geometric(i : Int) : Double = {
+    val r = 1.1
+    var res = 1.0
+    for (_ <- 0 until i)
+      res = res * r
+    res
+  }
+
   private def checkSat(p: SimpleAPI): ProverStatus.Value =
     if (arguments.enableRestarts && arguments.backend == ChooseLazy)
       checkSatWithRestarts(p)
@@ -55,7 +123,8 @@ trait PrincessBasedBackend extends Backend with Tracing {
       p: SimpleAPI,
       iteration: Int = 1
   ): ProverStatus.Value = {
-    val timeout: Long = luby(iteration) * arguments.restartTimeoutFactor
+    val runtime = luby(iteration) // geometric(iteration)
+    val timeout: Long = (runtime * arguments.restartTimeoutFactor).toLong
     ap.util.Timeout.check
     p.checkSat(block = false)
 
