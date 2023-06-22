@@ -1,12 +1,12 @@
 package uuverifiers
 import fastparse.Parsed
 import uuverifiers.catra.SatisfactionResult
+import uuverifiers.common.ExperimentRunner
 
 import java.util.Calendar
 import scala.concurrent.duration.Duration
 import scala.concurrent.{TimeoutException, duration}
 import scala.util.{Failure, Random, Success, Try}
-import uuverifiers.common.ExperimentRunner
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
@@ -16,19 +16,17 @@ object RunBenchmarks extends App {
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
   private val configurations = Map(
-    "lazy-norestart" -> Array("--backend", "lazy", "--no-restarts"),
-    "nuxmv-1" -> Array("--backend", "nuxmv"),
-    "nuxmv-2" -> Array("--backend", "nuxmv"),
-    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
-    "lazy-1" -> Array("--backend", "lazy"),
-    "lazy-2" -> Array("--backend", "lazy"),
+    //"nuxmv" -> Array("--backend", "nuxmv"),
+    //"baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
+    "lazy" -> Array("--backend", "lazy")
+    /*
     "lazy-no-clauselearning" -> Array(
       "--backend",
       "lazy",
       "--no-restarts",
       "--no-clause-learning"
     ),
-    s"lazy-eager-$nrMaterialiseEager" -> Array(
+        s"lazy-eager-$nrMaterialiseEager" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
@@ -39,7 +37,7 @@ object RunBenchmarks extends App {
       "lazy",
       "--nr-unknown-to-start-materialise",
       nrMaterialiseLazy.toString
-    )
+    )*/
   ).view
     .mapValues(
       c => catra.CommandLineOptions.parse(baseConf ++ c).get
@@ -79,7 +77,8 @@ object RunBenchmarks extends App {
   }.toSeq)
 
   private val runtime = Runtime.getRuntime
-  private val nrWorkers = runtime.availableProcessors / 2
+  //private val nrWorkers = runtime.availableProcessors / 2
+  private val nrWorkers = 1
 
   print(
     s"INFO ${Calendar.getInstance().getTime} JVM version: ${System.getProperty("java.version")}"
@@ -88,6 +87,14 @@ object RunBenchmarks extends App {
     s" Heap size: total: ${runtime.totalMemory()}B, max: ${runtime
       .maxMemory()}B, free: ${runtime.freeMemory()}B, nr cores: ${runtime.availableProcessors}, using: $nrWorkers"
   )
+
+  println("INFO: doing warm-up run...")
+  catra.CommandLineOptions
+    .default()
+    .withTimeout(Some(10000))
+    .getBackend()
+    .solveSatisfy(instances(0)._2)
+  println("...warm-up done!")
 
   private val (_, totalTimeSpent) = measureTime {
     val runner = new ExperimentRunner(experiments, nrWorkers)

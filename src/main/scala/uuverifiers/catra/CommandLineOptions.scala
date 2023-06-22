@@ -121,6 +121,28 @@ sealed case class CommandLineOptions(
         Success(Timeout(timeout_ms.getOrElse(0)).asInstanceOf[R])
       case e: Throwable => Failure(e)
     }
+
+  override def toString: String = {
+    val optionsAsStrings = Seq(
+      timeout_ms.map(to => s"--timeout $to").getOrElse(""),
+      if (printDecisions) "--print-decisions" else "",
+      s"--backend $backend",
+      dumpSMTDir.map(dir => s"--dump-smtlib $dir").getOrElse(""),
+      dumpGraphvizDir.map(dir => s"--dump-graphviz $dir").getOrElse(""),
+      dumpEquationDir.map(dir => s"--dump-equations $dir").getOrElse(""),
+      if (printProof) "--print-proofs" else "",
+      if (!eliminateQuantifiers) "--no-eliminate-quantifiers" else "",
+      if (!checkTermSat) "--no-check-term-sat" else "",
+      if (!checkIntermediateSat) "--no-check-intermediate-sat" else "",
+      s"--nr-unknown-to-start-materialise $nrUnknownToMaterialiseProduct",
+      if (!enableClauseLearning) "--no-clause-learning" else "",
+      if (!enableRestarts) "--no-restarts" else "",
+      s"--restart-timeout-factor $restartTimeoutFactor"
+    ).filterNot(_.isEmpty)
+
+    s"$runMode ${optionsAsStrings.mkString(" ")} ${inputFiles.mkString(" ")}"
+  }
+
 }
 
 object CommandLineOptions {
