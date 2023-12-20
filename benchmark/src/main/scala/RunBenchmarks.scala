@@ -17,8 +17,8 @@ object RunBenchmarks extends App {
   private val nrMaterialiseLazy = 1
   private val configurations = Map(
     //"nuxmv" -> Array("--backend", "nuxmv"),
-    //"baseline" -> Array("--backend", "baseline", "--timeout", "30000"), // We know baseline doesn't improve beyond 30s
-    "lazy" -> Array("--backend", "lazy")
+    "baseline" -> Array("--backend", "baseline", "--timeout", "30000") // We know baseline doesn't improve beyond 30s
+    //"lazy" -> Array("--backend", "lazy")
     /*
     "lazy-no-clauselearning" -> Array(
       "--backend",

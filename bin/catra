@@ -1,7 +1,7 @@
 #!/bin/sh
 
 JVM_OPTS=-Xmx10g
-CATRA_VERSION=0.1.2
+CATRA_VERSION=0.1.4
 SCRIPT_DIR=$(dirname "$0")
 
 java ${JVM_OPTS} -jar ${SCRIPT_DIR}/../target/scala-2.13/uuverifiers/catra-assembly-${CATRA_VERSION}.jar $@ 
