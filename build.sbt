@@ -30,8 +30,7 @@ ThisBuild / scalacOptions ++= Seq(
 ThisBuild / coverageExcludedFiles := ".*/src/test/.*"
 // ThisBuild / coverageEnabled := true
 
-ThisBuild / resolvers += ("uuverifiers" at "http://logicrunch.research.it.uu.se/maven/")
-  .withAllowInsecureProtocol(true)
+ThisBuild / resolvers += "uuverifiers" at "https://eldarica.org/maven/"
 
 ThisBuild / libraryDependencies += princess
 ThisBuild / libraryDependencies += fastparse
