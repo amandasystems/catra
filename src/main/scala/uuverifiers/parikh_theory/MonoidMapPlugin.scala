@@ -369,41 +369,39 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
 
     lazy val productName = s"$leftId}x$rightId"
     val productClauses = getMaterialisedAutomaton(productNr) match {
-      case leftxRight
-          if trace(s"$productName is empty")(
-            !theoryInstance.oldBehaviourEnabled && getMaterialisedAutomaton(
-              productNr
-            ).isEmpty
-          ) =>
-        Seq(
-          Plugin.AddAxiom(
-            assumptions,
-            Conjunction.FALSE,
-            theoryInstance
+      case leftxRight if leftxRight.isEmpty =>
+        trace(s"$productName is empty")(
+          Seq(
+            Plugin.AddAxiom(
+              assumptions,
+              Conjunction.FALSE,
+              theoryInstance
+            )
           )
         )
       case leftxRight
-          if trace(s"$productName is singleton; all transitions zero!")(
-            leftxRight.transitionsFrom(leftxRight.initialState).isEmpty
-          ) => {
-        implicit val order: TermOrder = context.goal.order
+          if !theoryInstance.oldBehaviourEnabled && leftxRight
+            .transitionsFrom(leftxRight.initialState)
+            .isEmpty =>
+        trace(s"$productName is singleton; all transitions zero!") {
+          implicit val order: TermOrder = context.goal.order
 
-        val allTransitionsZero = conj(
-          context.activeAutomata.unsorted.flatMap(
-            a =>
-              getMaterialisedAutomaton(a).transitions
-                .map(t => context.autTransitionTerm(a)(t) === 0)
+          val allTransitionsZero = conj(
+            context.activeAutomata.unsorted.flatMap(
+              a =>
+                getMaterialisedAutomaton(a).transitions
+                  .map(t => context.autTransitionTerm(a)(t) === 0)
+            )
           )
-        )
 
-        Seq(
-          Plugin.AddAxiom(
-            assumptions,
-            allTransitionsZero,
-            theoryInstance
+          Seq(
+            Plugin.AddAxiom(
+              assumptions,
+              allTransitionsZero,
+              theoryInstance
+            )
           )
-        )
-      }
+        }
       case _ =>
         TransitionSplitter.spawnSplitter(
           context.theoryInstance,
