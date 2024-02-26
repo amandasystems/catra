@@ -71,7 +71,7 @@ sealed case class TransitionSplitter(
 ) extends TheoryProcedure
     with Tracing {
 
-  override def toString : String = "TransitionSplitter"
+  override def toString: String = "TransitionSplitter"
 
   import theoryInstance.monoidMapPlugin.getMaterialisedAutomaton
 
@@ -176,7 +176,7 @@ sealed case class TransitionSplitter(
             .count(context.transitionStatus(autNr)(_).isUnknown)
 
         theoryInstance.logDecision(
-          "Split",
+          s"Split at ${goal.age}",
           List(
             Plugin.ScheduleTask(this, BASE_COST + nrUnknown * SIZE_COST_FACTOR)
           ) ++ split

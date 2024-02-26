@@ -9,6 +9,8 @@ import java.nio.file.FileVisitResult
 import java.nio.file.attribute.BasicFileAttributes
 import java.io.{File, IOException}
 import ap.SimpleAPI
+import scala.annotation.elidable
+import scala.annotation.elidable.FINE
 
 import scala.annotation.tailrec
 import scala.util.Success
@@ -227,8 +229,13 @@ object CommandLineOptions {
          
 
     Environment variables:
-      CATRA_TRACE -- if set to "true", enable very very verbose logging 🐌
+      ${describeTrace()}
   """
+
+  @elidable(FINE)
+  private def describeTrace(): String = {
+    "CATRA_TRACE -- if set to \"true\", enable very very verbose logging 🐌"
+  }
 
   private def enumerateDirectory(dir: Path): Seq[String] = {
     val pathMatcher = fileSystem.getPathMatcher(s"glob:**$fileExtension")

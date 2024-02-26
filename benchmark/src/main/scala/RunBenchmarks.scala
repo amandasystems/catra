@@ -10,12 +10,12 @@ import scala.util.{Failure, Random, Success, Try}
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val regularTimeout = 120000
+  private val regularTimeout = sys.env.getOrElse("CATRA_TIMEOUT", "30000").toInt
   private val baseConf =
     Array("solve-satisfy", "--timeout", regularTimeout.toString)
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
-  private val configurations = Map(
+  private val baseConfigurations = Map(
     "nuxmv" -> Array("--backend", "nuxmv"),
     "baseline" -> Array("--backend", "baseline", "--timeout", "30000"),
     "lazy" -> Array("--backend", "lazy"),
@@ -43,6 +43,9 @@ object RunBenchmarks extends App {
     )
     .toMap
 
+  private val selectConfigurations = sys.env.getOrElse("CATRA_CONFIGS", baseConfigurations.keys.mkString(",")).split(",").toSet
+  private val filteredConfigurations = baseConfigurations.view.filterKeys(selectConfigurations).toMap
+
   private val instanceFiles =
     args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
 
@@ -55,7 +58,7 @@ object RunBenchmarks extends App {
         }
     )
 
-  private val configNames = configurations.keys.toSeq.sorted
+  private val configNames = filteredConfigurations.keys.toSeq.sorted
 
   private def fmtResult(r: (Try[SatisfactionResult], Double)): String = {
     r match {
@@ -71,7 +74,7 @@ object RunBenchmarks extends App {
   private val experiments = Random.shuffle(instances.flatMap {
     case (file, instance) =>
       configNames.map(
-        configName => (file, instance, configurations(configName), configName)
+        configName => (file, instance, filteredConfigurations(configName), configName)
       )
   }.toSeq)
 
@@ -98,7 +101,7 @@ object RunBenchmarks extends App {
     val runner = new ExperimentRunner(experiments, nrWorkers)
 
     println(s"CONFIGS ${configNames.mkString("\t")}")
-    configurations.foreachEntry {
+    filteredConfigurations.foreachEntry {
       case (name, config) =>
         println(s"CONFIG $name IS $config")
     }
@@ -128,7 +131,7 @@ object RunBenchmarks extends App {
   }
 
   println(
-    s"INFO ${Calendar.getInstance().getTime} Executed ${experiments.length} experiments with ${configurations.size} configurations and ${instances.length} instances in $totalTimeSpent."
+    s"INFO ${Calendar.getInstance().getTime} Executed ${experiments.length} experiments with ${filteredConfigurations.size} configurations and ${instances.length} instances in $totalTimeSpent."
   )
 
 }
