@@ -15,27 +15,43 @@ object RunBenchmarks extends App {
     Array("solve-satisfy", "--timeout", regularTimeout.toString)
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
+  private val cactusTimeout = "120000"
   private val baseConfigurations = Map(
     "nuxmv" -> Array("--backend", "nuxmv"),
-    "baseline" -> Array("--backend", "baseline", "--timeout", "30000"),
-    "lazy" -> Array("--backend", "lazy"),
+    "baseline" -> Array("--backend", "baseline"),
+    "lazy-new" -> Array("--backend", "lazy"),
+    "lazy-old" -> Array("--backend", "lazy", "--old-behaviour"),
+    // Cactus plot entries:
+    "baseline-cactus" -> Array(
+      "--backend",
+      "baseline",
+      "--timeout",
+      cactusTimeout
+    ),
+    "lazy-cactus" -> Array("--backend", "lazy", "--timeout", cactusTimeout),
     "lazy-no-clauselearning" -> Array(
       "--backend",
       "lazy",
       "--no-restarts",
-      "--no-clause-learning"
+      "--no-clause-learning",
+      "--timeout",
+      cactusTimeout
     ),
-        s"lazy-eager-$nrMaterialiseEager" -> Array(
+    s"lazy-eager-$nrMaterialiseEager" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
-      nrMaterialiseEager.toString
+      nrMaterialiseEager.toString,
+      "--timeout",
+      cactusTimeout
     ),
     s"lazy-lazy-$nrMaterialiseLazy" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
-      nrMaterialiseLazy.toString
+      nrMaterialiseLazy.toString,
+      "--timeout",
+      cactusTimeout
     )
   ).view
     .mapValues(
@@ -43,8 +59,12 @@ object RunBenchmarks extends App {
     )
     .toMap
 
-  private val selectConfigurations = sys.env.getOrElse("CATRA_CONFIGS", baseConfigurations.keys.mkString(",")).split(",").toSet
-  private val filteredConfigurations = baseConfigurations.view.filterKeys(selectConfigurations).toMap
+  private val selectConfigurations = sys.env
+    .getOrElse("CATRA_CONFIGS", baseConfigurations.keys.mkString(","))
+    .split(",")
+    .toSet
+  private val filteredConfigurations =
+    baseConfigurations.view.filterKeys(selectConfigurations).toMap
 
   private val instanceFiles =
     args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
@@ -74,12 +94,14 @@ object RunBenchmarks extends App {
   private val experiments = Random.shuffle(instances.flatMap {
     case (file, instance) =>
       configNames.map(
-        configName => (file, instance, filteredConfigurations(configName), configName)
+        configName =>
+          (file, instance, filteredConfigurations(configName), configName)
       )
   }.toSeq)
 
   private val runtime = Runtime.getRuntime
-  private val nrWorkers = runtime.availableProcessors / 4
+//  private val nrWorkers = runtime.availableProcessors / 4
+  private val nrWorkers = 1
 
   print(
     s"INFO ${Calendar.getInstance().getTime} JVM version: ${System.getProperty("java.version")}"
