@@ -60,7 +60,8 @@ sealed case class CommandLineOptions(
     enableRestarts: Boolean,
     restartTimeoutFactor: Long,
     randomSeed: Int,
-    printProof: Boolean
+    printProof: Boolean,
+    old: Boolean
 ) {
   def withRandomSeed(newSeed: Int): CommandLineOptions =
     copy(randomSeed = newSeed)
@@ -139,6 +140,7 @@ sealed case class CommandLineOptions(
       s"--nr-unknown-to-start-materialise $nrUnknownToMaterialiseProduct",
       if (!enableClauseLearning) "--no-clause-learning" else "",
       if (!enableRestarts) "--no-restarts" else "",
+      if (old) "--old-behaviour" else "",
       s"--restart-timeout-factor $restartTimeoutFactor"
     ).filterNot(_.isEmpty)
 
@@ -169,6 +171,7 @@ object CommandLineOptions {
   private var restartTimeoutFactor = 500L
   private var randomSeed = 1234567
   private var printProof = false
+  private var old = false // Used in development
 
   private val usage =
     s"""
@@ -332,6 +335,10 @@ object CommandLineOptions {
       case "--print-proof" :: tail =>
         printProof = true
         parseFilesAndFlags(tail)
+      case "--old-behaviour" :: tail =>
+        old = true
+        parseFilesAndFlags(tail)
+
       case "--version" :: _ =>
         throw new RuntimeException(getVersion())
       case option :: _ if option.matches("--.*") =>
@@ -383,7 +390,8 @@ object CommandLineOptions {
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
       randomSeed = randomSeed,
-      printProof = printProof
+      printProof = printProof,
+      old = old
     )
   }
 
@@ -408,7 +416,8 @@ object CommandLineOptions {
       enableRestarts = enableRestarts,
       restartTimeoutFactor = restartTimeoutFactor,
       randomSeed = randomSeed,
-      printProof = printProof
+      printProof = printProof,
+      old = old
     )
   }
 }

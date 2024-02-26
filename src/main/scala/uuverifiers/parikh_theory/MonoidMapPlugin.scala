@@ -371,7 +371,9 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     val productClauses = getMaterialisedAutomaton(productNr) match {
       case leftxRight
           if trace(s"$productName is empty")(
-            getMaterialisedAutomaton(productNr).isEmpty
+            !theoryInstance.oldBehaviourEnabled && getMaterialisedAutomaton(
+              productNr
+            ).isEmpty
           ) =>
         Seq(
           Plugin.AddAxiom(
