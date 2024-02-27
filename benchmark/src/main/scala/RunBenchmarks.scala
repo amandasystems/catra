@@ -11,8 +11,6 @@ import scala.util.{Failure, Random, Success, Try}
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
   private val regularTimeout = sys.env.getOrElse("CATRA_TIMEOUT", "30000").toInt
-  private val baseConf =
-    Array("solve-satisfy", "--timeout", regularTimeout.toString)
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
   private val cactusTimeout = "120000"
@@ -20,8 +18,9 @@ object RunBenchmarks extends App {
     "nuxmv" -> Array("--backend", "nuxmv"),
     "baseline" -> Array("--backend", "baseline"),
     "lazy-new" -> Array("--backend", "lazy"),
-    "lazy-old" -> Array("--backend", "lazy", "--old-behaviour"),
+    "lazy-old" -> Array("--backend", "lazy", "--old-behaviour") /*,
     // Cactus plot entries:
+
     "baseline-cactus" -> Array(
       "--backend",
       "baseline",
@@ -52,10 +51,15 @@ object RunBenchmarks extends App {
       nrMaterialiseLazy.toString,
       "--timeout",
       cactusTimeout
-    )
+    )*/
   ).view
     .mapValues(
-      c => catra.CommandLineOptions.parse(baseConf ++ c).get
+      c =>
+        catra.CommandLineOptions
+          .parse(
+            Array("solve-satisfy", "--timeout", regularTimeout.toString) ++ c
+          )
+          .get
     )
     .toMap
 
@@ -63,8 +67,8 @@ object RunBenchmarks extends App {
     .getOrElse("CATRA_CONFIGS", baseConfigurations.keys.mkString(","))
     .split(",")
     .toSet
-  private val filteredConfigurations =
-    baseConfigurations.view.filterKeys(selectConfigurations).toMap
+  private val filteredConfigurations = baseConfigurations
+  //  baseConfigurations.view.filterKeys(selectConfigurations).toMap
 
   private val instanceFiles =
     args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
