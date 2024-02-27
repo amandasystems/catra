@@ -2,10 +2,10 @@
 set -x
 CURRENT_VERSION=$(sbt -Dsbt.supershell=false -error "print benchmark/version")
 RESTART_AFTER=10
-LOGFILE="logs/catra-${CURRENT_VERSION}.experiments.log"
+LOGFILE="logs${CATRA_TAG}/catra-${CURRENT_VERSION}.experiments.log"
 JARFILE="benchmark/target/scala-2.13/catra-benchmark-assembly-${CURRENT_VERSION}.jar"
 
-mkdir -p logs
+mkdir -p "logs${CATRA_TAG}"
 
 echo "" > $LOGFILE
 

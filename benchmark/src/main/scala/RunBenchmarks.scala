@@ -10,39 +10,65 @@ import scala.util.{Failure, Random, Success, Try}
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val regularTimeout = 20000
-  private val baseConf =
-    Array("solve-satisfy", "--timeout", regularTimeout.toString)
+  private val regularTimeout = sys.env.getOrElse("CATRA_TIMEOUT", "30000").toInt
   private val nrMaterialiseEager = 500
   private val nrMaterialiseLazy = 1
-  private val configurations = Map(
-    //"nuxmv" -> Array("--backend", "nuxmv"),
-    "baseline" -> Array("--backend", "baseline", "--timeout", "30000") // We know baseline doesn't improve beyond 30s
-    //"lazy" -> Array("--backend", "lazy")
-    /*
+  private val cactusTimeout = "120000"
+  private val baseConfigurations = Map(
+    "nuxmv" -> Array("--backend", "nuxmv"),
+    "baseline" -> Array("--backend", "baseline"),
+    "lazy-new" -> Array("--backend", "lazy"),
+    "lazy-old" -> Array("--backend", "lazy", "--old-behaviour") /*,
+    // Cactus plot entries:
+
+    "baseline-cactus" -> Array(
+      "--backend",
+      "baseline",
+      "--timeout",
+      cactusTimeout
+    ),
+    "lazy-cactus" -> Array("--backend", "lazy", "--timeout", cactusTimeout),
     "lazy-no-clauselearning" -> Array(
       "--backend",
       "lazy",
       "--no-restarts",
-      "--no-clause-learning"
+      "--no-clause-learning",
+      "--timeout",
+      cactusTimeout
     ),
-        s"lazy-eager-$nrMaterialiseEager" -> Array(
+    s"lazy-eager-$nrMaterialiseEager" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
-      nrMaterialiseEager.toString
+      nrMaterialiseEager.toString,
+      "--timeout",
+      cactusTimeout
     ),
     s"lazy-lazy-$nrMaterialiseLazy" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
-      nrMaterialiseLazy.toString
+      nrMaterialiseLazy.toString,
+      "--timeout",
+      cactusTimeout
     )*/
   ).view
     .mapValues(
-      c => catra.CommandLineOptions.parse(baseConf ++ c).get
+      c =>
+        catra.CommandLineOptions
+          .parse(
+            Array("solve-satisfy", "--timeout", regularTimeout.toString) ++ c
+          )
+          .get
     )
     .toMap
+
+  private val selectConfigurations = sys.env
+    .getOrElse("CATRA_CONFIGS", baseConfigurations.keys.mkString(","))
+    .split(",")
+    .toSet
+  private val filteredConfigurations = baseConfigurations
+  //  baseConfigurations.view.filterKeys(selectConfigurations).toMap
 
   private val instanceFiles =
     args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
@@ -56,7 +82,7 @@ object RunBenchmarks extends App {
         }
     )
 
-  private val configNames = configurations.keys.toSeq.sorted
+  private val configNames = filteredConfigurations.keys.toSeq.sorted
 
   private def fmtResult(r: (Try[SatisfactionResult], Double)): String = {
     r match {
@@ -72,12 +98,13 @@ object RunBenchmarks extends App {
   private val experiments = Random.shuffle(instances.flatMap {
     case (file, instance) =>
       configNames.map(
-        configName => (file, instance, configurations(configName), configName)
+        configName =>
+          (file, instance, filteredConfigurations(configName), configName)
       )
   }.toSeq)
 
   private val runtime = Runtime.getRuntime
-  //private val nrWorkers = runtime.availableProcessors / 2
+//  private val nrWorkers = runtime.availableProcessors / 4
   private val nrWorkers = 1
 
   print(
@@ -100,7 +127,7 @@ object RunBenchmarks extends App {
     val runner = new ExperimentRunner(experiments, nrWorkers)
 
     println(s"CONFIGS ${configNames.mkString("\t")}")
-    configurations.foreachEntry {
+    filteredConfigurations.foreachEntry {
       case (name, config) =>
         println(s"CONFIG $name IS $config")
     }
@@ -130,7 +157,7 @@ object RunBenchmarks extends App {
   }
 
   println(
-    s"INFO ${Calendar.getInstance().getTime} Executed ${experiments.length} experiments with ${configurations.size} configurations and ${instances.length} instances in $totalTimeSpent."
+    s"INFO ${Calendar.getInstance().getTime} Executed ${experiments.length} experiments with ${filteredConfigurations.size} configurations and ${instances.length} instances in $totalTimeSpent."
   )
 
 }

@@ -65,7 +65,8 @@ class LazyBackend(override val arguments: CommandLineOptions)
         automataGroup,
         arguments.nrUnknownToMaterialiseProduct,
         dumpAutomata = arguments.dumpGraphvizDir,
-        printDecisions = arguments.printDecisions
+        printDecisions = arguments.printDecisions,
+        oldBehaviourEnabled = arguments.old
       )
 
     val theories = automataProducts.map(buildTheory _)

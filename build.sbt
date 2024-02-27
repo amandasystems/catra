@@ -1,7 +1,7 @@
 import Dependencies.*
 
-ThisBuild / scalaVersion := "2.13.10"
-ThisBuild / version := "0.1.4"
+ThisBuild / scalaVersion := "2.13.12"
+ThisBuild / version := "0.1.5"
 ThisBuild / organization := "uuverifiers"
 
 ThisBuild / scalacOptions ++= Seq(
@@ -29,9 +29,6 @@ ThisBuild / scalacOptions ++= Seq(
 // ThisBuild / coverageFailOnMinimum := false
 ThisBuild / coverageExcludedFiles := ".*/src/test/.*"
 // ThisBuild / coverageEnabled := true
-
-ThisBuild / resolvers += "uuverifiers" at "https://eldarica.org/maven/"
-
 ThisBuild / libraryDependencies += princess
 ThisBuild / libraryDependencies += fastparse
 
@@ -48,7 +45,7 @@ lazy val root = (project in file("."))
 lazy val benchmark = (project in file("benchmark"))
   .settings(
     name := "catra-benchmark",
-    version := s"${version.value}-5", // Version scheme is CATRA version - benchmark version
+    version := s"${version.value}-7", // Version scheme is CATRA version - benchmark version
     assembly / mainClass := Some(
       "uuverifiers.RunBenchmarks"
     )
@@ -57,6 +54,6 @@ lazy val benchmark = (project in file("benchmark"))
 lazy val validator = (project in file("validator"))
   .settings(
     name := "catra-validate",
-    version := s"${version.value}-5", // Version scheme is CATRA version - validator version
+    version := s"${version.value}-6", // Version scheme is CATRA version - validator version
     assembly / mainClass := Some("uuverifiers.Validate")
   ) dependsOn root

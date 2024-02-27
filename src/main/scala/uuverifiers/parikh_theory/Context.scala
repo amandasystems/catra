@@ -23,7 +23,10 @@ sealed case class Context(
     theoryInstance: ParikhTheory
 ) extends Tracing {
 
-  import theoryInstance.monoidMapPlugin.{getMaterialisedAutomaton, allMaterialisedAutomata}
+  import theoryInstance.monoidMapPlugin.{
+    getMaterialisedAutomaton,
+    allMaterialisedAutomata
+  }
 
   def autTransitionMask(autId: Int)(transition: Transition): Atom =
     autTransitionMasks(autId)(
@@ -166,7 +169,13 @@ sealed case class Context(
   def dumpGraphs(
       directory: File,
       fileNamePrefix: String = s"${theoryInstance.filePrefix}"
-  ): Seq[String] =
+  ): Seq[String] = {
+    val goalDir = new File(directory, f"goal-${goal.age}%07d")
+
+    if (!goalDir.exists()) {
+      goalDir.mkdirs()
+    }
+
     allMaterialisedAutomata.zipWithIndex
       .filter(ai => activeAutomata contains ai._2) // We only need to dump active automata, which may have changed!
       .map {
@@ -193,11 +202,12 @@ sealed case class Context(
             )
 
           }.dumpDotFile(
-            directory,
-            fileNamePrefix + f"-aut-$i-goal-${goal.age}%07d.dot"
+            goalDir,
+            fileNamePrefix + f"-aut-$i.dot"
           )
           fileNamePrefix + s"-aut-$i.dot"
       }
       .toSeq
+  }
 
 }

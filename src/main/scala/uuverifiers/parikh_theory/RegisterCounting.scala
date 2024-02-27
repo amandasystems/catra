@@ -13,7 +13,8 @@ class RegisterCounting(
     automata: Seq[Automaton],
     override val materialisationThreshold: Int = 5,
     override val dumpAutomata: Option[File] = None,
-    override val printDecisions: Boolean = false
+    override val printDecisions: Boolean = false,
+    override val oldBehaviourEnabled: Boolean = false
 ) extends ParikhTheory {
   private val counters =
     automata
@@ -34,7 +35,7 @@ class RegisterCounting(
       implicit order: TermOrder
   ): Conjunction = allowsMonoidValues(counters.map(counterToTerm))
 
-  override def toString : String = "RegisterCounting[" + automata.size + "]"
+  override def toString: String = "RegisterCounting[" + automata.size + "]"
 
   TheoryRegistry register this
 

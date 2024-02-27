@@ -39,6 +39,7 @@ trait ParikhTheory
 
   val dumpAutomata: Option[File] = None
   val printDecisions: Boolean = false
+  val oldBehaviourEnabled: Boolean = false // Generic override flag
 
   def logDecision[A <: Plugin.Action](
       event: String,

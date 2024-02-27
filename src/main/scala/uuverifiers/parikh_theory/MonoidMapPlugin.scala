@@ -24,7 +24,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     with NoAxiomGeneration
     with Tracing {
 
-  override def toString : String = "MonoidMapPlugin"
+  override def toString: String = "MonoidMapPlugin"
 
   private val transitionExtractor = new TransitionMaskExtractor(theoryInstance)
 
@@ -39,11 +39,11 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     theoryInstance.auts: _*
   )
 
-  def getMaterialisedAutomaton(id : Int) : Automaton = synchronized {
+  def getMaterialisedAutomaton(id: Int): Automaton = synchronized {
     materialisedAutomata(id)
   }
 
-  def allMaterialisedAutomata : Seq[Automaton] = synchronized {
+  def allMaterialisedAutomata: Seq[Automaton] = synchronized {
     materialisedAutomata.toSeq
   }
 
@@ -189,7 +189,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
       )
 
       val subsumeActions: Seq[Plugin.Action] = theoryInstance.logDecision(
-        "SubsumeConnected",
+        s"SubsumeConnected at ${context.goal.age}",
         actions = {
           val definitelyReached = trace("definitelyReached")(
             aut.fwdReachable(
@@ -351,38 +351,56 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
     stats.increment("materialiseProduct")
     val productNr = getOrComputeProduct(leftId, rightId, context)
 
-    def concernsOneOfTheTerms(p: Atom): Boolean = {
-      autNr(p) match {
-        case `leftId` | `rightId` => true
-        case _                    => false
-      }
-    }
+    val Some(leftUnused) = context.unusedInstances.find(p => autNr(p) == leftId)
+    val Some(rightUnused) =
+      context.unusedInstances.find(p => autNr(p) == rightId)
+    val unusedInstances = Seq(leftUnused, rightUnused)
 
-    val unusedInstances = context.unusedInstances.filter(concernsOneOfTheTerms)
     val removeUnusedPredicates = trace("removeUnusedPredicates")(
       unusedInstances.map(Plugin.RemoveFacts(_))
     )
 
-    val productClauses =
-      if (trace(s"$leftId}x$rightId is empty")(
-            getMaterialisedAutomaton(productNr).isEmpty
-          )) {
+    def zeroTransitionMasksOf(id: Int) =
+      for (a <- context.autTransitionMasks(id); if a.last.isZero)
+        yield a
 
-        def extractAssumptions(id: Int) =
-          for (a <- context.autTransitionMasks(id); if a.last.isZero)
-            yield a
+    val assumptions =
+      zeroTransitionMasksOf(leftId) ++ zeroTransitionMasksOf(rightId) ++ unusedInstances
 
-        val assumptions =
-          extractAssumptions(leftId) ++ extractAssumptions(rightId) ++ unusedInstances
-
-        Seq(
-          Plugin.AddAxiom(
-            assumptions,
-            Conjunction.FALSE,
-            theoryInstance
+    lazy val productName = s"$leftId}x$rightId"
+    val productClauses = getMaterialisedAutomaton(productNr) match {
+      case leftxRight if leftxRight.isEmpty =>
+        trace(s"$productName is empty")(
+          Seq(
+            Plugin.AddAxiom(
+              assumptions,
+              Conjunction.FALSE,
+              theoryInstance
+            )
           )
         )
-      } else {
+      case leftxRight
+          if leftxRight.transitionsFrom(leftxRight.initialState).isEmpty =>
+        trace(s"$productName is singleton; all transitions zero!") {
+          implicit val order: TermOrder = context.goal.order
+
+          val allTransitionsZero = conj(
+            context.activeAutomata.unsorted.flatMap(
+              a =>
+                getMaterialisedAutomaton(a).transitions
+                  .map(t => context.autTransitionTerm(a)(t) === 0)
+            )
+          )
+
+          Seq(
+            Plugin.AddAxiom(
+              assumptions,
+              allTransitionsZero,
+              theoryInstance
+            )
+          )
+        }
+      case _ =>
         TransitionSplitter.spawnSplitter(
           context.theoryInstance,
           context.monoidMapPredicateAtom(0),
@@ -394,12 +412,12 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
             rightId,
             context
           )
-
-      }
+    }
 
     val actions = removeUnusedPredicates ++ productClauses
 
-    theoryInstance.logDecision("MaterialiseProduct", actions)
+    theoryInstance
+      .logDecision(s"MaterialiseProduct at ${context.goal.age}", actions)
   }
 
   private def formulaForNewAutomaton(
