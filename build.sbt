@@ -29,7 +29,6 @@ ThisBuild / scalacOptions ++= Seq(
 // ThisBuild / coverageFailOnMinimum := false
 ThisBuild / coverageExcludedFiles := ".*/src/test/.*"
 // ThisBuild / coverageEnabled := true
-ThisBuild / resolvers += "uuverifiers" at "https://eldarica.org/maven/"
 ThisBuild / libraryDependencies += princess
 ThisBuild / libraryDependencies += fastparse
 
