@@ -140,7 +140,7 @@ sealed case class CommandLineOptions(
       s"--nr-unknown-to-start-materialise $nrUnknownToMaterialiseProduct",
       if (!enableClauseLearning) "--no-clause-learning" else "",
       if (!enableRestarts) "--no-restarts" else "",
-      if (old) "--old-behaviour" else "",
+      if (this.old) "--old-behaviour" else "",
       s"--restart-timeout-factor $restartTimeoutFactor"
     ).filterNot(_.isEmpty)
 
