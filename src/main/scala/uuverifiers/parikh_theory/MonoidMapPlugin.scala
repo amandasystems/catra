@@ -380,9 +380,7 @@ class MonoidMapPlugin(private val theoryInstance: ParikhTheory)
           )
         )
       case leftxRight
-          if !theoryInstance.oldBehaviourEnabled && leftxRight
-            .transitionsFrom(leftxRight.initialState)
-            .isEmpty =>
+          if leftxRight.transitionsFrom(leftxRight.initialState).isEmpty =>
         trace(s"$productName is singleton; all transitions zero!") {
           implicit val order: TermOrder = context.goal.order
 

@@ -11,7 +11,7 @@ ThisBuild / scalacOptions ++= Seq(
   "-unchecked",
   //"-Xlint",
   "-Xelide-below",
-  "FINE",
+  "INFO",
   "-feature",
   /*"-opt-inline-from:**",
   "-opt:l:method",

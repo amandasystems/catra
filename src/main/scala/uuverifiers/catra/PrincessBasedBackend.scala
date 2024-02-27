@@ -16,37 +16,40 @@ object PrincessBasedBackend {
    * It is more efficient to skolemize formulas before sending them to
    * the prover. This way, learnt lemmas can be kept during restarts.
    */
-  class SkolemizingVisitor(p : SimpleAPI)
-        extends CollectingVisitor[(List[ITerm], Int, Int),
-                                  IExpression] {
+  class SkolemizingVisitor(p: SimpleAPI)
+      extends CollectingVisitor[(List[ITerm], Int, Int), IExpression] {
     import IExpression._
 
-    def apply(t : IExpression) : IExpression = this.visit(t, (List(), 0, 1))
+    def apply(t: IExpression): IExpression = this.visit(t, (List(), 0, 1))
 
-    override def preVisit(t : IExpression,
-                          ctxt : (List[ITerm], Int, Int)) : PreVisitResult = {
+    override def preVisit(
+        t: IExpression,
+        ctxt: (List[ITerm], Int, Int)
+    ): PreVisitResult = {
       val (subst, shift, polarity) = ctxt
 
       t match {
-        case t : IVariable => {
-          ShortCutResult(if (t.index >= subst.size)
-                           t shiftedBy shift
-                         else
-                           subst(t.index))
+        case t: IVariable => {
+          ShortCutResult(
+            if (t.index >= subst.size)
+              t shiftedBy shift
+            else
+              subst(t.index)
+          )
         }
-        case _ : INot => {
+        case _: INot => {
           UniSubArgs((subst, shift, -polarity))
         }
-        case IBinFormula(IBinJunctor.Eqv, _, _) | _ : IFunApp | _ : IAtom => {
+        case IBinFormula(IBinJunctor.Eqv, _, _) | _: IFunApp | _: IAtom => {
           UniSubArgs((subst, shift, 0))
         }
         case ISortedQuantified(q, sort, f)
             if (polarity == 1 && q == Quantifier.EX) ||
-               (polarity == -1 && q == Quantifier.ALL) => {
+              (polarity == -1 && q == Quantifier.ALL) => {
           val newConst = p.createConstant(sort)
           TryAgain(f, (newConst :: subst, shift - 1, polarity))
         }
-        case t : IVariableBinder => {
+        case t: IVariableBinder => {
           val newSubst = for (t <- subst) yield VariableShiftVisitor(t, 0, 1)
           UniSubArgs((ISortedVariable(0, t.sort) :: newSubst, shift, 0))
         }
@@ -54,15 +57,17 @@ object PrincessBasedBackend {
       }
     }
 
-    def postVisit(t : IExpression,
-                  ctxt : (List[ITerm], Int, Int),
-                  subres : Seq[IExpression]) : IExpression = {
+    def postVisit(
+        t: IExpression,
+        ctxt: (List[ITerm], Int, Int),
+        subres: Seq[IExpression]
+    ): IExpression = {
       t update subres
     }
 
   }
 
-  def skolemize(f : IFormula)(p : SimpleAPI) : IFormula = {
+  def skolemize(f: IFormula)(p: SimpleAPI): IFormula = {
     val visitor = new SkolemizingVisitor(p)
     visitor(f).asInstanceOf[IFormula]
   }
@@ -104,7 +109,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
   }
 
-  private def geometric(i : Int) : Double = {
+  private def geometric(i: Int): Double = {
     val r = 1.1
     var res = 1.0
     for (_ <- 0 until i)
@@ -155,7 +160,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
             s"Certificate: ${p.certificateAsString(Map(), ap.parameters.Param.InputFormat.Princess)}"
           )
 
-/*
+        /*
         for (t <- p.theories) t match {
           case t : ParikhTheory => {
             println()
@@ -172,7 +177,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
         }
 
         verifyProof3(p)
-*/
+         */
 
         Unsat
       }
@@ -182,7 +187,7 @@ trait PrincessBasedBackend extends Backend with Tracing {
     }
   }
 
-/*
+  /*
   private def verifyProof1(p: SimpleAPI) : Unit = {
     println("Verifying certificate ...")
 
@@ -258,7 +263,7 @@ sym("R132") === 1
     def verify(cert : Certificate,
                formulas : Conjunction) : Unit = cert match {
       case BranchInferenceCertificate(Seq(inf1, inf2, infs @ _*), child, order) => {
-        verify(BranchInferenceCertificate(List(inf1), 
+        verify(BranchInferenceCertificate(List(inf1),
                                           BranchInferenceCertificate(List(inf2) ++ infs,
                                                                      child, order), order),
                formulas)
@@ -388,7 +393,7 @@ sym("R132") === 1
 
     def verify(cert : Certificate) : Unit = cert match {
       case BranchInferenceCertificate(Seq(inf1, inf2, infs @ _*), child, order) => {
-        verify(BranchInferenceCertificate(List(inf1), 
+        verify(BranchInferenceCertificate(List(inf1),
                                           BranchInferenceCertificate(List(inf2) ++ infs,
                                                                      child, order), order))
       }
@@ -526,7 +531,7 @@ sym("R132") === 1
       case BranchInferenceCertificate(Seq(inf1, inf2, infs @ _*), child, order)
           if !(inf1.isInstanceOf[TheoryAxiomInference] &&
                  inf2.isInstanceOf[GroundInstInference]) => {
-        verify(BranchInferenceCertificate(List(inf1), 
+        verify(BranchInferenceCertificate(List(inf1),
                                           BranchInferenceCertificate(List(inf2) ++ infs,
                                                                      child, order), order),
                formulas)
@@ -576,7 +581,7 @@ sym("R132") === 1
     verify(cert, cert.assumedFormulas)
 
   }
-*/
+   */
 
   override def solveSatisfy(instance: Instance): Try[SatisfactionResult] =
     trace("solveSatisfy result") {
