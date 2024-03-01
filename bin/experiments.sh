@@ -11,6 +11,6 @@ echo "" > $LOGFILE
 
 echo "${CURRENT_VERSION}: Executing experiments in parallel, logging to ${LOGFILE}"
 find "$@" -type f | xargs -n $RESTART_AFTER -- \
-  java -XX:MaxRAMPercentage=90.0 -jar "$JARFILE" | tee -a "$LOGFILE"
+  java -Xmx100G -jar "$JARFILE" | tee -a "$LOGFILE"
 
 echo "Done with all experiments!" >> "$LOGFILE"

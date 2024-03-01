@@ -10,54 +10,43 @@ import scala.util.{Failure, Random, Success, Try}
 
 object RunBenchmarks extends App {
   import catra.SolveRegisterAutomata.measureTime
-  private val regularTimeout = sys.env.getOrElse("CATRA_TIMEOUT", "30000").toInt
-  private val nrMaterialiseEager = 500
+  private val timeout =
+    sys.env.getOrElse("CATRA_TIMEOUT", "30000").toInt
+  private val nrMaterialiseEager = 200
   private val nrMaterialiseLazy = 1
-  private val cactusTimeout = "120000"
   private val baseConfigurations = Map(
     "nuxmv" -> Array("--backend", "nuxmv"),
     "baseline" -> Array("--backend", "baseline"),
-    "lazy-new" -> Array("--backend", "lazy"),
-    "lazy-old" -> Array("--backend", "lazy", "--old-behaviour") /*,
-    // Cactus plot entries:
-
-    "baseline-cactus" -> Array(
-      "--backend",
-      "baseline",
-      "--timeout",
-      cactusTimeout
-    ),
-    "lazy-cactus" -> Array("--backend", "lazy", "--timeout", cactusTimeout),
+    "lazy" -> Array("--backend", "lazy"),
     "lazy-no-clauselearning" -> Array(
       "--backend",
       "lazy",
+      "--no-clause-learning"
+    ),
+    "lazy-no-clauselearning-no-restarts" -> Array(
+      "--backend",
+      "lazy",
       "--no-restarts",
-      "--no-clause-learning",
-      "--timeout",
-      cactusTimeout
+      "--no-clause-learning"
     ),
     s"lazy-eager-$nrMaterialiseEager" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
-      nrMaterialiseEager.toString,
-      "--timeout",
-      cactusTimeout
+      nrMaterialiseEager.toString
     ),
     s"lazy-lazy-$nrMaterialiseLazy" -> Array(
       "--backend",
       "lazy",
       "--nr-unknown-to-start-materialise",
-      nrMaterialiseLazy.toString,
-      "--timeout",
-      cactusTimeout
-    )*/
+      nrMaterialiseLazy.toString
+    )
   ).view
     .mapValues(
       c =>
         catra.CommandLineOptions
           .parse(
-            Array("solve-satisfy", "--timeout", regularTimeout.toString) ++ c
+            Array("solve-satisfy", "--timeout", timeout.toString) ++ c
           )
           .get
     )
@@ -67,8 +56,8 @@ object RunBenchmarks extends App {
     .getOrElse("CATRA_CONFIGS", baseConfigurations.keys.mkString(","))
     .split(",")
     .toSet
-  private val filteredConfigurations = baseConfigurations
-  //  baseConfigurations.view.filterKeys(selectConfigurations).toMap
+  private val filteredConfigurations =
+    baseConfigurations.view.filterKeys(selectConfigurations.contains).toMap
 
   private val instanceFiles =
     args.flatMap(catra.CommandLineOptions.expandFileNameOrDirectoryOrGlob)
@@ -104,8 +93,7 @@ object RunBenchmarks extends App {
   }.toSeq)
 
   private val runtime = Runtime.getRuntime
-//  private val nrWorkers = runtime.availableProcessors / 4
-  private val nrWorkers = 1
+  private val nrWorkers = sys.env.getOrElse("CATRA_THREADS", "6").toInt
 
   print(
     s"INFO ${Calendar.getInstance().getTime} JVM version: ${System.getProperty("java.version")}"
@@ -123,7 +111,7 @@ object RunBenchmarks extends App {
     .solveSatisfy(instances(0)._2)
   println("...warm-up done!")
 
-  private val (_, totalTimeSpent) = measureTime {
+  private val (exitCode, totalTimeSpent) = measureTime {
     val runner = new ExperimentRunner(experiments, nrWorkers)
 
     println(s"CONFIGS ${configNames.mkString("\t")}")
@@ -131,33 +119,42 @@ object RunBenchmarks extends App {
       case (name, config) =>
         println(s"CONFIG $name IS $config")
     }
-    println(s"TIMEOUT $regularTimeout")
+    println(s"TIMEOUT $timeout")
 
     val safetyMargin = 1000 * experiments.length
     val maxTimeout = Duration(
-      (experiments.length * regularTimeout) + safetyMargin,
+      (experiments.length * timeout) + safetyMargin,
       duration.MILLISECONDS
     )
 
     println(s"HARD TIMEOUT $maxTimeout FOR ALL")
 
-    runner.results(maxTimeout) match {
-      case Failure(_: TimeoutException) =>
+    val exitCode = runner.results(maxTimeout) match {
+      case Failure(_: TimeoutException) => {
         println("ERR hard timeout, some experiment is misbehaving!")
-      case Failure(e) => println(s"ERR unknown error running experiments: $e")
-      case Success(outcomes) =>
+        1
+      }
+      case Failure(e) => {
+        println(s"ERR unknown error running experiments: $e")
+        1
+      }
+      case Success(outcomes) => {
         for ((instance, rs) <- outcomes) {
           val rsMap = rs.toMap
           println(
             s"RESULT $instance\t${configNames.map(c => fmtResult(rsMap(c))).mkString("\t")}"
           )
         }
+        0
+      }
     }
     runner.stop()
+    exitCode
   }
 
   println(
     s"INFO ${Calendar.getInstance().getTime} Executed ${experiments.length} experiments with ${filteredConfigurations.size} configurations and ${instances.length} instances in $totalTimeSpent."
   )
+  System.exit(exitCode)
 
 }
