@@ -5,11 +5,15 @@ EXPERIMENT_DIR = parikh-plus
 .PHONY: all
 all: experiments
 
-catra-experiments.zip: build.sbt
+.PHONY: catra-experiments.zip
+catra-experiments.zip:
+	sbt assembly
 	sbt benchmark/assembly
 	zip catra-experiments.zip \
 		-r 120s-experiments.* \
 		$(shell ls -1t benchmark/target/scala-2.13/*.jar | head -1)
+		$(shell ls -1t target/scala-2.13/uuverifers/*.jar | head -1)
+		120s-baseline.sh
 
 catra-${current_version}.zip:
 	sbt assembly
