@@ -1,9 +1,20 @@
-current_version = $(shell git rev-parse --short HEAD)
+current_version = $(shell sbt -Dsbt.supershell=false -error "print version")
 TIMEOUT_MS = 30000
 EXPERIMENT_DIR = parikh-plus
 
 .PHONY: all
 all: experiments
+
+catra-experiments.zip: build.sbt
+	sbt benchmark/assembly
+	zip catra-experiments.zip \
+		-r 120s-experiments.* \
+		$(shell ls -1t benchmark/target/scala-2.13/*.jar | head -1)
+
+catra-${current_version}.zip:
+	sbt assembly
+	zip catra-${current_version}.zip  bin/catra target/scala-2.13/uuverifiers/catra-assembly-${current_version}.jar	
+
 
 clean:
 	sbt clean
