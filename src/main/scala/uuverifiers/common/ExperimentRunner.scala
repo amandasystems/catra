@@ -8,6 +8,10 @@ import scala.collection.MapView
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 import scala.util.Try
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import scala.util.Success
+import uuverifiers.catra.Timeout
 
 sealed class ExperimentRunner(
     experiments: Seq[(String, Instance, CommandLineOptions, String)],
@@ -32,11 +36,37 @@ sealed class ExperimentRunner(
 
   private val tasks =
     for ((instanceName, instance, config, configName) <- experiments)
-      yield Future {
-        val resultAndTime =
-          measureTime(config.getBackend().solveSatisfy(instance))
-        (instanceName, configName, resultAndTime)
+      yield {
+        val myDeadline =
+          Duration(config.timeout_ms.get + 1000, TimeUnit.MILLISECONDS)
+        val resultsFut = Future {
+          val resultAndTime =
+            measureTime(config.getBackend().solveSatisfy(instance))
+          (instanceName, configName, resultAndTime)
+        }
+
+        val futWithDeadline = Future {
+          try {
+            Await.result(resultsFut, myDeadline)
+          } catch {
+            case _: TimeoutException => {
+              val syntheticTimeoutResult =
+                Success(Timeout(config.timeout_ms.get))
+
+              val syntheticTime = (config.timeout_ms.get / 1000).toDouble
+
+              (
+                instanceName,
+                configName,
+                (syntheticTimeoutResult, syntheticTime)
+              )
+            }
+          }
+        }
+
+        futWithDeadline
       }
+
   def results(
       deadline: Duration
   ): Try[MapView[String, Seq[(String, (Try[SatisfactionResult], Double))]]] =

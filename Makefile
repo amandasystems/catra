@@ -14,6 +14,7 @@ catra-experiments.zip:
 		$(shell ls -1t benchmark/target/scala-2.13/*.jar | head -1)
 		$(shell ls -1t target/scala-2.13/uuverifers/*.jar | head -1)
 		120s-baseline.sh
+		bin/experiments.sh
 
 catra-${current_version}.zip:
 	sbt assembly

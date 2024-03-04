@@ -132,6 +132,7 @@ object RunBenchmarks extends App {
     val exitCode = runner.results(maxTimeout) match {
       case Failure(_: TimeoutException) => {
         println("ERR hard timeout, some experiment is misbehaving!")
+        println(s"RERUN ${experiments.map(_._1).mkString(" ")}")
         1
       }
       case Failure(e) => {

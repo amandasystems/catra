@@ -1,11 +1,13 @@
 #!/bin/bash
 set -x
-CURRENT_VERSION=$(sbt -Dsbt.supershell=false -error "print benchmark/version")
-RESTART_AFTER=10
-LOGFILE="logs${CATRA_TAG}/catra-${CURRENT_VERSION}.experiments.log"
-JARFILE="benchmark/target/scala-2.13/catra-benchmark-assembly-${CURRENT_VERSION}.jar"
+JARFILE=$(ls -1t benchmark/target/scala-2.13/*.jar | head -1)
+export CATRA_TIMEOUT=$CATRA_TIMEOUT
+export CATRA_CONFIGS=$CATRA_CONFIGS
+export CATRA_THREADS=$CATRA_THREADS
+RESTART_AFTER=$CATRA_THREADS
+LOGFILE="logs/$(basename ${JARFILE} .jar).experiments.configs=${CATRA_CONFIGS}.parallel=${RESTART_AFTER}.timeout=${CATRA_TIMEOUT}.log"
 
-mkdir -p "logs${CATRA_TAG}"
+mkdir -p "logs"
 
 echo "" > $LOGFILE
 
