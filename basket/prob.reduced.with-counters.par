@@ -1,0 +1,37 @@
+counter int x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13;
+synchronised {
+automaton aut_X0 {
+	init s7;
+
+	s7 -> soak [any] {x1 += 1}; // Needed for SAT
+
+	soak -> s13 [any] {x2 += 1}; // Load-bearing
+
+    s8 -> soak [any] {x3 += 1}; // Load-bearing
+	soak -> s24 [any] {x4 += 1}; // Needed for SAT
+
+	s13 -> s8 [12, 13] {x5 += 1}; // Load-bearing
+
+	accepting s24;
+};
+automaton aut_X2 {
+	init s4;
+	s4 -> s19 [0, 121] {x6 += 1};
+	s19 -> s19 [0, 65535] {x7 += 1};
+	accepting s4, s19; // Load-bearing s4
+};
+automaton aut_X3 {
+	init s0;
+	s0 -> s3 [88, 65535] {x8 += 1};
+	s0 -> s4 [78, 78] {x9 += 1}; // Load-bearing!
+	s4 -> s3 [71, 65535] {x10 += 1}; // Load-bearing
+	accepting s0, s3; // Load-bearing: s0
+};
+automaton aut_X4 {
+	init s8;
+	s8 -> s11 [65, 90] {x11 += 1}; // Needed for SAT
+	s11 -> s2 [65, 90] {x12 += 1}; // Needed for SAT
+	s11 -> s0 [0, 47] {x13 += 1}; // Load-bearing
+	accepting s8, s2, s0; // Load-bearing (all of them)
+};
+};
