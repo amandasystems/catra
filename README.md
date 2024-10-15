@@ -1,3 +1,5 @@
+<img src="https://amandastjerna.se/publications/catra/catra-logo.svg" width="100px" alt="The Catra logo, an M-shaped helmet with pointy ears against a blue accepting state, both under a purple crown with a mirrored P.">
+
 # Catra 
 A Princess theory for computing Parikh images of automata, and a tool to use
 it.
